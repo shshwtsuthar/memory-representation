@@ -1,1 +1,0 @@
-# SWE-agent conversion scripts
