@@ -1,0 +1,249 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: e284e95f-a28b-4816-9557-fbaeda7b1ff3
+- repo: django/django
+- instance_id: django__django-11179
+- base_commit: 19fc6376ce67d01ca37a91ef2f55ef769f50513a
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+delete() on instances of models without any dependencies doesn't clear PKs.
+Description
+
+Deleting any model with no dependencies not updates the PK on the model. It should be set to None after .delete() call.
+See Django.db.models.deletion:276-281. Should update the model line 280.
+
+FILES INSPECTED
+---------------
+- django/db/models/deletion.py [Read: 4]
+
+SEARCH ANCHORS
+--------------
+(none)
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15/testbed -name "deletion.py" -type f 2>/dev/null | head -5
+- [test] cd testbed && python test_delete_bug.py
+- [other/reproduction] cd testbed && python --version
+- [test] cd testbed && python test_delete_bug.py
+- [test] python ./swebench_9_15/testbed/test_delete_bug.py
+- [test] python3 ./swebench_9_15/testbed/test_delete_bug.py
+- [test] python3 ./swebench_9_15/testbed/test_delete_bug.py
+- [test] python3 tests/runtests.py delete --verbosity=2
+- [test] python3 ./swebench_9_15/testbed/test_pk_clearing.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- FAIL: PK is still 1, should be None
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #3]
+     260→        self.data = {model: self.data[model] for model in sorted_models}
+     261→
+     262→    def delete(self):
+     263→        # sort instance collections
+     264→        for model, instances in self.data.items():
+     265→            self.data[model] = sorted(instances, key=attrgetter("pk"))
+     266→
+     267→        # if possible, bring the models in an order suitable for databases that
+     268→        # don't support transactions or cannot defer constraint checks until the
+     269→        # end of a transaction.
+     270→        self.sort()
+     271→        # number of objects deleted for each model label
+     272→        deleted_counter = Counter()
+     273→
+     274→        # Optimize for the case with a single obj and no dependencies
+     275→        if len(self.data) == 1 and len(instances) == 1:
+     276→            instance = list(instances)[0]
+     277→            if self.can_fast_delete(instance):
+     278→                with transaction.mark_for_rollback_on_error():
+     279→                    count = sql.DeleteQuery(model).delete_batch([instance.pk], self.using)
+     280→                return count, {model._meta.label: count}
+     281→
+     282→        with transaction.atomic(using=self.using,
+  [... truncated ...]
+- [Read Result after action #5]
+     305→
+     306→            # delete instances
+     307→            for model, instances in self.data.items():
+     308→                query = sql.DeleteQuery(model)
+     309→                pk_list = [obj.pk for obj in instances]
+     310→                count = query.delete_batch(pk_list, self.using)
+     311→                deleted_counter[model._meta.label] += count
+     312→
+     313→                if not model._meta.auto_created:
+     314→                    for obj in instances:
+     315→                        signals.post_delete.send(
+     316→                            sender=model, instance=obj, using=self.using
+     317→                        )
+     318→
+     319→        # update collected instances
+     320→        for instances_for_fieldvalues in self.field_updates.values():
+     321→            for (field, value), instances in instances_for_fieldvalues.items():
+     322→                for obj in instances:
+     323→                    setattr(obj, field.attname, value)
+     324→        for model, instances in self.data.items():
+     325→            for instance in instances:
+     326→                setattr(instance, model._meta.pk.attname, None)
+     327→        return sum(deleted_counter.values()), dic
+  [... truncated ...]
+- [Test Output after action #8]
+  Exit code 1
+    File "test_delete_bug.py", line 50
+      print(f"Created object with PK: {obj.pk}")
+                                              ^
+  SyntaxError: invalid syntax
+- [Test Output after action #14]
+  Exit code 1
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_delete_bug.py", line 6, in <module>
+      import django
+    File "./swebench_9_15/testbed/django/__init__.py", line 1, in <module>
+      from django.utils.version import get_version
+    File "./swebench_9_15/testbed/django/utils/version.py", line 71, in <module>
+      @functools.lru_cache()
+  AttributeError: 'module' object has no attribute 'lru_cache'
+- [Test Output after action #16]
+  Testing delete() behavior on model without dependencies...
+  ------------------------------------------------------------
+  Created object with PK: 1
+  After delete(), PK is: 1
+  FAIL: PK is still 1, should be None
+
+  This confirms the bug exists!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Read Result after action #18]
+     273→
+     274→        # Optimize for the case with a single obj and no dependencies
+     275→        if len(self.data) == 1 and len(instances) == 1:
+     276→            instance = list(instances)[0]
+     277→            if self.can_fast_delete(instance):
+     278→                with transaction.mark_for_rollback_on_error():
+     279→                    count = sql.DeleteQuery(model).delete_batch([instance.pk], self.using)
+     280→                return count, {model._meta.label: count}
+     281→
+     282→        with transaction.atomic(using=self.using, savepoint=False):
+
+- [Test Output after action #21]
+  Testing delete() behavior on model without dependencies...
+  ------------------------------------------------------------
+  Created object with PK: 1
+  After delete(), PK is: None
+  PASS: PK was correctly set to None after delete()
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #23]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Importing application delete
+  Skipping setup of unused database(s): other.
+  Operations to perform:
+    Synchronize unmigrated apps: auth, contenttypes, delete, messages, sessions, staticfiles
+    Apply all migrations: admin, sites
+  Synchronizing apps without migrations:
+    Creating tables...
+      Creating table django_content_type
+      Creating table auth_permission
+      Creating table auth_group
+      Creating table auth_user
+      Creating table django_session
+      Creating table delete_r
+      Creating table delete_s
+      Creating table delete_t
+      Creating table delete_u
+      Creating table delete_rchild
+      Creating table delete_a
+      Creating table delete_m
+      Creating table delete_mr
+      Creating table delete_mrnull
+      Creating table delete_avatar
+      Creating table delete_user
+      Creating table delete_hiddenuser
+      Creating table delete_hiddenuserprofile
+      Creating table delete_m2mto
+      Creating table delete_m2mfrom
+      Creating table delete_parent
+      Creating table delete_child
+      Creating table delete_base
+      Creating table delete_reltobase
+      Running deferred SQL...
+  Running migrations:
+    Applying admin.0001_ini
+  [... truncated ...]
+- [Test Output after action #26]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/django/db/backends/utils.py", line 84, in _execute
+      return self.cursor.execute(sql, params)
+    File "./swebench_9_15/testbed/django/db/backends/sqlite3/base.py", line 391, in execute
+      return Database.Cursor.execute(self, query, params)
+  sqlite3.IntegrityError: FOREIGN KEY constraint failed
+
+  The above exception was the direct cause of the following exception:
+
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_pk_clearing.py", line 88, in <module>
+      author.delete()  # This should cascade and delete the book too
+    File "./swebench_9_15/testbed/django/db/models/base.py", line 919, in delete
+      return collector.delete()
+    File "./swebench_9_15/testbed/django/db/model
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/models/deletion.py
+  Tool: Edit action #20
+  old_text_sha256: 24d4a4dd833cbe192da3c8997ab0f16f541971da1d35f13bb5b9167a0c94c9fa
+  new_text_sha256: e3297da6cc215b2ccac39931f51c9ce918838d3ef4abae1ef9e3d401848d46e8
+- test_delete_bug.py
+  Tool: Write action #7
+  new_text_sha256: 256cea2aeedfc7d3a638788d28827bee55faaba5e42dbdc91c3c26e396f983ae
+- test_delete_bug.py
+  Tool: Edit action #12
+  old_text_sha256: f9ee32f7452f5ecc7ce7c807990d12245e56dcf19db61c87cb0fe098f9d8fdb2
+  new_text_sha256: b97513db9d71b394783e26c650af5fd3c842ce377176630d99146c7a8cdf6364
+- test_pk_clearing.py
+  Tool: Write action #25
+  new_text_sha256: 3eb1c5c29de305f6af9e451cc105a980458118788c806b107734c50e6cb8b046
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

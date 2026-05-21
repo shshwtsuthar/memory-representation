@@ -1,0 +1,936 @@
+STRIPPED RAW CLAUDE CODE TRAJECTORY
+This transcript was rendered from original raw JSONL using the canonical ADP strip manifest.
+
+[RAW line 3 USER]
+PRIOR ISSUE METADATA
+repo: sympy/sympy
+instance_id: sympy__sympy-14317
+base_commit: fb536869fb7aa28b2695ad7a3b70949926b291c4
+problem_statement:
+LaTeX printer does not use the same order of monomials as pretty and str
+When printing a Poly, the str and pretty printers use the logical order of monomials, from highest to lowest degrees. But latex printer does not.
+```
+>>> var('a b c x')
+>>> p = Poly([a, 1, b, 2, c, 3], x)
+>>> p
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+>>> pretty(p)
+"Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')"
+>>> latex(p)
+'\\operatorname{Poly}{\\left( a x^{5} + b x^{3} + c x + x^{4} + 2 x^{2} + 3, x, domain=\\mathbb{Z}\\left[a, b, c\\right] \\right)}'
+```
+[RAW line 6 TOOL Bash]
+
+[RAW line 14 TOOL Bash]
+ls -la testbed 2>&1 | head -20
+[RAW line 27 TOOL Bash]
+cd testbed && find . -name "*.py" -path "*/printing/*" | grep -E "(latex|printer)" | head -20
+[RAW line 28 TOOL RESULT toolu_01Unpm65ttH855onmCVEJA2T]
+./sympy/printing/codeprinter.py
+./sympy/printing/tests/test_codeprinter.py
+./sympy/printing/tests/test_latex.py
+./sympy/printing/latex.py
+./sympy/printing/printer.py
+[RAW line 30 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed/sympy/printing",
+  "pattern": "_print_Poly|class Poly"
+}
+[RAW line 33 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed",
+  "pattern": "_print_Poly"
+}
+[RAW line 36 TOOL Bash]
+cd testbed && grep -r "_print_Poly" sympy/printing/ --include="*.py"
+[RAW line 42 TOOL Bash]
+grep -r "_print_Poly" sympy/printing/ --include="*.py"
+[RAW line 43 TOOL RESULT toolu_01PtRuudWCdZHkS2HoYDvJNk]
+sympy/printing//str.py:    def _print_PolyRing(self, ring):
+sympy/printing//str.py:    def _print_PolyElement(self, poly):
+sympy/printing//str.py:    def _print_Poly(self, expr):
+sympy/printing//repr.py:    def _print_PolyRing(self, ring):
+sympy/printing//repr.py:    def _print_PolyElement(self, poly):
+sympy/printing//repr.py:    def _print_PolynomialRingBase(self, ring):
+sympy/printing//pretty/pretty.py:    def _print_PolyRing(self, ring):
+sympy/printing//pretty/pretty.py:    def _print_PolyElement(self, poly):
+sympy/printing//pretty/pretty.py:    def _print_PolynomialRing(self, expr):
+sympy/printing//pretty/pretty.py:    def _print_PolynomialRingBase(self, expr):
+sympy/printing//latex.py:    def _print_PolynomialRing(self, expr):
+sympy/printing//latex.py:    def _print_PolynomialRingBase(self, expr):
+sympy/printing//latex.py:    def _print_Poly(self, poly):
+sympy/printing//latex.py:    def _print_PolyElement(self, poly):
+[RAW line 45 TOOL Grep]
+{
+  "-C": 20,
+  "-n": true,
+  "output_mode": "content",
+  "path": "sympy/printing/latex.py",
+  "pattern": "def _print_Poly"
+}
+[RAW line 46 TOOL RESULT toolu_01GBMmPgJxeXsNizZZX5mwFZ]
+1817-        return self._print_Add(s.truncate()) + self._print(r' + \ldots')
+1818-
+1819-    def _print_FormalPowerSeries(self, s):
+1820-        return self._print_Add(s.infinite)
+1821-
+1822-    def _print_FiniteField(self, expr):
+1823-        return r"\mathbb{F}_{%s}" % expr.mod
+1824-
+1825-    def _print_IntegerRing(self, expr):
+1826-        return r"\mathbb{Z}"
+1827-
+1828-    def _print_RationalField(self, expr):
+1829-        return r"\mathbb{Q}"
+1830-
+1831-    def _print_RealField(self, expr):
+1832-        return r"\mathbb{R}"
+1833-
+1834-    def _print_ComplexField(self, expr):
+1835-        return r"\mathbb{C}"
+1836-
+1837:    def _print_PolynomialRing(self, expr):
+1838-        domain = self._print(expr.domain)
+1839-        symbols = ", ".join(map(self._print, expr.symbols))
+1840-        return r"%s\left[%s\right]" % (domain, symbols)
+1841-
+1842-    def _print_FractionField(self, expr):
+1843-        domain = self._print(expr.domain)
+1844-        symbols = ", ".join(map(self._print, expr.symbols))
+1845-        return r"%s\left(%s\right)" % (domain, symbols)
+1846-
+1847:    def _print_PolynomialRingBase(self, expr):
+1848-        domain = self._print(expr.domain)
+1849-        symbols = ", ".join(map(self._print, expr.symbols))
+1850-        inv = ""
+1851-        if not expr.is_Poly:
+1852-            inv = r"S_<^{-1}"
+1853-        return r"%s%s\left[%s\right]" % (inv, domain, symbols)
+1854-
+1855:    def _print_Poly(self, poly):
+1856-        cls = poly.__class__.__name__
+1857-        expr = self._print(poly.as_expr())
+1858-        gens = list(map(self._print, poly.gens))
+1859-        domain = "domain=%s" % self._print(poly.get_domain())
+1860-
+1861-        args = ", ".join([expr] + gens + [domain])
+1862-        if cls in accepted_latex_functions:
+1863-            tex = r"\%s {\left (%s \right )}" % (cls, args)
+1864-        else:
+1865-            tex = r"\operatorname{%s}{\left( %s \right)}" % (cls, args)
+1866-
+1867-        return tex
+1868-
+1869-    def _print_ComplexRootO
+[... truncated ...]
+[RAW line 48 TOOL Grep]
+{
+  "-C": 20,
+  "-n": true,
+  "output_mode": "content",
+  "path": "sympy/printing/str.py",
+  "pattern": "def _print_Poly"
+}
+[RAW line 49 TOOL RESULT toolu_013MQnRk4VwTmiXTaK2JcwnH]
+393-        return expr._print()
+394-
+395-    def _print_TensMul(self, expr):
+396-        return expr._print()
+397-
+398-    def _print_TensAdd(self, expr):
+399-        return expr._print()
+400-
+401-    def _print_PermutationGroup(self, expr):
+402-        p = ['    %s' % str(a) for a in expr.args]
+403-        return 'PermutationGroup([\n%s])' % ',\n'.join(p)
+404-
+405-    def _print_PDF(self, expr):
+406-        return 'PDF(%s, (%s, %s, %s))' % \
+407-            (self._print(expr.pdf.args[1]), self._print(expr.pdf.args[0]),
+408-            self._print(expr.domain[0]), self._print(expr.domain[1]))
+409-
+410-    def _print_Pi(self, expr):
+411-        return 'pi'
+412-
+413:    def _print_PolyRing(self, ring):
+414-        return "Polynomial ring in %s over %s with %s order" % \
+415-            (", ".join(map(self._print, ring.symbols)), ring.domain, ring.order)
+416-
+417-    def _print_FracField(self, field):
+418-        return "Rational function field in %s over %s with %s order" % \
+419-            (", ".join(map(self._print, field.symbols)), field.domain, field.order)
+420-
+421-    def _print_FreeGroupElement(self, elm):
+422-        return elm.__str__()
+423-
+424:    def _print_PolyElement(self, poly):
+425-        return poly.str(self, PRECEDENCE, "%s**%s", "*")
+426-
+427-    def _print_FracElement(self, frac):
+428-        if frac.denom == 1:
+429-            return self._print(frac.numer)
+430-        else:
+431-            numer = self.parenthesize(frac.numer, PRECEDENCE["Mul"], strict=True)
+432-            denom = self.parenthesize(frac.denom, PRECEDENCE["Atom"], strict=True)
+433-            return numer + "/" + denom
+434-
+435:    def _print_Poly(self, expr):
+436-        ATOM_PREC = PRECEDENCE["Atom"] - 1
+437-        terms, gens = [], [ self.parenthesize(s, ATOM_PREC) for s in expr.gens ]
+438-
+439-        for monom, coeff in expr.terms():
+440-            s_monom = []
+441-
+442-            for i, exp in enumerate(monom):
+443-                if exp > 0:
+444-                    i
+[... truncated ...]
+[RAW line 51 TOOL Read]
+{
+  "file_path": "sympy/printing/str.py",
+  "limit": 35,
+  "offset": 435
+}
+[RAW line 52 TOOL RESULT toolu_01SW6h2FfWn3SFZyCfyfp5yS]
+   435→    def _print_Poly(self, expr):
+   436→        ATOM_PREC = PRECEDENCE["Atom"] - 1
+   437→        terms, gens = [], [ self.parenthesize(s, ATOM_PREC) for s in expr.gens ]
+   438→
+   439→        for monom, coeff in expr.terms():
+   440→            s_monom = []
+   441→
+   442→            for i, exp in enumerate(monom):
+   443→                if exp > 0:
+   444→                    if exp == 1:
+   445→                        s_monom.append(gens[i])
+   446→                    else:
+   447→                        s_monom.append(gens[i] + "**%d" % exp)
+   448→
+   449→            s_monom = "*".join(s_monom)
+   450→
+   451→            if coeff.is_Add:
+   452→                if s_monom:
+   453→                    s_coeff = "(" + self._print(coeff) + ")"
+   454→                else:
+   455→                    s_coeff = self._print(coeff)
+   456→            else:
+   457→                if s_monom:
+   458→                    if coeff is S.One:
+   459→                        terms.extend(['+', s_monom])
+   460→                        continue
+   461→
+   462→                    if coeff is S.NegativeOne:
+   463→                        terms.extend(['-', s_monom])
+   464→                        continue
+   465→
+   466→                s_coeff = self._print(coeff)
+   467→
+   468→            if not s_monom:
+   469→                s_term = s_coeff
+
+[RAW line 54 TOOL Read]
+{
+  "file_path": "sympy/printing/str.py",
+  "limit": 20,
+  "offset": 468
+}
+[RAW line 55 TOOL RESULT toolu_01RpmWtdmj4nCsB1c3JTovN2]
+   468→            if not s_monom:
+   469→                s_term = s_coeff
+   470→            else:
+   471→                s_term = s_coeff + "*" + s_monom
+   472→
+   473→            if s_term.startswith('-'):
+   474→                terms.extend(['-', s_term[1:]])
+   475→            else:
+   476→                terms.extend(['+', s_term])
+   477→
+   478→        if terms[0] in ['-', '+']:
+   479→            modifier = terms.pop(0)
+   480→
+   481→            if modifier == '-':
+   482→                terms[0] = '-' + terms[0]
+   483→
+   484→        format = expr.__class__.__name__ + "(%s, %s"
+   485→
+   486→        from sympy.polys.polyerrors import PolynomialError
+   487→
+
+[RAW line 57 TOOL Read]
+{
+  "file_path": "sympy/printing/str.py",
+  "limit": 20,
+  "offset": 484
+}
+[RAW line 58 TOOL RESULT toolu_011TM58ygFsvNb74ZrFmWL19]
+   484→        format = expr.__class__.__name__ + "(%s, %s"
+   485→
+   486→        from sympy.polys.polyerrors import PolynomialError
+   487→
+   488→        try:
+   489→            format += ", modulus=%s" % expr.get_modulus()
+   490→        except PolynomialError:
+   491→            format += ", domain='%s'" % expr.get_domain()
+   492→
+   493→        format += ")"
+   494→
+   495→        for index, item in enumerate(gens):
+   496→            if len(item) > 2 and (item[:1] == "(" and item[len(item) - 1:] == ")"):
+   497→                gens[index] = item[1:len(item) - 1]
+   498→
+   499→        return format % (' '.join(terms), ', '.join(gens))
+   500→
+   501→    def _print_ProductSet(self, p):
+   502→        return ' x '.join(self._print(set) for set in p.sets)
+   503→
+
+[RAW line 65 TOOL Bash]
+python test_issue.py
+[RAW line 66 TOOL RESULT toolu_01GXeca2BC3FEjy5sYAhfTS3]
+Exit code 1
+Traceback (most recent call last):
+  File "test_issue.py", line 2, in <module>
+    from sympy import var, Poly, latex, pretty
+  File "./swebench_9_15/testbed/sympy/__init__.py", line 21, in <module>
+    raise ImportError("SymPy now depends on mpmath as an external library. "
+ImportError: SymPy now depends on mpmath as an external library. See http://docs.sympy.org/latest/install.html#mpmath for more information.
+[RAW line 68 TOOL Bash]
+python ../test_issue.py
+[RAW line 69 TOOL RESULT toolu_01DLevZiLkTuSmWUiUL38TM1]
+Exit code 2
+python: can't open file '../test_issue.py': [Errno 2] No such file or directory
+[RAW line 71 TOOL Bash]
+pwd && ls test_issue.py 2>&1
+[RAW line 72 TOOL RESULT toolu_01BzjnYNwGrVeuPPXc3363US]
+./swebench_9_15/testbed
+test_issue.py
+[RAW line 74 TOOL Bash]
+cd ./swebench_9_15 && python testbed/test_issue.py
+[RAW line 75 TOOL RESULT toolu_014R9cdmQbFUZ1kFrZTnPBBn]
+Exit code 1
+Traceback (most recent call last):
+  File "testbed/test_issue.py", line 2, in <module>
+    from sympy import var, Poly, latex, pretty
+  File "./swebench_9_15/testbed/sympy/__init__.py", line 21, in <module>
+    raise ImportError("SymPy now depends on mpmath as an external library. "
+ImportError: SymPy now depends on mpmath as an external library. See http://docs.sympy.org/latest/install.html#mpmath for more information.
+[RAW line 77 TOOL Bash]
+python -c "import sys; print(sys.path)"
+[RAW line 78 TOOL RESULT toolu_01KkewLgorJGqFf6DhDct5Zt]
+['', '/Applications/ADFRsuite-1.0/lib/python27.zip', '/Applications/ADFRsuite-1.0/CCSBpckgs/PIL', '/Applications/ADFRsuite-1.0/lib/python2.7', '/Applications/ADFRsuite-1.0/lib/python2.7/plat-darwin', '/Applications/ADFRsuite-1.0/lib/python2.7/plat-mac', '/Applications/ADFRsuite-1.0/lib/python2.7/plat-mac/lib-scriptpackages', '/Applications/ADFRsuite-1.0/lib/python2.7/lib-tk', '/Applications/ADFRsuite-1.0/lib/python2.7/lib-old', '/Applications/ADFRsuite-1.0/lib/python2.7/lib-dynload', '/Applications/ADFRsuite-1.0/lib/python2.7/site-packages', '/Applications/ADFRsuite-1.0/CCSBpckgs']
+[RAW line 80 TOOL Bash]
+python3 testbed/test_issue.py
+[RAW line 81 TOOL RESULT toolu_01EwWdVfBuhChfJdVHMfnisk]
+Exit code 2
+python3: can't open file 'testbed/test_issue.py': [Errno 2] No such file or directory
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+[RAW line 83 TOOL Bash]
+pwd && ls -la test_issue.py
+[RAW line 84 TOOL RESULT toolu_01GpXGjfHsufa8AWdUBcPvbS]
+./swebench_9_15/testbed
+-rw-------@ 1 user  staff  954 17 Dec 01:17 test_issue.py
+[RAW line 86 TOOL Bash]
+python3 test_issue.py
+[RAW line 87 TOOL RESULT toolu_01NdeWKnxvdrDbkc9JQoY9RG]
+Poly object:
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+String representation:
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+Pretty representation:
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+LaTeX representation:
+\operatorname{Poly}{\left( a x^{5} + b x^{3} + c x + x^{4} + 2 x^{2} + 3, x, domain=\mathbb{Z}\left[a, b, c\right] \right)}
+
+Checking order in string representation:
+  Contains 'a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3': True
+
+Checking order in LaTeX representation:
+  Contains 'a x^{5} + x^{4} + b x^{3} + 2 x^{2} + c x + 3': False
+  WRONG - Contains 'a x^{5} + b x^{3} + c x + x^{4} + 2 x^{2} + 3': True
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import Mapping, defaultdict
+./swebench_9_15/testbed/sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import defaultdict, Iterable
+./swebench_9_15/testbed/sympy/core/containers.py:271: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  class OrderedSet(collections.MutableSet):
+./swebench_9_15/testbed/sympy/solvers/diophantine.py:3188: SyntaxWarning: "is" with a litera
+[... truncated ...]
+[RAW line 90 TOOL Read]
+{
+  "file_path": "sympy/printing/latex.py",
+  "limit": 15,
+  "offset": 1855
+}
+[RAW line 91 TOOL RESULT toolu_01PvZdUsDmroGVGF2gKqcHdG]
+  1855→    def _print_Poly(self, poly):
+  1856→        cls = poly.__class__.__name__
+  1857→        expr = self._print(poly.as_expr())
+  1858→        gens = list(map(self._print, poly.gens))
+  1859→        domain = "domain=%s" % self._print(poly.get_domain())
+  1860→
+  1861→        args = ", ".join([expr] + gens + [domain])
+  1862→        if cls in accepted_latex_functions:
+  1863→            tex = r"\%s {\left (%s \right )}" % (cls, args)
+  1864→        else:
+  1865→            tex = r"\operatorname{%s}{\left( %s \right)}" % (cls, args)
+  1866→
+  1867→        return tex
+  1868→
+  1869→    def _print_ComplexRootOf(self, root):
+
+[RAW line 94 TOOL Read]
+{
+  "file_path": "sympy/printing/str.py",
+  "limit": 65,
+  "offset": 435
+}
+[RAW line 95 TOOL RESULT toolu_01EptYfE4n9AghPfzwXcDni1]
+   435→    def _print_Poly(self, expr):
+   436→        ATOM_PREC = PRECEDENCE["Atom"] - 1
+   437→        terms, gens = [], [ self.parenthesize(s, ATOM_PREC) for s in expr.gens ]
+   438→
+   439→        for monom, coeff in expr.terms():
+   440→            s_monom = []
+   441→
+   442→            for i, exp in enumerate(monom):
+   443→                if exp > 0:
+   444→                    if exp == 1:
+   445→                        s_monom.append(gens[i])
+   446→                    else:
+   447→                        s_monom.append(gens[i] + "**%d" % exp)
+   448→
+   449→            s_monom = "*".join(s_monom)
+   450→
+   451→            if coeff.is_Add:
+   452→                if s_monom:
+   453→                    s_coeff = "(" + self._print(coeff) + ")"
+   454→                else:
+   455→                    s_coeff = self._print(coeff)
+   456→            else:
+   457→                if s_monom:
+   458→                    if coeff is S.One:
+   459→                        terms.extend(['+', s_monom])
+   460→                        continue
+   461→
+   462→                    if coeff is S.NegativeOne:
+   463→                        terms.extend(['-', s_monom])
+   464→                        continue
+   465→
+   466→                s_coeff = self._print(coeff)
+   467→
+   468→            if not s_monom:
+   469→                s_term = s_coeff
+   470→            else:
+   471→                s_term = s_coeff + "*" + s_monom
+   472→
+   473→            if s_term.startswith('-'):
+   474→                terms.extend(['-', s_term[1:]])
+   475→            else:
+   476→                terms.extend(['+', s_term])
+   477→
+   478→        if terms[0] in ['-', '+']:
+   479→            modifier = terms.pop(0)
+   480→
+   481→            if modifier == '-':
+   482→                terms[0] = '-' + terms[0]
+   483→
+   484→        format = expr.__class__.__name__ + "(%s, %s"
+   485→
+   486→        from sympy.polys.polyerrors import PolynomialError
+   487→
+   488→        try:
+   489→
+[... truncated ...]
+[RAW line 98 TOOL Edit]
+{
+  "file_path": "sympy/printing/latex.py",
+  "new_text_sha256": "7b0495f185496deb74dc817c813f0f87a717fa1382c09e7390bfc90c31b7daa5",
+  "old_text_sha256": "85674d86b25484db2abd20d2647a849196729cf33ca309d339961ae9e688ab8b"
+}
+[RAW line 103 TOOL Bash]
+python3 test_issue.py
+[RAW line 104 TOOL RESULT toolu_01UhrJN5a8nyuukJ3Y1szvrH]
+Poly object:
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+String representation:
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+Pretty representation:
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+LaTeX representation:
+\operatorname{Poly}{\left( a x^{5} x^{4} + b x^{3} + 2 x^{2} + c x + 3, x, domain=\mathbb{Z}\left[a, b, c\right] \right)}
+
+Checking order in string representation:
+  Contains 'a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3': True
+
+Checking order in LaTeX representation:
+  Contains 'a x^{5} + x^{4} + b x^{3} + 2 x^{2} + c x + 3': False
+  WRONG - Contains 'a x^{5} + b x^{3} + c x + x^{4} + 2 x^{2} + 3': False
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import Mapping, defaultdict
+./swebench_9_15/testbed/sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import defaultdict, Iterable
+./swebench_9_15/testbed/sympy/core/containers.py:271: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  class OrderedSet(collections.MutableSet):
+./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the
+[... truncated ...]
+[RAW line 111 TOOL Bash]
+python3 debug_test.py
+[RAW line 112 TOOL RESULT toolu_011TJJD8go3nyeGVjToySKx7]
+Poly object:
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+Terms:
+  monom: (5,), coeff: a
+  monom: (4,), coeff: 1
+  monom: (3,), coeff: b
+  monom: (2,), coeff: 2
+  monom: (1,), coeff: c
+  monom: (0,), coeff: 3
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import Mapping, defaultdict
+./swebench_9_15/testbed/sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import defaultdict, Iterable
+./swebench_9_15/testbed/sympy/core/containers.py:271: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  class OrderedSet(collections.MutableSet):
+./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import Callable
+[RAW line 115 TOOL Edit]
+{
+  "file_path": "sympy/printing/latex.py",
+  "new_text_sha256": "04b81457a172e9a5ecccf49024bf37537edb291006d3111e8938dbb41741c666",
+  "old_text_sha256": "17c96146c9eede9d87be2d8bd48e98613acc7e3ca32831b63f84ce350445f9c4"
+}
+[RAW line 118 TOOL Bash]
+python3 test_issue.py
+[RAW line 119 TOOL RESULT toolu_015okBaPVbtnbeRCnNmwgsQZ]
+Poly object:
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+String representation:
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+Pretty representation:
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+LaTeX representation:
+\operatorname{Poly}{\left( a x^{5} + x^{4} + b x^{3} + 2 x^{2} + c x + 3, x, domain=\mathbb{Z}\left[a, b, c\right] \right)}
+
+Checking order in string representation:
+  Contains 'a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3': True
+
+Checking order in LaTeX representation:
+  Contains 'a x^{5} + x^{4} + b x^{3} + 2 x^{2} + c x + 3': True
+  WRONG - Contains 'a x^{5} + b x^{3} + c x + x^{4} + 2 x^{2} + 3': False
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import Mapping, defaultdict
+./swebench_9_15/testbed/sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import defaultdict, Iterable
+./swebench_9_15/testbed/sympy/core/containers.py:271: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  class OrderedSet(collections.MutableSet):
+./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing th
+[... truncated ...]
+[RAW line 122 TOOL Bash]
+python3 -m pytest sympy/printing/tests/test_latex.py -xvs -k "poly" 2>&1 | head -100
+[RAW line 123 TOOL RESULT toolu_01BGrSyT8P416pHV5cZWJFfM]
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+architecture: 64-bit
+cache:        yes
+ground types: gmpy 2.0.8
+
+rootdir: ./swebench_9_15/testbed
+plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+collecting ... collected 122 items / 118 deselected / 4 selected
+
+sympy/printing/tests/test_latex.py::test_latex_PolyElement PASSED
+sympy/printing/tests/test_latex.py::test_latex_Poly FAILED
+
+=================================== FAILURES ===================================
+_______________________________ test_latex_Poly ________________________________
+
+    def test_latex_Poly():
+        assert latex(Poly(x**2 + 2 * x, x)) == \
+            r"\operatorname{Poly}{\left( x^{2} + 2 x, x, domain=\mathbb{Z} \right)}"
+>       assert latex(Poly(x/y, x)) == \
+            r"\operatorname{Poly}{\left( \frac{x}{y}, x, domain=\mathbb{Z}\left(y\right) \right)}"
+E       AssertionError: assert '\\operatorna...ht) \\right)}' == '\\operatorna...ht) \\right)}'
+E
+E         - \operatorname{Poly}{\left( \frac{x}{y}, x, domain=\mathbb{Z}\left(y\right) \right)}
+E         ?                                  ^    -
+E         + \operatorname{Poly}{\left( \frac{1}{y} x, x, domain=\mathbb{Z}\left(y\right) \right)}
+E         ?                                  ^       +++
+
+sympy/printing/tests/test_latex.py:1145: AssertionError
+=============================== warnings summary ===============================
+sympy/core/basic.py:3
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Mapping, defaultdict
+
+sympy/core/expr.py:12
+  ./swebench_9_15/tes
+[... truncated ...]
+[RAW line 126 TOOL Write]
+{
+  "content_sha256": "7dcb30aaec3b2b28b31b11eecc13fd65f519c69f1074a6ee84c48b3d6e443c40",
+  "file_path": "test_poly_xy.py"
+}
+[RAW line 130 TOOL Bash]
+python3 test_poly_xy.py
+[RAW line 131 TOOL RESULT toolu_01Eg6rTG4UyUk3TvAZxgqWEN]
+Poly object:
+Poly(1/y*x, x, domain='ZZ(y)')
+
+String representation:
+Poly(1/y*x, x, domain='ZZ(y)')
+
+LaTeX representation:
+\operatorname{Poly}{\left( \frac{1}{y} x, x, domain=\mathbb{Z}\left(y\right) \right)}
+
+Terms:
+  monom: (1,), coeff: 1/y
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import Mapping, defaultdict
+./swebench_9_15/testbed/sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import defaultdict, Iterable
+./swebench_9_15/testbed/sympy/core/containers.py:271: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  class OrderedSet(collections.MutableSet):
+./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import Callable
+[RAW line 134 TOOL Bash]
+python3 -c "from sympy import *; x, y = symbols('x y'); print('as_expr:', Poly(x/y, x).as_expr())"
+[RAW line 135 TOOL RESULT toolu_019MyEDZLbdukUrBSjMSyMuK]
+as_expr: x/y
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import Mapping, defaultdict
+./swebench_9_15/testbed/sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import defaultdict, Iterable
+./swebench_9_15/testbed/sympy/core/containers.py:271: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  class OrderedSet(collections.MutableSet):
+./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import Callable
+[RAW line 138 TOOL Read]
+{
+  "file_path": "sympy/printing/tests/test_latex.py",
+  "limit": 10,
+  "offset": 1142
+}
+[RAW line 139 TOOL RESULT toolu_012ik7HF91o12Hkw54Roga2o]
+  1142→def test_latex_Poly():
+  1143→    assert latex(Poly(x**2 + 2 * x, x)) == \
+  1144→        r"\operatorname{Poly}{\left( x^{2} + 2 x, x, domain=\mathbb{Z} \right)}"
+  1145→    assert latex(Poly(x/y, x)) == \
+  1146→        r"\operatorname{Poly}{\left( \frac{x}{y}, x, domain=\mathbb{Z}\left(y\right) \right)}"
+  1147→    assert latex(Poly(2.0*x + y)) == \
+  1148→        r"\operatorname{Poly}{\left( 2.0 x + 1.0 y, x, y, domain=\mathbb{R} \right)}"
+  1149→
+  1150→
+  1151→def test_latex_ComplexRootOf():
+
+[RAW line 141 TOOL Edit]
+{
+  "file_path": "sympy/printing/tests/test_latex.py",
+  "new_text_sha256": "df3d558bc99b553d4b7f7640a1825ce14cf55a641b5b9bf1c26be1f85d328c8c",
+  "old_text_sha256": "cb10989b0cf6da3b7c4511ac249ff1e5076acb5fb114a7aec0ccb762c49d8992"
+}
+[RAW line 145 TOOL Bash]
+python3 -m pytest sympy/printing/tests/test_latex.py::test_latex_Poly -xvs
+[RAW line 146 TOOL RESULT toolu_01RHTPXsK4yudrrdtsNCJHQk]
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+architecture: 64-bit
+cache:        yes
+ground types: gmpy 2.0.8
+
+rootdir: ./swebench_9_15/testbed
+plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+collecting ... collected 1 item
+
+sympy/printing/tests/test_latex.py::test_latex_Poly PASSED
+
+=============================== warnings summary ===============================
+sympy/core/basic.py:3
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Mapping, defaultdict
+
+sympy/core/expr.py:12
+  ./swebench_9_15/testbed/sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import defaultdict, Iterable
+
+sympy/core/containers.py:271
+  ./swebench_9_15/testbed/sympy/core/containers.py:271: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    class OrderedSet(collections.MutableSet):
+
+sympy/plotting/plot.py:28
+  ./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Callable
+
+sympy/physics/quantum/matrixutils.py:46
+  ./swebench_9_15/testbed/sympy/physics/quantum/matrixutils.py:46: DeprecationWarning: Please use `spmatrix` from the `scipy.sparse` namespace, the `scipy.sp
+[... truncated ...]
+[RAW line 149 TOOL Bash]
+python3 -m pytest sympy/printing/tests/test_latex.py -xvs -k "poly" 2>&1 | head -100
+[RAW line 150 TOOL RESULT toolu_011RXBE88vdGqgDBMgQhryda]
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+architecture: 64-bit
+cache:        yes
+ground types: gmpy 2.0.8
+
+rootdir: ./swebench_9_15/testbed
+plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+collecting ... collected 122 items / 118 deselected / 4 selected
+
+sympy/printing/tests/test_latex.py::test_latex_PolyElement PASSED
+sympy/printing/tests/test_latex.py::test_latex_Poly PASSED
+sympy/printing/tests/test_latex.py::test_PrettyPoly PASSED
+sympy/printing/tests/test_latex.py::test_PolynomialRingBase PASSED
+
+=============================== warnings summary ===============================
+sympy/core/basic.py:3
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Mapping, defaultdict
+
+sympy/core/expr.py:12
+  ./swebench_9_15/testbed/sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import defaultdict, Iterable
+
+sympy/core/containers.py:271
+  ./swebench_9_15/testbed/sympy/core/containers.py:271: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    class OrderedSet(collections.MutableSet):
+
+sympy/plotting/plot.py:28
+  ./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from c
+[... truncated ...]
+[RAW line 153 TOOL Bash]
+python3 -m pytest sympy/printing/tests/test_latex.py -x --tb=short 2>&1 | tail -50
+[RAW line 154 TOOL RESULT toolu_0124qSpT5EGKXM8XMJxrZxfW]
+plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+collected 122 items
+
+sympy/printing/tests/test_latex.py .........x........................... [ 30%]
+...............................................................x......F
+
+=================================== FAILURES ===================================
+_______________________________ test_issue_8470 ________________________________
+sympy/printing/tests/test_latex.py:1652: in test_issue_8470
+    e = parse_expr("-B*A", evaluate=False)
+sympy/parsing/sympy_parser.py:948: in parse_expr
+    code = compile(evaluateFalse(code), '<string>', 'eval')
+E   ValueError: Name node can't be used with 'False' constant
+=============================== warnings summary ===============================
+sympy/core/basic.py:3
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Mapping, defaultdict
+
+sympy/core/expr.py:12
+  ./swebench_9_15/testbed/sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import defaultdict, Iterable
+
+sympy/core/containers.py:271
+  ./swebench_9_15/testbed/sympy/core/containers.py:271: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    class OrderedSet(collections.MutableSet):
+
+sympy/plotting/plot.py:28
+  ./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Callable
+
+sympy/physics/quantum/matrixutils.py:46
+  ./swebench_9_15/testbed/sympy/physics/quantum/matrixutils.py:
+[... truncated ...]
+[RAW line 156 TOOL Read]
+{
+  "file_path": "sympy/printing/tests/test_latex.py",
+  "limit": 10,
+  "offset": 1650
+}
+[RAW line 157 TOOL RESULT toolu_016inHWqRkmD7e2orkyg4Kcy]
+  1650→def test_issue_8470():
+  1651→    from sympy.parsing.sympy_parser import parse_expr
+  1652→    e = parse_expr("-B*A", evaluate=False)
+  1653→    assert latex(e) == r"A \left(- B\right)"
+  1654→
+  1655→
+  1656→def test_issue_7117():
+  1657→    # See also issue #5031 (hence the evaluate=False in these).
+  1658→    e = Eq(x + 1, 2*x)
+  1659→    q = Mul(2, e, evaluate=False)
+
+[RAW line 159 TOOL Bash]
+python3 -m pytest sympy/printing/tests/test_latex.py -k "not test_issue_8470" --tb=line 2>&1 | tail -30
+[RAW line 160 TOOL RESULT toolu_01KazC29wV7JeyUSrvzwRjg6]
+  ./swebench_9_15/testbed/sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import defaultdict, Iterable
+
+sympy/core/containers.py:271
+  ./swebench_9_15/testbed/sympy/core/containers.py:271: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    class OrderedSet(collections.MutableSet):
+
+sympy/plotting/plot.py:28
+  ./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Callable
+
+sympy/physics/quantum/matrixutils.py:46
+  ./swebench_9_15/testbed/sympy/physics/quantum/matrixutils.py:46: DeprecationWarning: Please use `spmatrix` from the `scipy.sparse` namespace, the `scipy.sparse.base` namespace is deprecated.
+    scipy_sparse_matrix = sparse.base.spmatrix
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+                                DO *NOT* COMMIT!
+=========================== short test summary info ============================
+FAILED sympy/printing/tests/test_latex.py::test_issue_13559 - ValueError: Nam...
+====== 1 failed, 118 passed, 1 deselected, 2 xfailed, 5 warnings in 1.13s ======
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+[RAW line 162 TOOL Bash]
+python3 -m pytest sympy/printing/tests/test_latex.py -k "not test_issue_8470 and not test_issue_13559" --tb=line 2>&1 | tail -20
+[RAW line 163 TOOL RESULT toolu_01SLHzqyk7jjpt3vcN8vUocR]
+sympy/plotting/plot.py:28
+  ./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Callable
+
+sympy/physics/quantum/matrixutils.py:46
+  ./swebench_9_15/testbed/sympy/physics/quantum/matrixutils.py:46: DeprecationWarning: Please use `spmatrix` from the `scipy.sparse` namespace, the `scipy.sparse.base` namespace is deprecated.
+    scipy_sparse_matrix = sparse.base.spmatrix
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========== 118 passed, 2 deselected, 2 xfailed, 5 warnings in 1.11s ===========
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+[RAW line 166 TOOL Bash]
+python3 test_issue.py
+[RAW line 167 TOOL RESULT toolu_01FAtDmzpqRnfsdX3i7E4rDy]
+Poly object:
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+String representation:
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+Pretty representation:
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+LaTeX representation:
+\operatorname{Poly}{\left( a x^{5} + x^{4} + b x^{3} + 2 x^{2} + c x + 3, x, domain=\mathbb{Z}\left[a, b, c\right] \right)}
+
+Checking order in string representation:
+  Contains 'a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3': True
+
+Checking order in LaTeX representation:
+  Contains 'a x^{5} + x^{4} + b x^{3} + 2 x^{2} + c x + 3': True
+  WRONG - Contains 'a x^{5} + b x^{3} + c x + x^{4} + 2 x^{2} + 3': False
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import Mapping, defaultdict
+./swebench_9_15/testbed/sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import defaultdict, Iterable
+./swebench_9_15/testbed/sympy/core/containers.py:271: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  class OrderedSet(collections.MutableSet):
+./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing th
+[... truncated ...]

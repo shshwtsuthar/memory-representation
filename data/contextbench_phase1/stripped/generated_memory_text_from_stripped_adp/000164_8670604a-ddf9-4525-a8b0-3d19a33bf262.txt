@@ -1,0 +1,356 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 8670604a-ddf9-4525-a8b0-3d19a33bf262
+- repo: django/django
+- instance_id: django__django-16139
+- base_commit: d559cb02da30f74debbb1fc3a46de0df134d2d80
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Accessing UserAdmin via to_field leads to link to PasswordResetForm being broken (404)
+Description
+
+        (last modified by Simon Kern)
+
+Accessing the UserAdmin via another model's Admin that has a reference to User (with to_field set, e.g., to_field="uuid") leads to the UserAdmin being accessed via an url that looks similar to this one:
+.../user/22222222-3333-4444-5555-666677778888/change/?_to_field=uuid
+However the underlying form looks like this:
+Code highlighting:
+class UserChangeForm(forms.ModelForm):
+    password = ReadOnlyPasswordHashField(
+        label=_("Password"),
+        help_text=_(
+            "Raw passwords are not stored, so there is no way to see this "
+            "user’s password, but you can change the password using "
+            '<a href="{}">this form</a>.'
+        ),
+    )
+    ...
+    ...
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        password = self.fields.get("password")
+        if password:
+            password.help_text = password.help_text.format("../password/")
+    ...
+    ...
+This results in the link to the PasswordResetForm being wrong and thus ending up in a 404. If we drop the assumption that UserAdmin is always accessed via its pk, then we're good to go. It's as simple as replacing password.help_text = password.help_text.format("../password/") with password.help_text = password.help_text.format(f"../../{self.instance.pk}/password/")
+I've opened a pull request on GitHub for this Ticket, please see:
+​PR
+
+FILES INSPECTED
+---------------
+- django/contrib/auth/forms.py [Read: 2]
+- tests/auth_tests/test_forms.py [Read: 3, Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [2] Grep pattern='class UserChangeForm'
+- [3] Grep pattern='class UserChangeForm' path='testbed'
+- [10] Grep pattern='class.*UserChangeForm.*Test' path='tests/auth_tests/test_forms.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15 -type f -name "*.py" | grep -E "(admin|user)" | head -20
+- [test] cd testbed && python test_issue.py
+- [test] cd testbed && python test_issue.py
+- [test] python ./swebench_9_15/testbed/test_issue.py
+- [test] python3 ./swebench_9_15/testbed/test_issue.py
+- [diagnostic] ls ./swebench_9_15/testbed/tests/ | grep settings
+- [diagnostic] ls ./swebench_9_15/testbed/tests/ | grep -E "^(runtests|manage)"
+- [test] python3 tests/runtests.py auth_tests.test_forms.UserChangeFormTest --verbosity=2
+- [test] python3 tests/runtests.py auth_tests.test_forms.UserChangeFormTest --verbosity=2
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #3]
+  Found 3 files
+  testbed/tests/auth_tests/test_forms.py
+  testbed/docs/topics/auth/customizing.txt
+  testbed/django/contrib/auth/forms.py
+- [Read Result after action #5]
+       1→import unicodedata
+       2→
+       3→from django import forms
+       4→from django.contrib.auth import authenticate, get_user_model, password_validation
+       5→from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX, identify_hasher
+       6→from django.contrib.auth.models import User
+       7→from django.contrib.auth.tokens import default_token_generator
+       8→from django.contrib.sites.shortcuts import get_current_site
+       9→from django.core.exceptions import ValidationError
+      10→from django.core.mail import EmailMultiAlternatives
+      11→from django.template import loader
+      12→from django.utils.encoding import force_bytes
+      13→from django.utils.http import urlsafe_base64_encode
+      14→from django.utils.text import capfirst
+      15→from django.utils.translation import gettext
+      16→from django.utils.translation import gettext_lazy as _
+      17→
+      18→UserModel = get_user_model()
+      19→
+      20→
+      21→def _unicode_ci_compare(s1, s2):
+      22→    """
+      23→    Perform case-insensitive comparison of two identifiers, using the
+      24→    recommended algorithm from Unicode Technical Report 36, section
+      25→    2.11.2(B)(2).
+      26→    """
+      27→    return (
+      28→
+  [... truncated ...]
+- [Read Result after action #8]
+       1→import datetime
+       2→import re
+       3→from unittest import mock
+       4→
+       5→from django.contrib.auth.forms import (
+       6→    AdminPasswordChangeForm,
+       7→    AuthenticationForm,
+       8→    PasswordChangeForm,
+       9→    PasswordResetForm,
+      10→    ReadOnlyPasswordHashField,
+      11→    ReadOnlyPasswordHashWidget,
+      12→    SetPasswordForm,
+      13→    UserChangeForm,
+      14→    UserCreationForm,
+      15→)
+      16→from django.contrib.auth.models import User
+      17→from django.contrib.auth.signals import user_login_failed
+      18→from django.contrib.sites.models import Site
+      19→from django.core import mail
+      20→from django.core.exceptions import ValidationError
+      21→from django.core.mail import EmailMultiAlternatives
+      22→from django.forms import forms
+      23→from django.forms.fields import CharField, Field, IntegerField
+      24→from django.test import SimpleTestCase, TestCase, override_settings
+      25→from django.utils import translation
+      26→from django.utils.text import capfirst
+      27→from django.utils.translation import gettext as _
+      28→
+      29→from .models.custom_user import (
+      30→    CustomUser,
+      31→    CustomUserWithoutIsActiveField,
+      32→
+  [... truncated ...]
+- [Grep Result after action #10]
+  813:class UserChangeFormTest(TestDataMixin, TestCase):
+- [Read Result after action #12]
+     813→class UserChangeFormTest(TestDataMixin, TestCase):
+     814→    def test_username_validity(self):
+     815→        user = User.objects.get(username="testclient")
+     816→        data = {"username": "not valid"}
+     817→        form = UserChangeForm(data, instance=user)
+     818→        self.assertFalse(form.is_valid())
+     819→        validator = next(
+     820→            v
+     821→            for v in User._meta.get_field("username").validators
+     822→            if v.code == "invalid"
+     823→        )
+     824→        self.assertEqual(form["username"].errors, [str(validator.message)])
+     825→
+     826→    def test_bug_14242(self):
+     827→        # A regression test, introduce by adding an optimization for the
+     828→        # UserChangeForm.
+     829→
+     830→        class MyUserForm(UserChangeForm):
+     831→            def __init__(self, *args, **kwargs):
+     832→                super().__init__(*args, **kwargs)
+     833→                self.fields[
+     834→                    "groups"
+     835→                ].help_text = "These groups give users different permissions"
+     836→
+     837→            class Meta(UserChangeForm.Meta):
+     838→                fields = ("groups",)
+     839→
+     840→
+  [... truncated ...]
+- [Test Output after action #14]
+  Exit code 1
+    File "test_issue.py", line 32
+      expected_url = f"../../{user.pk}/password/"
+                                                ^
+  SyntaxError: invalid syntax
+- [Test Output after action #17]
+  Exit code 1
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_issue.py", line 6, in <module>
+      from django.contrib.auth.forms import UserChangeForm
+    File "./swebench_9_15/testbed/django/__init__.py", line 1, in <module>
+      from django.utils.version import get_version
+    File "./swebench_9_15/testbed/django/utils/version.py", line 7, in <module>
+      from django.utils.regex_helper import _lazy_re_compile
+    File "./swebench_9_15/testbed/django/utils/regex_helper.py", line 10, in <module>
+      from django.utils.functional import SimpleLazyObject
+    File "./swebench_9_15/testbed/django/utils/functional.py", line 265
+      if (_wrapped := self._wrapped) is empty:
+                   ^
+  SyntaxError: invalid syntax
+- [Test Output after action #19]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_issue.py", line 6, in <module>
+      from django.contrib.auth.forms import UserChangeForm
+    File "./swebench_9_15/testbed/django/contrib/auth/forms.py", line 6, in <module>
+      from django.contrib.auth.models import User
+    File "./swebench_9_15/testbed/django/contrib/auth/models.py", line 3, in <module>
+      from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
+    File "./swebench_9_15/testbed/django/contrib/auth/base_user.py", line 56, in <module>
+      class AbstractBaseUser(models.Model):
+    File "./swebench_9_15/testbed/django/db/models/base.py", line 127, in __new__
+      app_config = apps.get_containing_app_config(module)
+    File "./swebench_9_15/testbed/django/apps/r
+  [... truncated ...]
+- [Diagnostic Output after action #22]
+  settings_tests
+- [Diagnostic Output after action #24]
+  managers_regress
+  runtests.py
+- [Test Output after action #26]
+  Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+  Importing application auth_tests
+  Found 11 test(s).
+  Skipping setup of unused database(s): other.
+  Operations to perform:
+    Synchronize unmigrated apps: auth, auth_tests, contenttypes, messages, sessions, staticfiles
+    Apply all migrations: admin, sites
+  Synchronizing apps without migrations:
+    Creating tables...
+      Creating table django_content_type
+      Creating table auth_permission
+      Creating table auth_group
+      Creating table auth_user
+      Creating table django_session
+      Creating table auth_tests_customuser
+      Creating table auth_tests_customuserwithoutisactivefield
+      Creating table auth_tests_extensionuser
+      Creating table auth_tests_custompermissionsuser
+      Creating table auth_tests_customusernonuniqueusername
+      Creating table auth_tests_isactivetestuser1
+      Creating table auth_tests_minimaluser
+      Creating table auth_tests_nopassworduser
+      Creating table auth_tests_concrete
+      Creating table auth_tests_uuiduser
+      Creating table auth_tests_customemailfield
+      Creating table auth_tests_email
+      Creating table auth_tests_customuserwithfk
+      Creating table auth_tests_i
+  [... truncated ...]
+- [Read Result after action #28]
+     905→        user = User.objects.get(username="testclient")
+     906→        data = {
+     907→            "username": "testclient",
+     908→            "password": "testclient",
+     909→            "date_of_birth": "1998-02-24",
+     910→        }
+     911→        form = CustomUserChangeForm(data, instance=user)
+     912→        self.assertTrue(form.is_valid())
+     913→        form.save()
+     914→        self.assertEqual(form.cleaned_data["username"], "testclient")
+     915→        self.assertEqual(form.cleaned_data["date_of_birth"], datetime.date(1998, 2, 24))
+     916→
+     917→    def test_password_excluded(self):
+     918→        class UserChangeFormWithoutPassword(UserChangeForm):
+     919→            password = None
+     920→
+     921→            class Meta:
+     922→                model = User
+     923→                exclude = ["password"]
+     924→
+     925→        form = UserChangeFormWithoutPassword()
+     926→        self.assertNotIn("password", form.fields)
+     927→
+     928→    def test_username_field_autocapitalize_none(self):
+     929→        form = UserChangeForm()
+     930→        self.assertEqual(
+     931→            form.fields["username"].widget.attrs.get("autocapitalize"), "none"
+     932→        )
+     9
+  [... truncated ...]
+- [Test Output after action #31]
+  Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+  Importing application auth_tests
+  Found 12 test(s).
+  Skipping setup of unused database(s): other.
+  Operations to perform:
+    Synchronize unmigrated apps: auth, auth_tests, contenttypes, messages, sessions, staticfiles
+    Apply all migrations: admin, sites
+  Synchronizing apps without migrations:
+    Creating tables...
+      Creating table django_content_type
+      Creating table auth_permission
+      Creating table auth_group
+      Creating table auth_user
+      Creating table django_session
+      Creating table auth_tests_customuser
+      Creating table auth_tests_customuserwithoutisactivefield
+      Creating table auth_tests_extensionuser
+      Creating table auth_tests_custompermissionsuser
+      Creating table auth_tests_customusernonuniqueusername
+      Creating table auth_tests_isactivetestuser1
+      Creating table auth_tests_minimaluser
+      Creating table auth_tests_nopassworduser
+      Creating table auth_tests_concrete
+      Creating table auth_tests_uuiduser
+      Creating table auth_tests_customemailfield
+      Creating table auth_tests_email
+      Creating table auth_tests_customuserwithfk
+      Creating table auth_tests_i
+  [... truncated ...]
+- [Read Result after action #33]
+     162→    def __init__(self, *args, **kwargs):
+     163→        super().__init__(*args, **kwargs)
+     164→        password = self.fields.get("password")
+     165→        if password:
+     166→            password.help_text = password.help_text.format(f"../../{self.instance.pk}/password/")
+     167→        user_permissions = self.fields.get("user_permissions")
+     168→        if user_permissions:
+     169→            user_permissions.queryset = user_permissions.queryset.select_related(
+     170→                "content_type"
+     171→            )
+     172→
+     173→
+     174→class AuthenticationForm(forms.Form):
+     175→    """
+     176→    Base class for authenticating users. Extend this to get a form that accepts
+
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/contrib/auth/forms.py
+  Tool: Edit action #7
+  old_text_sha256: f9d3da94536bd86a157bcbcb0e8eb57a38ba4cd9213965d915beb5a8f18bb5af
+  new_text_sha256: 3a72ea8e9438690ff04044ace8825a0b66659f9ebd836e1ebd2c851bab375e83
+- test_simple.py
+  Tool: Write action #21
+  new_text_sha256: cb0b5917362f834fdf01fb25abf18eb9634d6db3008ebbec41ac74924762fd2c
+- tests/auth_tests/test_forms.py
+  Tool: Edit action #30
+  old_text_sha256: a9ccc9dd9ca025eccdde5100dd3f23c2b406891e50fa52ffb9cd31d735f7918f
+  new_text_sha256: b0228afec9eda213c99e23bf788c9dedd9beb1237ccfd0395fb4690f7872eae9
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

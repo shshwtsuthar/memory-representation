@@ -1,0 +1,361 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: c67a7675-fa98-4d48-849a-244848941731
+- repo: sympy/sympy
+- instance_id: sympy__sympy-14817
+- base_commit: 0dbdc0ea83d339936da175f8c3a97d0d6bafb9f8
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Error pretty printing MatAdd
+```py
+>>> pprint(MatrixSymbol('x', n, n) + MatrixSymbol('y*', n, n))
+Traceback (most recent call last):
+  File "./sympy/core/sympify.py", line 368, in sympify
+    expr = parse_expr(a, local_dict=locals, transformations=transformations, evaluate=evaluate)
+  File "./sympy/parsing/sympy_parser.py", line 950, in parse_expr
+    return eval_expr(code, local_dict, global_dict)
+  File "./sympy/parsing/sympy_parser.py", line 863, in eval_expr
+    code, global_dict, local_dict)  # take local objects in preference
+  File "<string>", line 1
+    Symbol ('y' )*
+                 ^
+SyntaxError: unexpected EOF while parsing
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "./sympy/printing/pretty/pretty.py", line 2371, in pretty_print
+    use_unicode_sqrt_char=use_unicode_sqrt_char))
+  File "./sympy/printing/pretty/pretty.py", line 2331, in pretty
+    return pp.doprint(expr)
+  File "./sympy/printing/pretty/pretty.py", line 62, in doprint
+    return self._print(expr).render(**self._settings)
+  File "./sympy/printing/printer.py", line 274, in _print
+    return getattr(self, printmethod)(expr, *args, **kwargs)
+  File "./sympy/printing/pretty/pretty.py", line 828, in _print_MatAdd
+    if S(item.args[0]).is_negative:
+  File "./sympy/core/sympify.py", line 370, in sympify
+    raise SympifyError('could not parse %r' % a, exc)
+sympy.core.sympify.SympifyError: Sympify of expression 'could not parse 'y*'' failed, because of exception being raised:
+SyntaxError: unexpected EOF while parsing (<string>, line 1)
+```
+
+The code shouldn't be using sympify to handle string arguments from MatrixSymbol.
+
+I don't even understand what the code is doing. Why does it omit the `+` when the first argument is negative? This seems to assume that the arguments of MatAdd have a certain form, and that they will always print a certain way if they are negative.
+
+FILES INSPECTED
+---------------
+- sympy/printing/pretty/pretty.py [Read: 1, Grep: 3]
+- sympy/printing [Grep: 1]
+- sympy/printing/precedence.py [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [9] Grep pattern='def _print_Add' path='sympy/printing/pretty/pretty.py'
+- [13] Grep pattern='def _coeff_isneg' path='sympy/printing/pretty/pretty.py'
+- [15] Grep pattern='_coeff_isneg' path='sympy/printing'
+- [17] Grep pattern='def _coeff_isneg' path='sympy/printing/precedence.py'
+- [19] Grep pattern='_coeff_isneg' path='sympy/printing/pretty/pretty.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction]
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, pprint, Symbol
+n = Symbol('n')
+# This should trigger the error
+try:
+    pprint(MatrixSymbol('x', n, n) + MatrixSymbol('y*', n, n))
+except Exception as e:
+    print('Error occurred:')
+    print(type(e).__name__ + ':', str(e))
+"
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol
+n = Symbol('n')
+x = MatrixSymbol('x', n, n)
+y = MatrixSymbol('y*', n, n)
+print('x.args:', x.args)
+print('y.args:', y.args)
+print('Type of x:', type(x))
+
+# Let's also check what a MatAdd looks like
+result = x + y
+print('\\nMatAdd:', result)
+print('MatAdd args:', result.args)
+print('Type of first arg:', type(result.args[0]))
+" 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol
+n = Symbol('n')
+x = MatrixSymbol('x', n, n)
+y = MatrixSymbol('y', n, n)
+
+# Check different scenarios
+from sympy import MatAdd, S
+
+# Case 1: Simple addition
+expr1 = x + y
+print('Case 1 (x + y):')
+for arg in expr1.args:
+    print('  ', arg, type(arg), hasattr(arg, 'is_Mul'))
+
+# Case 2: With scalar multiplication
+expr2 = x + (-1)*y
+print('\\nCase 2 (x + (-1)*y):')
+for arg in expr2.args:
+    print('  ', arg, type(
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol
+from sympy.core.function import _coeff_isneg
+n = Symbol('n')
+x = MatrixSymbol('x', n, n)
+y = MatrixSymbol('y', n, n)
+
+# Test different cases
+expr1 = x + y
+expr2 = x + (-1)*y
+
+print('Testing _coeff_isneg:')
+for arg in expr2.args:
+    print(f'  {arg}: is_Mul={arg.is_Mul}, _coeff_isneg={_coeff_isneg(arg)}')
+" 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol
+n = Symbol('n')
+y = MatrixSymbol('y', n, n)
+
+# Check the type of -y
+neg_y = (-1)*y
+print(f'Type of (-1)*y: {type(neg_y)}')
+print(f'Class name: {neg_y.__class__.__name__}')
+print(f'Args: {neg_y.args}')
+print(f'First arg: {neg_y.args[0]}, type: {type(neg_y.args[0])}')
+print(f'First arg is_negative: {neg_y.args[0].is_negative}')
+
+# Check if we can use hasattr
+print(f'\\nHas is_MatMul: {hasattr(neg_y, \"is_MatMul\
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol
+n = Symbol('n')
+x = MatrixSymbol('x', n, n)
+y = MatrixSymbol('y*', n, n)
+
+# Test as_coeff_mmul
+print('Test as_coeff_mmul:')
+print('x.as_coeff_mmul():', x.as_coeff_mmul())
+print('y.as_coeff_mmul():', y.as_coeff_mmul())
+print('(-1*y).as_coeff_mmul():', ((-1)*y).as_coeff_mmul())
+
+# Check if the coefficient is negative
+coeff_x = x.as_coeff_mmul()[0]
+coeff_y = y.as_coeff_mmul()[0]
+coeff_neg_y = ((-1)*y).as_coeff_mm
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol, S
+n = Symbol('n')
+x = MatrixSymbol('x', n, n)
+y = MatrixSymbol('y*', n, n)
+
+# Test as_coeff_mmul
+print('Test as_coeff_mmul:')
+coeff_x, _ = x.as_coeff_mmul()
+coeff_y, _ = y.as_coeff_mmul()
+coeff_neg_y, _ = ((-1)*y).as_coeff_mmul()
+
+print('Type of coeff_x:', type(coeff_x), coeff_x)
+print('Type of coeff_y:', type(coeff_y), coeff_y)
+print('Type of coeff_neg_y:', type(coeff_neg_y), coeff_neg_y)
+
+# Try converting t
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol, S
+n = Symbol('n')
+x = MatrixSymbol('x', n, n)
+y = MatrixSymbol('y*', n, n)
+
+# Test different approaches
+coeff_x, _ = x.as_coeff_mmul()
+coeff_neg_y, _ = ((-1)*y).as_coeff_mmul()
+
+print('Check if already SymPy:')
+print('coeff_x has is_negative:', hasattr(coeff_x, 'is_negative'))
+print('coeff_neg_y has is_negative:', hasattr(coeff_neg_y, 'is_negative'))
+
+# Try simpler checks
+print('\\nSimpler checks:')
+print(
+  [... truncated ...]
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- Traceback (most recent call last):
+- FAILED: AttributeError: 'int' object has no attribute 'is_negative'
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #5]
+     820→
+     821→    def _print_MatAdd(self, expr):
+     822→        s = None
+     823→        for item in expr.args:
+     824→            pform = self._print(item)
+     825→            if s is None:
+     826→                s = pform     # First element
+     827→            else:
+     828→                if S(item.args[0]).is_negative:
+     829→                    s = prettyForm(*stringPict.next(s, ' '))
+     830→                    pform = self._print(item)
+     831→                else:
+     832→                    s = prettyForm(*stringPict.next(s, ' + '))
+     833→                s = prettyForm(*stringPict.next(s, pform))
+     834→
+     835→        return s
+     836→
+     837→    def _print_MatMul(self, expr):
+     838→        args = list(expr.args)
+     839→        from sympy import Add, MatAdd, HadamardProduct
+     840→        for i, a in enumerate(args):
+     841→            if (isinstance(a, (Add, MatAdd, HadamardProduct))
+     842→                    and len(expr.args) > 1):
+     843→                args[i] = prettyForm(*self._print(a).parens())
+     844→            else:
+     845→                args[i] = self._print(a)
+     846→
+     847→        return prettyForm.__mul__(*args)
+     848→
+     849→    def _print_DotProduct(self
+  [... truncated ...]
+- [Grep Result after action #9]
+  1456:    def _print_Add(self, expr, order=None):
+  1457-        if self.order == 'none':
+  1458-            terms = list(expr.args)
+  1459-        else:
+  1460-            terms = self._as_ordered_terms(expr, order=order)
+  1461-        pforms, indices = [], []
+  1462-
+  1463-        def pretty_negative(pform, index):
+  1464-            """Prepend a minus sign to a pretty form. """
+  1465-            #TODO: Move this code to prettyForm
+  1466-            if index == 0:
+  1467-                if pform.height() > 1:
+  1468-                    pform_neg = '- '
+  1469-                else:
+  1470-                    pform_neg = '-'
+  1471-            else:
+  1472-                pform_neg = ' - '
+  1473-
+  1474-            if (pform.binding > prettyForm.NEG
+  1475-                or pform.binding == prettyForm.ADD):
+  1476-                p = stringPict(*pform.parens())
+  1477-            else:
+  1478-                p = pform
+  1479-            p = stringPict.next(pform_neg, p)
+  1480-            # Lower the binding to NEG, even if it was higher. Otherwise, it
+  1481-            # will print as a + ( - (b)), instead of a - (b).
+  1482-            return prettyForm(binding=prettyForm.NEG, *p)
+  1483-
+  1484-        for i, term in enumerate(
+  [... truncated ...]
+- [Grep Result after action #13]
+  No matches found
+- [Grep Result after action #15]
+  Found 5 files
+  sympy/printing/pretty/pretty.py
+  sympy/printing/precedence.py
+  sympy/printing/mathml.py
+  sympy/printing/latex.py
+  sympy/printing/glsl.py
+- [Grep Result after action #17]
+  No matches found
+- [Grep Result after action #19]
+  from sympy.core.function import _coeff_isneg
+              if term.is_Mul and _coeff_isneg(term):
+- [Test Output after action #41]
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+    from collections import Mapping, defaultdict
+    from collections import defaultdict, Iterable
+    class OrderedSet(collections.MutableSet):
+    from collections import Callable
+  Testing fix for sympy__sympy-14817
+  Issue: Error pretty printing MatAdd with MatrixSymbol
+
+  ============================================================
+  Test 1: Original bug - MatrixSymbol with '*' character
+  ============================================================
+  Expression: x + y*
+  x + y*
+  ✓ PASSED
+
+  ============================================================
+  Test 2: Negative coefficient
+  ============================================================
+  Expression: -y + x
+  -y + x
+  ✓ PASSED
+
+  ============================================================
+  Test 3: Multiple terms with mixed signs
+  ============================================================
+  Expression: -y + x + z
+  -y + x + z
+  ✓ PASSED
+
+  =
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/printing/pretty/pretty.py
+  Tool: Edit action #25
+  old_text_sha256: 6d6baa2c8cedf916ddbfd277c740c08ce907e0733856a0e32ea354d76f54d362
+  new_text_sha256: ccfd52d141c4c380d6799fddfe17f436786f8f0b660495e7c9da4acd6131e14c
+- sympy/printing/pretty/pretty.py
+  Tool: Edit action #34
+  old_text_sha256: ccfd52d141c4c380d6799fddfe17f436786f8f0b660495e7c9da4acd6131e14c
+  new_text_sha256: 875918c8b849ef7e07d3d6eff3418cf050242a699368265775912c81c951dcbf
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

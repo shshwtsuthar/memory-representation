@@ -1,0 +1,380 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: fd65b6a7-79b5-47e6-9e6e-209832e96b47
+- repo: django/django
+- instance_id: django__django-12308
+- base_commit: 2e0f04507b17362239ba49830d26fec504d46978
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+JSONField are not properly displayed in admin when they are readonly.
+Description
+
+JSONField values are displayed as dict when readonly in the admin.
+For example, {"foo": "bar"} would be displayed as {'foo': 'bar'}, which is not valid JSON.
+I believe the fix would be to add a special case in django.contrib.admin.utils.display_for_field to call the prepare_value of the JSONField (not calling json.dumps directly to take care of the InvalidJSONInput case).
+
+FILES INSPECTED
+---------------
+- django/contrib/admin/utils.py [Read: 2]
+- django/db/models/fields/json.py [Read: 1]
+- django/forms [Grep: 1]
+- django/forms/fields.py [Grep: 2]
+- tests/admin_utils/tests.py [Grep: 1, Read: 2]
+- tests/admin_utils/models.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [4] Glob path='testbed' glob='**/admin/utils.py'
+- [6] Glob path='testbed' glob='**/fields/json.py'
+- [8] Glob path='testbed' glob='**/forms/fields.py'
+- [14] Grep pattern='class JSONField' path='django/forms'
+- [16] Grep pattern='class JSONField' path='django/forms/fields.py'
+- [18] Grep pattern='class InvalidJSONInput' path='django/forms/fields.py'
+- [41] Glob path='swebench_9_15/testbed' glob='**/tests/**/test*admin*utils*.py'
+- [44] Grep pattern='display_for_field' path='tests/admin_utils/tests.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls *.py
+- [diagnostic] find . -name "*12308*" -type f 2>/dev/null | head -20
+- [diagnostic] cd testbed && cat > test_jsonfield_readonly.py << 'EOF'
+"""
+Test to verify JSONField readonly display in admin
+"""
+import json
+from django.contrib.admin.utils import display_for_field
+from django.db import models
+
+# Create a simple model with JSONField
+class TestModel(models.Model):
+    data = models.JSONField()
+
+    class Meta:
+        app_label = 'test'
+
+# Get the field
+field = TestModel._meta.get_field('data')
+
+# Test 1: Display a dict
+test_value_1 = {"foo": "bar"}
+result_1 = display_for_fiel
+  [... truncated ...]
+- [test] cd testbed && python test_jsonfield_readonly.py
+- [test] python test_jsonfield_readonly.py
+- [test] python test_jsonfield_readonly.py
+- [other/reproduction] python --version
+- [test] python3 testbed/test_jsonfield_readonly.py
+- [diagnostic] ls -la testbed/*.py | head -5
+- [diagnostic] ls -la ./swebench_9_15/testbed/test*.py
+- [test] python3 ./swebench_9_15/testbed/test_jsonfield_readonly.py
+- [test] python3 ./swebench_9_15/testbed/test_jsonfield_readonly.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- E   django.core.exceptions.ImproperlyConfigured: Requested setting INSTALLED_APPS, but settings are not configured. You must either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing settings.
+- ERROR tests/admin_utils/tests.py - django.core.exceptions.ImproperlyConfigure...
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #1]
+  calculate_session_usage.py
+- [Glob Result after action #4]
+  ./swebench_9_15/testbed/django/contrib/admin/utils.py
+- [Glob Result after action #6]
+  ./swebench_9_15/testbed/django/db/models/fields/json.py
+- [Glob Result after action #8]
+  ./swebench_9_15/testbed/django/contrib/gis/forms/fields.py
+  ./swebench_9_15/testbed/django/forms/fields.py
+- [Read Result after action #10]
+       1→import datetime
+       2→import decimal
+       3→from collections import defaultdict
+       4→
+       5→from django.core.exceptions import FieldDoesNotExist
+       6→from django.db import models, router
+       7→from django.db.models.constants import LOOKUP_SEP
+       8→from django.db.models.deletion import Collector
+       9→from django.forms.utils import pretty_name
+      10→from django.urls import NoReverseMatch, reverse
+      11→from django.utils import formats, timezone
+      12→from django.utils.html import format_html
+      13→from django.utils.regex_helper import _lazy_re_compile
+      14→from django.utils.text import capfirst
+      15→from django.utils.translation import ngettext, override as translation_override
+      16→
+      17→QUOTE_MAP = {i: '_%02X' % i for i in b'":/_#?;@&=+$,"[]<>%\n\\'}
+      18→UNQUOTE_MAP = {v: chr(k) for k, v in QUOTE_MAP.items()}
+      19→UNQUOTE_RE = _lazy_re_compile('_(?:%s)' % '|'.join([x[1:] for x in UNQUOTE_MAP]))
+      20→
+      21→
+      22→class FieldIsAForeignKeyColumnName(Exception):
+      23→    """A field is a foreign key attname, i.e. <FK>_id."""
+      24→    pass
+      25→
+      26→
+      27→def lookup_needs_distinct(opts, lookup_path):
+      28→    """
+      29→    Return True
+  [... truncated ...]
+- [Read Result after action #12]
+       1→import json
+       2→
+       3→from django import forms
+       4→from django.core import checks, exceptions
+       5→from django.db import NotSupportedError, connections, router
+       6→from django.db.models import lookups
+       7→from django.db.models.lookups import PostgresOperatorLookup, Transform
+       8→from django.utils.translation import gettext_lazy as _
+       9→
+      10→from . import Field
+      11→from .mixins import CheckFieldDefaultMixin
+      12→
+      13→__all__ = ['JSONField']
+      14→
+      15→
+      16→class JSONField(CheckFieldDefaultMixin, Field):
+      17→    empty_strings_allowed = False
+      18→    description = _('A JSON object')
+      19→    default_error_messages = {
+      20→        'invalid': _('Value must be valid JSON.'),
+      21→    }
+      22→    _default_hint = ('dict', '{}')
+      23→
+      24→    def __init__(
+      25→        self, verbose_name=None, name=None, encoder=None, decoder=None,
+      26→        **kwargs,
+      27→    ):
+      28→        if encoder and not callable(encoder):
+      29→            raise ValueError('The encoder parameter must be a callable object.')
+      30→        if decoder and not callable(decoder):
+      31→            raise ValueError('The decoder parameter must
+  [... truncated ...]
+- [Grep Result after action #14]
+  Found 1 file
+  testbed/django/forms/fields.py
+- [Grep Result after action #16]
+  1226:class JSONField(CharField):
+  1227-    default_error_messages = {
+  1228-        'invalid': _('Enter a valid JSON.'),
+  1229-    }
+  1230-    widget = Textarea
+  1231-
+  1232-    def __init__(self, encoder=None, decoder=None, **kwargs):
+  1233-        self.encoder = encoder
+  1234-        self.decoder = decoder
+  1235-        super().__init__(**kwargs)
+  1236-
+  1237-    def to_python(self, value):
+  1238-        if self.disabled:
+  1239-            return value
+  1240-        if value in self.empty_values:
+  1241-            return None
+  1242-        elif isinstance(value, (list, dict, int, float, JSONString)):
+  1243-            return value
+  1244-        try:
+  1245-            converted = json.loads(value, cls=self.decoder)
+  1246-        except json.JSONDecodeError:
+  1247-            raise ValidationError(
+  1248-                self.error_messages['invalid'],
+  1249-                code='invalid',
+  1250-                params={'value': value},
+  1251-            )
+  1252-        if isinstance(converted, str):
+  1253-            return JSONString(converted)
+  1254-        else:
+  1255-            return converted
+  1256-
+  1257-    def bound_data(self, data, initial):
+  1258-        if self.disabled:
+  1259-            return initia
+  [... truncated ...]
+- [Grep Result after action #18]
+  1218:class InvalidJSONInput(str):
+  1219-    pass
+  1220-
+  1221-
+  1222-class JSONString(str):
+  1223-    pass
+- [Test Output after action #23]
+  Exit code 1
+    File "test_jsonfield_readonly.py", line 21
+      print(f"Test 1 - Dict input: {test_value_1}")
+                                                 ^
+  SyntaxError: invalid syntax
+- [Test Output after action #26]
+  Exit code 1
+    File "test_jsonfield_readonly.py", line 41
+      print(f"Test 1 - Dict input: {test_value_1}")
+                                                 ^
+  SyntaxError: invalid syntax
+- [Test Output after action #30]
+  Exit code 2
+  python3: can't open file 'testbed/test_jsonfield_readonly.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Diagnostic Output after action #32]
+  (eval):1: no matches found: testbed/*.py
+- [Diagnostic Output after action #34]
+  -rw-r--r--@ 1 user  staff  2335 14 Dec 15:05 ./swebench_9_15/testbed/test_jsonfield_readonly.py
+- [Test Output after action #36]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+    File "./swebench_9_15/testbed/test_jsonfield_readonly.py", line 72
+      print(f"Result uses double quotes (valid JSON): {'\"' in result_1}")
+            ^
+  SyntaxError: f-string expression part cannot include a backslash
+- [Test Output after action #39]
+  Test 1 - Dict input: {'foo': 'bar'}
+  Result: {"foo": "bar"}
+  Is valid JSON: True
+
+  Test 2 - List input: ['a', 'b', 'c']
+  Result: ["a", "b", "c"]
+  Is valid JSON: True
+
+  Test 3 - None input: None
+  Result: -
+  Expected '-': True
+
+  Test 4 - Nested structure: {'name': 'John', 'age': 30, 'hobbies': ['reading', 'gaming']}
+  Result: {"name": "John", "age": 30, "hobbies": ["reading", "gaming"]}
+  Is valid JSON: True
+
+  Verification:
+  Result uses double quotes (valid JSON): True
+  Result doesn't use single quotes for keys: True
+
+  All tests passed!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Diagnostic Output after action #42]
+  ./swebench_9_15/testbed/tests/admin_utils/test_logentry.py
+  ./swebench_9_15/testbed/tests/admin_utils/models.py
+  ./swebench_9_15/testbed/tests/admin_utils/__init__.py
+  ./swebench_9_15/testbed/tests/admin_utils/admin.py
+  ./swebench_9_15/testbed/tests/admin_utils/tests.py
+  ./swebench_9_15/testbed/tests/admin_utils/urls.py
+- [Grep Result after action #44]
+  8:    NestedObjects, display_for_field, display_for_value, flatten,
+  138:                resolved_value = display_for_field(resolved_value, field, self.empty_value)
+  142:    def test_null_display_for_field(self):
+  144:        Regression test for #12550: display_for_field should handle None
+  147:        display_value = display_for_field(None, models.CharField(), self.empty_value)
+  150:        display_value = display_for_field(None, models.CharField(
+  157:        display_value = display_for_field(None, models.DateField(), self.empty_value)
+  160:        display_value = display_for_field(None, models.TimeField(), self.empty_value)
+  165:        display_value = display_for_field(None, models.NullBooleanField(), self.empty_value)
+  169:        display_value = display_for_field(None, models.BooleanField(null=True), self.empty_value)
+  173:        display_value = display_for_field(None, models.DecimalField(), self.empty_value)
+  176:        display_value = display_for_field(None, models.FloatField(), self.empty_value)
+  179:    def test_number_formats_display_for_field(self):
+  180:        display_value = display_for_field(12345.6789, models.FloatField(), self.empty_value)
+  183:        display_value = display
+  [... truncated ...]
+- [Test Output after action #46]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 0 items / 1 error
+
+  ==================================== ERRORS ====================================
+  _________________ ERROR collecting tests/admin_utils/tests.py __________________
+  tests/admin_utils/tests.py:16: in <module>
+      from .models import (
+  tests/admin_utils/models.py:5: in <module>
+      class Site(models.Model):
+  django/db/models/base.py:108: in __new__
+      app_config = apps.get_containing_app_config(module)
+  django/apps/registry.py:252: in get_containing_app_config
+      self.check_apps_ready()
+  django/apps/registry.py:134: in check_apps_ready
+      settings.INSTALLED_APPS
+  django/conf/__init__.py:77: in __getattr__
+      self._setup(name)
+  django/conf/__init__.py:58: in _setup
+      raise ImproperlyConfigured(
+  E   django.core.exceptions.ImproperlyConfigur
+  [... truncated ...]
+- [Test Output after action #48]
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+  test_action_flag_choices (admin_utils.test_logentry.LogEntryTests) ... ok
+  test_log_action (admin_utils.test_logentry.LogEntryTests) ... ok
+  test_logentry_change_message (admin_utils.test_logentry.LogEntryTests)
+  LogEntry.change_message is stored as a dumped JSON structure to be able ... ok
+  test_logentry_change_message_formsets (admin_utils.test_logentry.LogEntryTests)
+  All messages for changed formsets are logged in a change message. ... ok
+  test_logentry_change_message_localized_datetime_input (admin_utils.test_logentry.LogEntryTests)
+  Localized date/time inputs shouldn't affect changed form data detection. ... ok
+  test_logentry_change_message_not_json (admin_utils.test_logentr
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/contrib/admin/utils.py
+  Tool: Edit action #20
+  old_text_sha256: 65c39d2e46d823cd8a95896befc024bc9f8b8ff260108f05d54632ab500ab3d2
+  new_text_sha256: 3ee716fc7a60645316d0cf6ec66a62c60756f3cfe45a9dc279051e7cce280766
+- test_jsonfield_readonly.py
+  Tool: Write action #25
+  new_text_sha256: e2ddee9705870d6757393f548e3b61c972099f8c3272a94ed17da02f4e2dfdb4
+- test_jsonfield_readonly.py
+  Tool: Edit action #38
+  old_text_sha256: e60b73b9b20c8d8d040f1320a38f032bf89c84a80daa8934a612043f2bfa9f9b
+  new_text_sha256: 9f8aa328c4d47d7d9e7d2e9bc912f06491911b5da51df589ddc57685c10eab6b
+- tests/admin_utils/tests.py
+  Tool: Edit action #63
+  old_text_sha256: f7f9bb2485942f68e53f24ba7f907a980cecc5bd10794f148b648cd3bc9a868b
+  new_text_sha256: 9e290399d18a6915d6a49b579b5d9b22a31b942506caaa1321341238238bc490
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

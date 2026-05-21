@@ -1,0 +1,1157 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 46901acd-69e3-4702-9314-832d6cbc0dd0
+- repo: django/django
+- instance_id: django__django-17051
+- base_commit: b7a17b0ea0a2061bae752a3a2292007d41825814
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-17051
+base_commit: b7a17b0ea0a2061bae752a3a2292007d41825814
+problem_statement:
+Allow returning IDs in QuerySet.bulk_create() when updating conflicts.
+Description
+
+Currently, when using bulk_create with a conflict handling flag turned on (e.g. ignore_conflicts or update_conflicts), the primary keys are not set in the returned queryset, as documented in bulk_create.
+While I understand using ignore_conflicts can lead to PostgreSQL not returning the IDs when a row is ignored (see ​this SO thread), I don't understand why we don't return the IDs in the case of update_conflicts.
+For instance:
+MyModel.objects.bulk_create([MyModel(...)], update_conflicts=True, update_fields=[...], unique_fields=[...])
+generates a query without a RETURNING my_model.id part:
+INSERT INTO "my_model" (...)
+VALUES (...)
+    ON CONFLICT(...) DO UPDATE ...
+If I append the RETURNING my_model.id clause, the query is indeed valid and the ID is returned (checked with PostgreSQL).
+I investigated a bit and ​this in Django source is where the returning_fields gets removed.
+I believe we could discriminate the cases differently so as to keep those returning_fields in the case of update_conflicts.
+This would be highly helpful when using bulk_create as a bulk upsert feature.
+sha256: 06e19bef20cd2ea9ece13cfbd84679dd699d84269b7b2b0dc2f61ee346497926
+truncated: false
+
+[ADP ACTION current=1 original=3: code_action bash]
+payload:
+find . -name "*django__django-17051*" -type f 2>/dev/null | head -20
+sha256: ffd983830162c3759824de01696967be3d1773612dc717c51cbcf5cad09631ff
+truncated: false
+
+[ADP ACTION current=2 original=7: code_action bash]
+payload:
+ls -la testbed 2>/dev/null || echo "No testbed directory found"
+sha256: 09efe649b83d538dd27f3e7b112719edec1cc087383337a37471f346178e290e
+truncated: false
+
+[ADP OBSERVATION current=3 original=8 source=environment]
+name: Bash:toolu_017fFWZDkbEeWkF1F2D7qgo6
+excerpt:
+No testbed directory found
+sha256: 24c8f4e7fa1a6e754a0f099e5c078c8f00b708ac72d61f8999d2de23e68469d5
+truncated: false
+
+[ADP ACTION current=4 original=25: code_action bash]
+payload:
+cd ./swebench_9_15
+sha256: 94e703031341289bafd2cc973cb6d1fcd8115d5c50153066398cc583d8050d38
+truncated: false
+
+[ADP ACTION current=5 original=31: api_action Grep]
+path: django
+payload:
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed/django",
+  "pattern": "def bulk_create"
+}
+sha256: 15ae7ac44426b833df59a8902ff98372ab065bc2098f5f46de065f57327db89f
+truncated: false
+
+[ADP OBSERVATION current=6 original=32 source=environment]
+name: Grep:toolu_01JdwTPtBF5qCNH6QaDPFCbZ
+excerpt:
+Found 1 file
+testbed/django/db/models/query.py
+sha256: 897a7c5854a9ee4ebde6a5d63273ece2119adeae689bbad5dad3a2198c5d3ccd
+truncated: false
+
+[ADP ACTION current=7 original=33: api_action Grep]
+path: django
+payload:
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed/django",
+  "pattern": "returning_fields"
+}
+sha256: 316b158c1659d932d9efd2e143051b65ea28123a155a907c8367db01510439fa
+truncated: false
+
+[ADP OBSERVATION current=8 original=34 source=environment]
+name: Grep:toolu_01YAjJuXevkJwCbcS1g8hqxY
+excerpt:
+Found 4 files
+testbed/django/db/models/sql/compiler.py
+testbed/django/db/models/query.py
+testbed/django/db/models/options.py
+testbed/django/db/models/base.py
+sha256: 91e3129c58c85f63e313b551ae8641e040df442cf5d55e2203fb93003411204e
+truncated: false
+
+[ADP ACTION current=9 original=35: api_action Grep]
+path: django/db/models/query.py
+payload:
+{
+  "-A": 100,
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/query.py",
+  "pattern": "def bulk_create"
+}
+sha256: b4cb4f18040ced9779bff6adc9bc9050a19c144362c74411bdf621bc726a7423
+truncated: false
+
+[ADP OBSERVATION current=10 original=36 source=environment]
+name: Grep:toolu_01YAf2xzjhR8PdhPc8XRYo6j
+excerpt:
+726:    def bulk_create(
+727-        self,
+728-        objs,
+729-        batch_size=None,
+730-        ignore_conflicts=False,
+731-        update_conflicts=False,
+732-        update_fields=None,
+733-        unique_fields=None,
+734-    ):
+735-        """
+736-        Insert each of the instances into the database. Do *not* call
+737-        save() on each of the instances, do not send any pre/post_save
+738-        signals, and do not set the primary key attribute if it is an
+739-        autoincrement field (except if features.can_return_rows_from_bulk_insert=True).
+740-        Multi-table models are not supported.
+741-        """
+742-        # When you bulk insert you don't get the primary keys back (if it's an
+743-        # autoincrement, except if can_return_rows_from_bulk_insert=True), so
+744-        # you can't insert into the child tables which references this. There
+745-        # are two workarounds:
+746-        # 1) This could be implemented if you didn't have an autoincrement pk
+747-        # 2) You could do it by doing O(n) normal inserts into the parent
+748-        #    tables to get the primary keys back and then doing a single bulk
+749-        #    insert into the childmost table.
+750-        # We currently set the primary keys on the objects when using
+751-        # PostgreSQL via the RETURNING ID clause. It should be possible for
+752-        # Oracle as well, but the semantics for extracting the primary keys is
+753-        # trickier so it's not done yet.
+754-        if batch_size is not None and batch_size <= 0:
+755-            raise ValueError("Batch size must be a positive integer.")
+756-        # Check that the parents share the same concrete model with the our
+757-        # model to detect the inheritance pattern ConcreteGrandParent ->
+758-        # MultiTableParent -> ProxyChild. Simply checking self.model._meta.proxy
+759-        # would not identify that case as involving multiple tables.
+760-        for parent in self.model._meta.get_parent_list():
+sha256: e33651cc338ecc05b1ffee687f8b592c3a37061c88b1082e7c00e93f9c660926
+truncated: true
+
+[ADP ACTION current=11 original=37: api_action Grep]
+path: django/db/models/query.py
+payload:
+{
+  "-A": 50,
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/query.py",
+  "pattern": "def _batched_insert"
+}
+sha256: a22e3871d94ed253ecdcac8a6ae5d0252adb8e7a11560557ec79a75aa189f3d2
+truncated: false
+
+[ADP OBSERVATION current=12 original=38 source=environment]
+name: Grep:toolu_01T9ZnJvho7zdmLTpxo9qnJ2
+excerpt:
+1821:    def _batched_insert(
+1822-        self,
+1823-        objs,
+1824-        fields,
+1825-        batch_size,
+1826-        on_conflict=None,
+1827-        update_fields=None,
+1828-        unique_fields=None,
+1829-    ):
+1830-        """
+1831-        Helper method for bulk_create() to insert objs one batch at a time.
+1832-        """
+1833-        connection = connections[self.db]
+1834-        ops = connection.ops
+1835-        max_batch_size = max(ops.bulk_batch_size(fields, objs), 1)
+1836-        batch_size = min(batch_size, max_batch_size) if batch_size else max_batch_size
+1837-        inserted_rows = []
+1838-        bulk_return = connection.features.can_return_rows_from_bulk_insert
+1839-        for item in [objs[i : i + batch_size] for i in range(0, len(objs), batch_size)]:
+1840-            if bulk_return and on_conflict is None:
+1841-                inserted_rows.extend(
+1842-                    self._insert(
+1843-                        item,
+1844-                        fields=fields,
+1845-                        using=self.db,
+1846-                        returning_fields=self.model._meta.db_returning_fields,
+1847-                    )
+1848-                )
+1849-            else:
+1850-                self._insert(
+1851-                    item,
+1852-                    fields=fields,
+1853-                    using=self.db,
+1854-                    on_conflict=on_conflict,
+1855-                    update_fields=update_fields,
+1856-                    unique_fields=unique_fields,
+1857-                )
+1858-        return inserted_rows
+1859-
+1860-    def _chain(self):
+1861-        """
+1862-        Return a copy of the current QuerySet that's ready for another
+1863-        operation.
+1864-        """
+1865-        obj = self._clone()
+1866-        if obj._sticky_filter:
+1867-            obj.query.filter_is_sticky = True
+1868-            obj._sticky_filter = False
+1869-        return obj
+1870-
+1871-    def _clone(self):
+sha256: ce656dbc50ace10b9ef953bc59137a805d1e553968234fd2c947901cbd26f70b
+truncated: false
+
+[ADP ACTION current=13 original=39: api_action Grep]
+path: django/db/models/query.py
+payload:
+{
+  "-A": 30,
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/query.py",
+  "pattern": "def _check_bulk_create_options"
+}
+sha256: ced937cf8154b72db50fc304fef52421563f8139d590a67d7c5bd143678e388b
+truncated: false
+
+[ADP OBSERVATION current=14 original=40 source=environment]
+name: Grep:toolu_01KDSK5kCG6p5rEkaevYCBrx
+excerpt:
+672:    def _check_bulk_create_options(
+673-        self, ignore_conflicts, update_conflicts, update_fields, unique_fields
+674-    ):
+675-        if ignore_conflicts and update_conflicts:
+676-            raise ValueError(
+677-                "ignore_conflicts and update_conflicts are mutually exclusive."
+678-            )
+679-        db_features = connections[self.db].features
+680-        if ignore_conflicts:
+681-            if not db_features.supports_ignore_conflicts:
+682-                raise NotSupportedError(
+683-                    "This database backend does not support ignoring conflicts."
+684-                )
+685-            return OnConflict.IGNORE
+686-        elif update_conflicts:
+687-            if not db_features.supports_update_conflicts:
+688-                raise NotSupportedError(
+689-                    "This database backend does not support updating conflicts."
+690-                )
+691-            if not update_fields:
+692-                raise ValueError(
+693-                    "Fields that will be updated when a row insertion fails "
+694-                    "on conflicts must be provided."
+695-                )
+696-            if unique_fields and not db_features.supports_update_conflicts_with_target:
+697-                raise NotSupportedError(
+698-                    "This database backend does not support updating "
+699-                    "conflicts with specifying unique fields that can trigger "
+700-                    "the upsert."
+701-                )
+702-            if not unique_fields and db_features.supports_update_conflicts_with_target:
+sha256: b8bbfb63da1bdafbc6c31b05830a19b006d4cb3ac1d561514877d4b4ab2972b4
+truncated: false
+
+[ADP ACTION current=15 original=41: api_action Grep]
+path: django/db/models/query.py
+payload:
+{
+  "-A": 50,
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/query.py",
+  "pattern": "def _check_bulk_create_options"
+}
+sha256: 5341c90220b8ab0ddb713d783bface7039b1cdd6c5ab63005b701ff949ecc20e
+truncated: false
+
+[ADP OBSERVATION current=16 original=42 source=environment]
+name: Grep:toolu_012iMxKZusyQUQsvD4UvaGpo
+excerpt:
+672:    def _check_bulk_create_options(
+673-        self, ignore_conflicts, update_conflicts, update_fields, unique_fields
+674-    ):
+675-        if ignore_conflicts and update_conflicts:
+676-            raise ValueError(
+677-                "ignore_conflicts and update_conflicts are mutually exclusive."
+678-            )
+679-        db_features = connections[self.db].features
+680-        if ignore_conflicts:
+681-            if not db_features.supports_ignore_conflicts:
+682-                raise NotSupportedError(
+683-                    "This database backend does not support ignoring conflicts."
+684-                )
+685-            return OnConflict.IGNORE
+686-        elif update_conflicts:
+687-            if not db_features.supports_update_conflicts:
+688-                raise NotSupportedError(
+689-                    "This database backend does not support updating conflicts."
+690-                )
+691-            if not update_fields:
+692-                raise ValueError(
+693-                    "Fields that will be updated when a row insertion fails "
+694-                    "on conflicts must be provided."
+695-                )
+696-            if unique_fields and not db_features.supports_update_conflicts_with_target:
+697-                raise NotSupportedError(
+698-                    "This database backend does not support updating "
+699-                    "conflicts with specifying unique fields that can trigger "
+700-                    "the upsert."
+701-                )
+702-            if not unique_fields and db_features.supports_update_conflicts_with_target:
+703-                raise ValueError(
+704-                    "Unique fields that can trigger the upsert must be provided."
+705-                )
+706-            # Updating primary keys and non-concrete fields is forbidden.
+707-            if any(not f.concrete or f.many_to_many for f in update_fields):
+708-                raise ValueError(
+709-                    "bulk_create() can only be used
+sha256: d815387426370edecec9b93834b2b822d61e7a46b8f8673cad250dcd6934b78d
+truncated: true
+
+[ADP ACTION current=17 original=43: api_action Read]
+path: django/db/models/query.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/query.py",
+  "limit": 60,
+  "offset": 672
+}
+sha256: eae685b1e0f9aa67d2bc89966d47c6c37c62051c83560eabb90b7052a6c7ab8a
+truncated: false
+
+[ADP OBSERVATION current=18 original=44 source=environment]
+name: Read:toolu_01WsRYLjy77heyJcZbGJjVgq
+excerpt:
+   672→    def _check_bulk_create_options(
+   673→        self, ignore_conflicts, update_conflicts, update_fields, unique_fields
+   674→    ):
+   675→        if ignore_conflicts and update_conflicts:
+   676→            raise ValueError(
+   677→                "ignore_conflicts and update_conflicts are mutually exclusive."
+   678→            )
+   679→        db_features = connections[self.db].features
+   680→        if ignore_conflicts:
+   681→            if not db_features.supports_ignore_conflicts:
+   682→                raise NotSupportedError(
+   683→                    "This database backend does not support ignoring conflicts."
+   684→                )
+   685→            return OnConflict.IGNORE
+   686→        elif update_conflicts:
+   687→            if not db_features.supports_update_conflicts:
+   688→                raise NotSupportedError(
+   689→                    "This database backend does not support updating conflicts."
+   690→                )
+   691→            if not update_fields:
+   692→                raise ValueError(
+   693→                    "Fields that will be updated when a row insertion fails "
+   694→                    "on conflicts must be provided."
+   695→                )
+   696→            if unique_fields and not db_features.supports_update_conflicts_with_target:
+   697→                raise NotSupportedError(
+   698→                    "This database backend does not support updating "
+   699→                    "conflicts with specifying unique fields that can trigger "
+   700→                    "the upsert."
+   701→                )
+   702→            if not unique_fields and db_features.supports_update_conflicts_with_target:
+   703→                raise ValueError(
+   704→                    "Unique fields that can trigger the upsert must be provided."
+   705→                )
+   706→            # Updating primary keys and non-concrete fields is forbidden.
+   707→            if any(not f.concrete or f.many_to_many for f in u
+sha256: a629ee1bb5e0b91b19243284799ec2323ee574c3944296841b9dcc7e9267622c
+truncated: true
+
+[ADP ACTION current=19 original=45: api_action Grep]
+path: django
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django",
+  "pattern": "class OnConflict"
+}
+sha256: 672cff2369677f361aa806fdc0d6412e595fae143a9294d2ecb6d46e643a93a4
+truncated: false
+
+[ADP OBSERVATION current=20 original=46 source=environment]
+name: Grep:toolu_016K6yLL1CMk6nTvABjc3poj
+excerpt:
+testbed/django/db/models/constants.py:10:class OnConflict(Enum):
+sha256: 3d276e9b6523d43cfa2e354d633ae24ad740b890130ba5d7fbf575c2b18e4194
+truncated: false
+
+[ADP ACTION current=21 original=47: api_action Read]
+path: django/db/models/constants.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/constants.py"
+}
+sha256: 8086db7a3cbfdeec1c59d12e060b2b4d06004b4009c80499efb23f12b1cd35ed
+truncated: false
+
+[ADP OBSERVATION current=22 original=48 source=environment]
+name: Read:toolu_01Mn9bUfzSuTK4yomH1rdnyz
+excerpt:
+     1→"""
+     2→Constants used across the ORM in general.
+     3→"""
+     4→from enum import Enum
+     5→
+     6→# Separator used to split filter strings apart.
+     7→LOOKUP_SEP = "__"
+     8→
+     9→
+    10→class OnConflict(Enum):
+    11→    IGNORE = "ignore"
+    12→    UPDATE = "update"
+    13→
+
+sha256: 01ead20160eb29cc67ec8710a57042711657769e0115b1ff2542de5014020403
+truncated: false
+
+[ADP ACTION current=23 original=51: api_action Read]
+path: django/db/models/query.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/query.py",
+  "limit": 40,
+  "offset": 1821
+}
+sha256: ab26598deaf6ee4d60dae968df7c3b57028f1c4bea756403dbd560cbca3d1565
+truncated: false
+
+[ADP OBSERVATION current=24 original=52 source=environment]
+name: Read:toolu_01Mv5PfbPvB3atRbag5CEPS5
+excerpt:
+  1821→    def _batched_insert(
+  1822→        self,
+  1823→        objs,
+  1824→        fields,
+  1825→        batch_size,
+  1826→        on_conflict=None,
+  1827→        update_fields=None,
+  1828→        unique_fields=None,
+  1829→    ):
+  1830→        """
+  1831→        Helper method for bulk_create() to insert objs one batch at a time.
+  1832→        """
+  1833→        connection = connections[self.db]
+  1834→        ops = connection.ops
+  1835→        max_batch_size = max(ops.bulk_batch_size(fields, objs), 1)
+  1836→        batch_size = min(batch_size, max_batch_size) if batch_size else max_batch_size
+  1837→        inserted_rows = []
+  1838→        bulk_return = connection.features.can_return_rows_from_bulk_insert
+  1839→        for item in [objs[i : i + batch_size] for i in range(0, len(objs), batch_size)]:
+  1840→            if bulk_return and on_conflict is None:
+  1841→                inserted_rows.extend(
+  1842→                    self._insert(
+  1843→                        item,
+  1844→                        fields=fields,
+  1845→                        using=self.db,
+  1846→                        returning_fields=self.model._meta.db_returning_fields,
+  1847→                    )
+  1848→                )
+  1849→            else:
+  1850→                self._insert(
+  1851→                    item,
+  1852→                    fields=fields,
+  1853→                    using=self.db,
+  1854→                    on_conflict=on_conflict,
+  1855→                    update_fields=update_fields,
+  1856→                    unique_fields=unique_fields,
+  1857→                )
+  1858→        return inserted_rows
+  1859→
+  1860→    def _chain(self):
+
+sha256: e22f0e7ca566319ac5ce5ee9bea91d167baf1bed041de78f1f50d2f3383ed720
+truncated: false
+
+[ADP ACTION current=25 original=53: api_action Read]
+path: django/db/models/query.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/query.py",
+  "limit": 50,
+  "offset": 1
+}
+sha256: c7b7668fadc85387d860d83401ace74879cec17cc0b7964d4911f4bee006eda7
+truncated: false
+
+[ADP OBSERVATION current=26 original=54 source=environment]
+name: Read:toolu_0145CdnTE7xJvQWM5YF2YPd8
+excerpt:
+     1→"""
+     2→The main QuerySet implementation. This provides the public API for the ORM.
+     3→"""
+     4→
+     5→import copy
+     6→import operator
+     7→import warnings
+     8→from itertools import chain, islice
+     9→
+    10→from asgiref.sync import sync_to_async
+    11→
+    12→import django
+    13→from django.conf import settings
+    14→from django.core import exceptions
+    15→from django.db import (
+    16→    DJANGO_VERSION_PICKLE_KEY,
+    17→    IntegrityError,
+    18→    NotSupportedError,
+    19→    connections,
+    20→    router,
+    21→    transaction,
+    22→)
+    23→from django.db.models import AutoField, DateField, DateTimeField, Field, sql
+    24→from django.db.models.constants import LOOKUP_SEP, OnConflict
+    25→from django.db.models.deletion import Collector
+    26→from django.db.models.expressions import Case, F, Value, When
+    27→from django.db.models.functions import Cast, Trunc
+    28→from django.db.models.query_utils import FilteredRelation, Q
+    29→from django.db.models.sql.constants import CURSOR, GET_ITERATOR_CHUNK_SIZE
+    30→from django.db.models.utils import (
+    31→    AltersData,
+    32→    create_namedtuple_class,
+    33→    resolve_callables,
+    34→)
+    35→from django.utils import timezone
+    36→from django.utils.functional import cached_property, partition
+    37→
+    38→# The maximum number of results to fetch in a get() query.
+    39→MAX_GET_RESULTS = 21
+    40→
+    41→# The maximum number of items to display in a QuerySet.__repr__
+    42→REPR_OUTPUT_SIZE = 20
+    43→
+    44→
+    45→class BaseIterable:
+    46→    def __init__(
+    47→        self, queryset, chunked_fetch=False, chunk_size=GET_ITERATOR_CHUNK_SIZE
+    48→    ):
+    49→        self.queryset = queryset
+    50→        self.chunked_fetch = chunked_fetch
+
+sha256: 98754ecf9f3d725d9696a2dd2a55c8e007278ace341e819c2c85ae93088d1613
+truncated: false
+
+[ADP ACTION current=27 original=55: api_action Edit]
+path: django/db/models/query.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/query.py",
+  "new_text_sha256": "f311b85b65e273dc03609c6b1b82e078f646f5133352b765ddf4c449c4d6aa25",
+  "old_text_sha256": "df190cc1235bb719ab7d74affafc4ce7b83143ed4e7c3ec1d956f1ec69258955"
+}
+sha256: 031cb3f9b45b60b6c213e509547595894614068581c36847f52f3d973105f60b
+truncated: false
+
+[ADP ACTION current=28 original=57: api_action Read]
+path: django/db/models/query.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/query.py",
+  "limit": 25,
+  "offset": 802
+}
+sha256: 814132686394f65b739335e9d6a178ec36e137377a5c2c9d55be12f72dbe9b14
+truncated: false
+
+[ADP OBSERVATION current=29 original=58 source=environment]
+name: Read:toolu_014RbmSEMWx8dAX2rne3BGMy
+excerpt:
+   802→            if objs_without_pk:
+   803→                fields = [f for f in fields if not isinstance(f, AutoField)]
+   804→                returned_columns = self._batched_insert(
+   805→                    objs_without_pk,
+   806→                    fields,
+   807→                    batch_size,
+   808→                    on_conflict=on_conflict,
+   809→                    update_fields=update_fields,
+   810→                    unique_fields=unique_fields,
+   811→                )
+   812→                connection = connections[self.db]
+   813→                if (
+   814→                    connection.features.can_return_rows_from_bulk_insert
+   815→                    and on_conflict is None
+   816→                ):
+   817→                    assert len(returned_columns) == len(objs_without_pk)
+   818→                for obj_without_pk, results in zip(objs_without_pk, returned_columns):
+   819→                    for result, field in zip(results, opts.db_returning_fields):
+   820→                        setattr(obj_without_pk, field.attname, result)
+   821→                    obj_without_pk._state.adding = False
+   822→                    obj_without_pk._state.db = self.db
+   823→
+   824→        return objs
+   825→
+   826→    async def abulk_create(
+
+sha256: 2a5442134b51e56b36c6d2bcb897a93f39ebd6d3a2942c744b0bb349e34f2181
+truncated: false
+
+[ADP ACTION current=30 original=59: api_action Edit]
+path: django/db/models/query.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/query.py",
+  "new_text_sha256": "c8b10e72d40914b725b3a2ed5affbb237604027e5dabfafe16a12d56fb2c85b0",
+  "old_text_sha256": "bdf35b9eabdbb9f791b06655903d832076184b2b66dffae59ebb08b65c91d05f"
+}
+sha256: e8420cfa2d92ea40f01316fb092d06a17f278446904822bf7944b2c4205efe75
+truncated: false
+
+[ADP ACTION current=31 original=63: code_action bash]
+payload:
+find testbed/tests -name "*bulk*" -type f 2>/dev/null | head -10
+sha256: 56b210a43725fb50860fb133ccbcbcaf507ace1bd84c863b25f819f8da6b349f
+truncated: false
+
+[ADP OBSERVATION current=32 original=64 source=environment]
+name: Bash:toolu_01PjNedsM86XDuC9re37qWKt
+excerpt:
+testbed/tests/queries/test_bulk_update.py
+testbed/tests/postgres_tests/test_bulk_update.py
+sha256: 7512a2e1c8bc544f212a7d4a289bf79871c02b51f6bc4afd9fc2c5910536f78b
+truncated: false
+
+[ADP ACTION current=33 original=65: api_action Grep]
+path: tests
+payload:
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed/tests",
+  "pattern": "def test.*bulk_create"
+}
+sha256: 767efa06f8cbc60e28ba90cd9c2abd5789764798cc8d4d8b56f0daf2c857e138
+truncated: false
+
+[ADP OBSERVATION current=34 original=66 source=environment]
+name: Grep:toolu_01ArQCHAxBZMaqzSpCkXxr9w
+excerpt:
+Found 6 files
+testbed/tests/generic_relations/tests.py
+testbed/tests/field_defaults/tests.py
+testbed/tests/custom_pk/tests.py
+testbed/tests/bulk_create/tests.py
+testbed/tests/async/test_async_queryset.py
+testbed/tests/model_fields/test_uuid.py
+sha256: 7e25818c2587a5713ce3d1d3adcc8b90ee848c295485b6479367db512649e384
+truncated: false
+
+[ADP ACTION current=35 original=67: api_action Grep]
+path: tests/bulk_create/tests.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/tests/bulk_create/tests.py",
+  "pattern": "update_conflicts"
+}
+sha256: 9608b234e2a402b7072e65c3606d339d060aa86baa4156295371718f59d197e3
+truncated: false
+
+[ADP OBSERVATION current=36 original=68 source=environment]
+name: Grep:toolu_01WnrXpJHyfoWB1uD7Rz2FEJ
+excerpt:
+445:    @skipIfDBFeature("supports_update_conflicts")
+446:    def test_update_conflicts_unsupported(self):
+449:            Country.objects.bulk_create(self.data, update_conflicts=True)
+451:    @skipUnlessDBFeature("supports_ignore_conflicts", "supports_update_conflicts")
+452:    def test_ignore_update_conflicts_exclusive(self):
+453:        msg = "ignore_conflicts and update_conflicts are mutually exclusive"
+458:                update_conflicts=True,
+461:    @skipUnlessDBFeature("supports_update_conflicts")
+462:    def test_update_conflicts_no_update_fields(self):
+468:            Country.objects.bulk_create(self.data, update_conflicts=True)
+470:    @skipUnlessDBFeature("supports_update_conflicts")
+471:    @skipIfDBFeature("supports_update_conflicts_with_target")
+472:    def test_update_conflicts_unique_field_unsupported(self):
+480:                update_conflicts=True,
+485:    @skipUnlessDBFeature("supports_update_conflicts")
+486:    def test_update_conflicts_nonexistent_update_fields(self):
+488:        if connection.features.supports_update_conflicts_with_target:
+494:                update_conflicts=True,
+500:        "supports_update_conflicts",
+501:        "supports_update_conflicts_with_target",
+503:    def test_update_conflicts_unique_fields_required(self):
+508:                update_conflicts=True,
+513:        "supports_update_conflicts",
+514:        "supports_update_conflicts_with_target",
+516:    def test_update_conflicts_invalid_update_fields(self):
+522:                update_conflicts=True,
+530:                update_conflicts=True,
+536:        "supports_update_conflicts",
+537:        "supports_update_conflicts_with_target",
+539:    def test_update_conflicts_pk_in_update_fields(self):
+544:                update_conflicts=True,
+550:        "supports_update_conflicts",
+551:        "supports_update_conflicts_with_target",
+553:    def test_update_conflicts_invalid_unique_fields(self):
+559:                update_conflicts=True,
+567:                update_conflict
+sha256: 191ebe930997a9ceeca32357ee2bafc614319d55b5c2daef5b34ac3f31d25290
+truncated: true
+
+[ADP ACTION current=37 original=69: api_action Read]
+path: tests/bulk_create/tests.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/tests/bulk_create/tests.py",
+  "limit": 60,
+  "offset": 731
+}
+sha256: 9d5a0b1e3b7d5c0636dacbf741ec20a494189fb1860bcebe44f6f04692942b20
+truncated: false
+
+[ADP OBSERVATION current=38 original=70 source=environment]
+name: Read:toolu_01EnHRafmQFpFrhgGM5MEHGp
+excerpt:
+   731→    def _test_update_conflicts(self, unique_fields):
+   732→        UpsertConflict.objects.bulk_create(
+   733→            [
+   734→                UpsertConflict(number=1, rank=1, name="John"),
+   735→                UpsertConflict(number=2, rank=2, name="Mary"),
+   736→                UpsertConflict(number=3, rank=3, name="Hannah"),
+   737→            ]
+   738→        )
+   739→        self.assertEqual(UpsertConflict.objects.count(), 3)
+   740→
+   741→        conflicting_objects = [
+   742→            UpsertConflict(number=1, rank=4, name="Steve"),
+   743→            UpsertConflict(number=2, rank=2, name="Olivia"),
+   744→            UpsertConflict(number=3, rank=1, name="Hannah"),
+   745→        ]
+   746→        UpsertConflict.objects.bulk_create(
+   747→            conflicting_objects,
+   748→            update_conflicts=True,
+   749→            update_fields=["name", "rank"],
+   750→            unique_fields=unique_fields,
+   751→        )
+   752→        self.assertEqual(UpsertConflict.objects.count(), 3)
+   753→        self.assertCountEqual(
+   754→            UpsertConflict.objects.values("number", "rank", "name"),
+   755→            [
+   756→                {"number": 1, "rank": 4, "name": "Steve"},
+   757→                {"number": 2, "rank": 2, "name": "Olivia"},
+   758→                {"number": 3, "rank": 1, "name": "Hannah"},
+   759→            ],
+   760→        )
+   761→
+   762→        UpsertConflict.objects.bulk_create(
+   763→            conflicting_objects + [UpsertConflict(number=4, rank=4, name="Mark")],
+   764→            update_conflicts=True,
+   765→            update_fields=["name", "rank"],
+   766→            unique_fields=unique_fields,
+   767→        )
+   768→        self.assertEqual(UpsertConflict.objects.count(), 4)
+   769→        self.assertCountEqual(
+   770→            UpsertConflict.objects.values("number", "rank", "name"),
+   771→            [
+   772→                {"number": 1, "rank": 4, "name": "Steve"},
+   773→
+sha256: faffe99cb46bb1d1cc5a623d90e5f696241b7c36c43dc148a018c29d198988b8
+truncated: true
+
+[ADP ACTION current=39 original=71: api_action Grep]
+path: tests/bulk_create
+payload:
+{
+  "-A": 10,
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/tests/bulk_create",
+  "pattern": "class UpsertConflict"
+}
+sha256: 52c767c3e643daca20c0635e8ff2c8608559533aa60a975a473632daa54f868e
+truncated: false
+
+[ADP OBSERVATION current=40 original=72 source=environment]
+name: Grep:toolu_01173ZVwvd54ywuE8JscdgKR
+excerpt:
+testbed/tests/bulk_create/models.py:77:class UpsertConflict(models.Model):
+./swebench_9_15/testbed/tests/bulk_create/models.py-78-    number = models.IntegerField(unique=True)
+./swebench_9_15/testbed/tests/bulk_create/models.py-79-    rank = models.IntegerField()
+./swebench_9_15/testbed/tests/bulk_create/models.py-80-    name = models.CharField(max_length=15)
+./swebench_9_15/testbed/tests/bulk_create/models.py-81-
+./swebench_9_15/testbed/tests/bulk_create/models.py-82-
+testbed/tests/bulk_create/models.py-83-class NoFields(models.Model):
+./swebench_9_15/testbed/tests/bulk_create/models.py-84-    pass
+./swebench_9_15/testbed/tests/bulk_create/models.py-85-
+./swebench_9_15/testbed/tests/bulk_create/models.py-86-
+testbed/tests/bulk_create/models.py-87-class SmallAutoFieldModel(models.Model):
+sha256: 3084bde412485f4cd3a0d63a7e5cccedf3e75ecbd7f34a8c9689c287c0e2fd3d
+truncated: false
+
+[ADP ACTION current=41 original=75: code_action bash]
+payload:
+python test_issue.py
+sha256: 9340b86fed181ffc4932e68b97bf1b25f6ab048db759756a4107c7976507a895
+truncated: false
+
+[ADP OBSERVATION current=42 original=76 source=environment]
+name: Bash:toolu_015TodpYQYULhmrAyBdKof3H:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 67
+SyntaxError: Non-ASCII character '\xe2' in file test_issue.py on line 67, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+sha256: f7d1a39d2a3e9db9da3f49e581088c4086595b53e6f8a6b30127764bff541841
+truncated: false
+
+[ADP ACTION current=43 original=79: code_action bash]
+payload:
+python test_issue.py
+sha256: 0a78170b73aaeda80989fc478af16216f9fad48f141ce802da271d4dca92e36c
+truncated: false
+
+[ADP OBSERVATION current=44 original=80 source=environment]
+name: Bash:toolu_01MACiuvx7Y9mbpk6MWsvjSV:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 68
+    print(f"✓ Initial objects created with IDs: {initial_objects[0].pk}, {initial_objects[1].pk}")
+                                                                                                  ^
+SyntaxError: invalid syntax
+sha256: df50bc176ed8185a91489f54bc816b069cd8fdf2d8053c7bee983482f2e6f69b
+truncated: false
+
+[ADP ACTION current=45 original=81: code_action bash]
+payload:
+python --version
+sha256: 2bd71816e2fa294ffa9be948fbf1ab28c305b65b1c298c2fc0b537419e06fb55
+truncated: false
+
+[ADP OBSERVATION current=46 original=82 source=environment]
+name: Bash:toolu_01GQt8Rc2ctQVbnuq8bvoVR9
+excerpt:
+Python 2.7.3
+sha256: c6d9bd2d561b074688a302920b8e73838fd3f7b4043465431748a1e3b85691fe
+truncated: false
+
+[ADP ACTION current=47 original=83: code_action bash]
+payload:
+python3 test_issue.py
+sha256: e92c58640a9ace8efd8422ea1c56006cf74c841563a07f24fb1d8eb00c44d7bd
+truncated: false
+
+[ADP OBSERVATION current=48 original=84 source=environment]
+name: Bash:toolu_01JQk9sH6hzAZHmZC1xT23az:error
+excerpt:
+Exit code 1
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Traceback (most recent call last):
+  File "test_issue.py", line 17, in <module>
+    from django.conf import settings
+  File "./swebench_9_15/testbed/django/conf/__init__.py", line 19, in <module>
+    from django.utils.deprecation import RemovedInDjango51Warning
+  File "./swebench_9_15/testbed/django/utils/deprecation.py", line 4, in <module>
+    from asgiref.sync import iscoroutinefunction, markcoroutinefunction, sync_to_async
+ModuleNotFoundError: No module named 'asgiref'
+sha256: e112e6541e5958ba92e557d421713f064f036b768c9fbc8ac5d9e83af0c76146
+truncated: false
+
+[ADP ACTION current=49 original=87: code_action bash]
+payload:
+cd ./swebench_9_15 && python3 test_issue.py
+sha256: ae4cc5473c14ebad37b0f6be533cbd95ad50bd43fcd3637a76344bedb3dfa49c
+truncated: false
+
+[ADP OBSERVATION current=50 original=88 source=environment]
+name: Bash:toolu_01RHQs4dEn9UsMgxXimCbg52:error
+excerpt:
+Exit code 1
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Traceback (most recent call last):
+  File "test_issue.py", line 36, in <module>
+    django.setup()
+  File "./swebench_9_15/testbed/django/__init__.py", line 14, in setup
+    from django.apps import apps
+  File "./swebench_9_15/testbed/django/apps/__init__.py", line 2, in <module>
+    from .registry import apps
+  File "./swebench_9_15/testbed/django/apps/registry.py", line 13, in <module>
+    class Apps:
+  File "./swebench_9_15/testbed/django/apps/registry.py", line 168, in Apps
+    @functools.cache
+AttributeError: module 'functools' has no attribute 'cache'
+sha256: 7b6f330319f10daf9f2bff6626761a6abb3698462c3885282e0572f532163b14
+truncated: false
+
+[ADP ACTION current=51 original=89: code_action bash]
+payload:
+cd testbed && python3 -c "import sys; print(sys.version)"
+sha256: 0b0bd227e2cf584aa7d00fdda635d77a115d8386942b796c20386fff834c72ba
+truncated: false
+
+[ADP ACTION current=52 original=91: code_action bash]
+payload:
+python3 -c "import sys; print(sys.version)"
+sha256: bc259ab4c730f0e09ae883fa86ca3053c6933d25254ae9d24de6c69bfcd36b21
+truncated: false
+
+[ADP OBSERVATION current=53 original=92 source=environment]
+name: Bash:toolu_01XXBcpuiDajXVzjmCubGdNV
+excerpt:
+3.8.8 (default, Apr 13 2021, 12:59:45)
+[Clang 10.0.0 ]
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: c7127a628774efa09e9f691c02f38baa949608f0cb7004e2626c4e58a0d88a1b
+truncated: false
+
+[ADP ACTION current=54 original=93: api_action Grep]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed/django/db/models/sql/compiler.py",
+  "pattern": "def as_sql"
+}
+sha256: 0ce518e3271856e269e3bb1f54a6c4f9bbb41fba437dc2d461dd6d7d48001d9d
+truncated: false
+
+[ADP ACTION current=55 original=97: code_action bash]
+payload:
+ls -la django/db/models/sql/compiler.py
+sha256: c6609a990307bcb85398499fe0cf7e90e4062499cc892016f0de4a35da1cd951
+truncated: false
+
+[ADP OBSERVATION current=56 original=98 source=environment]
+name: Bash:toolu_01PcKjXYjZBoGy3EuHbwX3Tw
+excerpt:
+-rw-r--r--@ 1 user  staff  89233  9 Dec 03:42 django/db/models/sql/compiler.py
+sha256: 262e353769c9193219df08386ffcaa448e01e5c5935763f69eb0a4ab6c87b28e
+truncated: false
+
+[ADP ACTION current=57 original=99: api_action Grep]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "-A": 100,
+  "-n": true,
+  "output_mode": "content",
+  "path": "django/db/models/sql/compiler.py",
+  "pattern": "class SQLInsertCompiler"
+}
+sha256: a129bd47ab3710943114d7c88ffba0736ed3a2a1c5329cfcde098739ad99c597
+truncated: false
+
+[ADP OBSERVATION current=58 original=100 source=environment]
+name: Grep:toolu_01LdJDQTxSzb2PGCEmjikbbU
+excerpt:
+1623:class SQLInsertCompiler(SQLCompiler):
+1624-    returning_fields = None
+1625-    returning_params = ()
+1626-
+1627-    def field_as_sql(self, field, val):
+1628-        """
+1629-        Take a field and a value intended to be saved on that field, and
+1630-        return placeholder SQL and accompanying params. Check for raw values,
+1631-        expressions, and fields with get_placeholder() defined in that order.
+1632-
+1633-        When field is None, consider the value raw and use it as the
+1634-        placeholder, with no corresponding parameters returned.
+1635-        """
+1636-        if field is None:
+1637-            # A field value of None means the value is raw.
+1638-            sql, params = val, []
+1639-        elif hasattr(val, "as_sql"):
+1640-            # This is an expression, let's compile it.
+1641-            sql, params = self.compile(val)
+1642-        elif hasattr(field, "get_placeholder"):
+1643-            # Some fields (e.g. geo fields) need special munging before
+1644-            # they can be inserted.
+1645-            sql, params = field.get_placeholder(val, self, self.connection), [val]
+1646-        else:
+1647-            # Return the common case for the placeholder
+1648-            sql, params = "%s", [val]
+1649-
+1650-        # The following hook is only used by Oracle Spatial, which sometimes
+1651-        # needs to yield 'NULL' and [] as its placeholder and params instead
+1652-        # of '%s' and [None]. The 'NULL' placeholder is produced earlier by
+1653-        # OracleOperations.get_geom_placeholder(). The following line removes
+1654-        # the corresponding None parameter. See ticket #10888.
+1655-        params = self.connection.ops.modify_insert_params(sql, params)
+1656-
+1657-        return sql, params
+1658-
+1659-    def prepare_value(self, field, value):
+1660-        """
+1661-        Prepare a value to be used in a query by resolving it if it is an
+1662-        expression and otherwise calling the field's get_db_prep_save().
+16
+sha256: dd21bc14b275178787c29a07fe87d04b31378dffdecc374d97c0fbcc65ec00a4
+truncated: true
+
+[ADP ACTION current=59 original=101: api_action Grep]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "-A": 50,
+  "-B": 2,
+  "-n": true,
+  "output_mode": "content",
+  "path": "django/db/models/sql/compiler.py",
+  "pattern": "def as_sql"
+}
+sha256: 72603dd01e40e600d951b9c29a6fafa802566eab0394691c73f3c773d2094665
+truncated: false
+
+[ADP OBSERVATION current=60 original=102 source=environment]
+name: Grep:toolu_01Q3z8o146gjZfy77tR7JTks
+excerpt:
+33-        super().__init__(refs, source)
+34-
+35:    def as_sql(self, compiler, connection):
+36-        return str(self.ordinal), ()
+37-
+38-
+39-class SQLCompiler:
+40-    # Multiline ordering SQL clause may appear from RawSQL.
+41-    ordering_parts = _lazy_re_compile(
+42-        r"^(.*)\s(?:ASC|DESC).*",
+43-        re.MULTILINE | re.DOTALL,
+44-    )
+45-
+46-    def __init__(self, query, connection, using, elide_empty=True):
+47-        self.query = query
+48-        self.connection = connection
+49-        self.using = using
+50-        # Some queries, e.g. coalesced aggregation, need to be executed even if
+51-        # they would return an empty result set.
+52-        self.elide_empty = elide_empty
+53-        self.quote_cache = {"*": "*"}
+54-        # The select, klass_info, and annotations are needed by QuerySet.iterator()
+55-        # these are set as a side-effect of executing the query. Note that we calculate
+56-        # separately a list of extra select columns needed for grammatical correctness
+57-        # of the query, but these columns are not included in self.select.
+58-        self.select = None
+59-        self.annotation_col_map = None
+60-        self.klass_info = None
+61-        self._meta_ordering = None
+62-
+63-    def __repr__(self):
+64-        return (
+65-            f"<{self.__class__.__qualname__} "
+66-            f"model={self.query.model.__qualname__} "
+67-            f"connection={self.connection!r} using={self.using!r}>"
+68-        )
+69-
+70-    def setup_query(self, with_col_aliases=False):
+71-        if all(self.query.alias_refcount[a] == 0 for a in self.query.alias_map):
+72-            self.query.get_initial_alias()
+73-        self.select, self.klass_info, self.annotation_col_map = self.get_select(
+74-            with_col_aliases=with_col_aliases,
+75-        )
+76-        self.col_count = len(self.select)
+77-
+78-    def pre_sql_setup(self, with_col_aliases=False):
+79-        """
+80-        Do any necessary class setup immediately prior to producin
+sha256: 7781fac67d522f9895a1ff248e4d5802c3c0b0882d8d6ae49940fa81ef89d5de
+truncated: true
+
+[ADP ACTION current=61 original=103: api_action Read]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/sql/compiler.py",
+  "limit": 80,
+  "offset": 1732
+}
+sha256: ecc53d88403a85cede400e2054b45e8af5522e3eaab363a092bf555562086e10
+truncated: false
+
+[ADP OBSERVATION current=62 original=104 source=environment]
+name: Read:toolu_0126FTWmuqm82B4jukWaYcRb
+excerpt:
+  1732→    def as_sql(self):
+  1733→        # We don't need quote_name_unless_alias() here, since these are all
+  1734→        # going to be column names (so we can avoid the extra overhead).
+  1735→        qn = self.connection.ops.quote_name
+  1736→        opts = self.query.get_meta()
+  1737→        insert_statement = self.connection.ops.insert_statement(
+  1738→            on_conflict=self.query.on_conflict,
+  1739→        )
+  1740→        result = ["%s %s" % (insert_statement, qn(opts.db_table))]
+  1741→        fields = self.query.fields or [opts.pk]
+  1742→        result.append("(%s)" % ", ".join(qn(f.column) for f in fields))
+  1743→
+  1744→        if self.query.fields:
+  1745→            value_rows = [
+  1746→                [
+  1747→                    self.prepare_value(field, self.pre_save_val(field, obj))
+  1748→                    for field in fields
+  1749→                ]
+  1750→                for obj in self.query.objs
+  1751→            ]
+  1752→        else:
+  1753→            # An empty object.
+  1754→            value_rows = [
+  1755→                [self.connection.ops.pk_default_value()] for _ in self.query.objs
+  1756→            ]
+  1757→            fields = [None]
+  1758→
+  1759→        # Currently the backends just accept values when generating bulk
+  1760→        # queries and generate their own placeholders. Doing that isn't
+  1761→        # necessary and it should be possible to use placeholders and
+  1762→        # expressions in bulk inserts too.
+  1763→        can_bulk = (
+  1764→            not self.returning_fields and self.connection.features.has_bulk_insert
+  1765→        )
+  1766→
+  1767→        placeholder_rows, param_rows = self.assemble_as_sql(fields, value_rows)
+  1768→
+  1769→        on_conflict_suffix_sql = self.connection.ops.on_conflict_suffix_sql(
+  1770→            fields,
+  1771→            self.query.on_conflict,
+  1772→            (f.column for f in self.query.update_fields),
+  1773→            (f.column for f in sel
+sha256: a5fe21929dae4a96930cc17c88a1a085950cd54a7f17bd14502cc5ffcb2f3674
+truncated: true

@@ -1,0 +1,291 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 87758b30-79ea-42b8-9864-431a0c97a88c
+- repo: astropy/astropy
+- instance_id: astropy__astropy-7746
+- base_commit: d5bd3f68bb6d5ce3a61bdce9883ee750d1afade5
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Issue when passing empty lists/arrays to WCS transformations
+The following should not fail but instead should return empty lists/arrays:
+
+```
+In [1]: from astropy.wcs import WCS
+
+In [2]: wcs = WCS('2MASS_h.fits')
+
+In [3]: wcs.wcs_pix2world([], [], 0)
+---------------------------------------------------------------------------
+InconsistentAxisTypesError                Traceback (most recent call last)
+<ipython-input-3-e2cc0e97941a> in <module>()
+----> 1 wcs.wcs_pix2world([], [], 0)
+
+~/Dropbox/Code/Astropy/astropy/astropy/wcs/wcs.py in wcs_pix2world(self, *args, **kwargs)
+   1352         return self._array_converter(
+   1353             lambda xy, o: self.wcs.p2s(xy, o)['world'],
+-> 1354             'output', *args, **kwargs)
+   1355     wcs_pix2world.__doc__ = """
+   1356         Transforms pixel coordinates to world coordinates by doing
+
+~/Dropbox/Code/Astropy/astropy/astropy/wcs/wcs.py in _array_converter(self, func, sky, ra_dec_order, *args)
+   1267                     "a 1-D array for each axis, followed by an origin.")
+   1268
+-> 1269             return _return_list_of_arrays(axes, origin)
+   1270
+   1271         raise TypeError(
+
+~/Dropbox/Code/Astropy/astropy/astropy/wcs/wcs.py in _return_list_of_arrays(axes, origin)
+   1223             if ra_dec_order and sky == 'input':
+   1224                 xy = self._denormalize_sky(xy)
+-> 1225             output = func(xy, origin)
+   1226             if ra_dec_order and sky == 'output':
+   1227                 output = self._normalize_sky(output)
+
+~/Dropbox/Code/Astropy/astropy/astropy/wcs/wcs.py in <lambda>(xy, o)
+   1351             raise ValueError("No basic WCS settings were created.")
+   1352         return self._array_converter(
+-> 1353             lambda xy, o: self.wcs.p2s(xy, o)['world'],
+   1354             'output', *args, **kwargs)
+   1355     wcs_pix2world.__doc__ = """
+
+InconsistentAxisTypesError: ERROR 4 in wcsp2s() at line 2646 of file cextern/wcslib/C/wcs.c:
+ncoord and/or nelem inconsistent with the wcsprm.
+```
+
+FILES INSPECTED
+---------------
+- astropy/wcs/wcs.py [Read: 3, Grep: 3]
+
+SEARCH ANCHORS
+--------------
+- [4] Grep pattern='def _return_list_of_arrays' path='astropy/wcs/wcs.py'
+- [6] Grep pattern='def _return_single_array' path='astropy/wcs/wcs.py'
+- [7] Grep pattern='def wcs_pix2world' path='astropy/wcs/wcs.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction]
+- [test] cd testbed && python test_empty_arrays.py
+- [other/reproduction] cd testbed && python --version
+- [test] cd testbed && python test_empty_arrays.py 2>&1
+- [test] python ./swebench_9_15/testbed/test_empty_arrays.py 2>&1
+- [test] python3 ./swebench_9_15/testbed/test_empty_arrays.py 2>&1
+- [test] python3 ./swebench_9_15/testbed/test_logic.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ERROR: An error occurred while attempting to rebuild the extension modules.  Please try manually running `./setup.py develop` or `./setup.py build_ext --inplace` to see what the issue was.  Extension modules must be successfully compiled and importable in order to import astropy. [astropy]
+- ImportError: cannot import name '_compiler' from 'astropy.utils' (./swebench_9_15/testbed/astropy/utils/__init__.py)
+- ImportError: astropy
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #2]
+    1200→                raise ValueError(
+    1201→                    "WCS does not have both longitude and latitude celestial "
+    1202→                    "axes, therefore (ra, dec) data can not be returned")
+    1203→            out = np.empty((sky.shape[0], 2))
+    1204→            out[:, 0] = sky[:, self.wcs.lng]
+    1205→            out[:, 1] = sky[:, self.wcs.lat]
+    1206→            return out
+    1207→
+    1208→    def _array_converter(self, func, sky, *args, ra_dec_order=False):
+    1209→        """
+    1210→        A helper function to support reading either a pair of arrays
+    1211→        or a single Nx2 array.
+    1212→        """
+    1213→
+    1214→        def _return_list_of_arrays(axes, origin):
+    1215→            try:
+    1216→                axes = np.broadcast_arrays(*axes)
+    1217→            except ValueError:
+    1218→                raise ValueError(
+    1219→                    "Coordinate arrays are not broadcastable to each other")
+    1220→
+    1221→            xy = np.hstack([x.reshape((x.size, 1)) for x in axes])
+    1222→
+    1223→            if ra_dec_order and sky == 'input':
+    1224→                xy = self._denormalize_sky(xy)
+    1225→            output = func(xy, origin)
+    1226→
+  [... truncated ...]
+- [Grep Result after action #4]
+  1214:        def _return_list_of_arrays(axes, origin):
+  1215-            try:
+  1216-                axes = np.broadcast_arrays(*axes)
+  1217-            except ValueError:
+  1218-                raise ValueError(
+  1219-                    "Coordinate arrays are not broadcastable to each other")
+  1220-
+  1221-            xy = np.hstack([x.reshape((x.size, 1)) for x in axes])
+  1222-
+  1223-            if ra_dec_order and sky == 'input':
+  1224-                xy = self._denormalize_sky(xy)
+  1225-            output = func(xy, origin)
+  1226-            if ra_dec_order and sky == 'output':
+  1227-                output = self._normalize_sky(output)
+  1228-                return (output[:, 0].reshape(axes[0].shape),
+  1229-                        output[:, 1].reshape(axes[0].shape))
+  1230-            return [output[:, i].reshape(axes[0].shape)
+  1231-                    for i in range(output.shape[1])]
+  1232-
+  1233-        def _return_single_array(xy, origin):
+  1234-            if xy.shape[-1] != self.naxis:
+- [Read Result after action #8]
+    1208→    def _array_converter(self, func, sky, *args, ra_dec_order=False):
+    1209→        """
+    1210→        A helper function to support reading either a pair of arrays
+    1211→        or a single Nx2 array.
+    1212→        """
+    1213→
+    1214→        def _return_list_of_arrays(axes, origin):
+    1215→            try:
+    1216→                axes = np.broadcast_arrays(*axes)
+    1217→            except ValueError:
+    1218→                raise ValueError(
+    1219→                    "Coordinate arrays are not broadcastable to each other")
+    1220→
+    1221→            xy = np.hstack([x.reshape((x.size, 1)) for x in axes])
+    1222→
+    1223→            if ra_dec_order and sky == 'input':
+    1224→                xy = self._denormalize_sky(xy)
+    1225→            output = func(xy, origin)
+    1226→            if ra_dec_order and sky == 'output':
+    1227→                output = self._normalize_sky(output)
+    1228→                return (output[:, 0].reshape(axes[0].shape),
+    1229→                        output[:, 1].reshape(axes[0].shape))
+    1230→            return [output[:, i].reshape(axes[0].shape)
+    1231→                    for i in range(output.shape[1])]
+    1232→
+    1233→        def _return_single_a
+  [... truncated ...]
+- [Test Output after action #13]
+  Exit code 1
+    File "test_empty_arrays.py", line 20
+      print(f"   Result: {result}")
+                                 ^
+  SyntaxError: invalid syntax
+- [Test Output after action #19]
+  Exit code 1
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_empty_arrays.py", line 5, in <module>
+      from astropy.wcs import WCS
+    File "./swebench_9_15/testbed/astropy/__init__.py", line 24, in <module>
+      raise UnsupportedPythonError("Astropy does not support Python < {}".format(__minimum_python_version__))
+  astropy.UnsupportedPythonError: Astropy does not support Python < 3.5
+- [Test Output after action #21]
+  Exit code 1
+  Rebuilding extension modules [Done]
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  WARNING: You appear to be trying to import astropy from within a source checkout without building the extension modules first.  Attempting to (re)build extension modules: [astropy]
+  ERROR: An error occurred while attempting to rebuild the extension modules.  Please try manually running `./setup.py develop` or `./setup.py build_ext --inplace` to see what the issue was.  Extension modules must be successfully compiled and importable in order to import astropy. [astropy]
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/astropy/__init__.py", line 181, in _initialize_astropy
+      from .utils import _compiler
+  ImportError: cannot import name '_compiler' from 'astropy.utils' (./swebench_9_15/testbed/astropy/utils
+  [... truncated ...]
+- [Read Result after action #23]
+    1214→        def _return_list_of_arrays(axes, origin):
+    1215→            try:
+    1216→                axes = np.broadcast_arrays(*axes)
+    1217→            except ValueError:
+    1218→                raise ValueError(
+    1219→                    "Coordinate arrays are not broadcastable to each other")
+    1220→
+    1221→            xy = np.hstack([x.reshape((x.size, 1)) for x in axes])
+    1222→
+    1223→            # Handle empty arrays - return empty output without calling the C function
+    1224→            if xy.shape[0] == 0:
+    1225→                if ra_dec_order and sky == 'output':
+    1226→                    return (xy[:, 0].reshape(axes[0].shape),
+    1227→                            xy[:, 1].reshape(axes[0].shape))
+    1228→                return [xy[:, i].reshape(axes[0].shape)
+    1229→                        for i in range(self.naxis)]
+    1230→
+    1231→            if ra_dec_order and sky == 'input':
+    1232→                xy = self._denormalize_sky(xy)
+    1233→            output = func(xy, origin)
+    1234→            if ra_dec_order and sky == 'output':
+    1235→                output = self._normalize_sky(output)
+    1236→                return (output[:, 0].reshape(axes[0].shape),
+    1237→
+  [... truncated ...]
+- [Test Output after action #26]
+  Testing empty array handling logic...
+
+  Test 1: Empty lists
+    axes shapes: [(0,), (0,)]
+    xy shape: (0, 2)
+    xy.shape[0] == 0: True
+    result shapes: [(0,), (0,)]
+    result: [array([], dtype=float64), array([], dtype=float64)]
+    PASSED
+
+  Test 2: Empty single array
+    xy shape: (0, 2)
+    xy.shape[0] == 0: True
+    result shape: (0, 2)
+    PASSED
+
+  Test 3: Non-empty arrays
+    axes shapes: [(3,), (3,)]
+    xy shape: (3, 2)
+    xy.shape[0] == 0: False
+    PASSED (not empty, would call C function)
+
+  ============================================================
+  All logic tests passed!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+SOURCE EDIT EVIDENCE
+--------------------
+- astropy/wcs/wcs.py
+  Tool: Edit action #10
+  old_text_sha256: e0b7d1563a78dcc99ad5fe2e2034ecd05dc8d5cad027ade95f99d6ad7ed62ac9
+  new_text_sha256: dc9dc679146a77c4e999eae724103f28f7db82fccd68d6783ec571ae823bdd91
+- astropy/wcs/wcs.py
+  Tool: Edit action #11
+  old_text_sha256: 224c30f7308af1b1e4c8a94eb19208f23a430c4e1ae08cda6cddf9232574e0a4
+  new_text_sha256: 442e332ae83ac126796c8e32f177e60fb18db249a3335f360034b5285b3fb3a5
+- test_empty_arrays.py
+  Tool: Write action #12
+  new_text_sha256: 71f344555c08b779d4b4ce756a501596a278bad35f63e7e41c667ccd88825672
+- test_empty_arrays.py
+  Tool: Write action #17
+  new_text_sha256: a344da521e513915c600dad1ff406521e2c2f0ff22211ef88508e521568e4800
+- test_logic.py
+  Tool: Write action #25
+  new_text_sha256: f54c053f2e9403684348a988dc833aa029c87a9e870a17517fb2e847ce2b3d88
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

@@ -1,0 +1,320 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: dafc4f33-b846-4b80-b33d-052fad51d1a5
+- repo: django/django
+- instance_id: django__django-17087
+- base_commit: 4a72da71001f154ea60906a2f74898d32b7322a7
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Class methods from nested classes cannot be used as Field.default.
+Description
+
+        (last modified by Mariusz Felisiak)
+
+Given the following model:
+
+class Profile(models.Model):
+    class Capability(models.TextChoices):
+        BASIC = ("BASIC", "Basic")
+        PROFESSIONAL = ("PROFESSIONAL", "Professional")
+
+        @classmethod
+        def default(cls) -> list[str]:
+            return [cls.BASIC]
+    capabilities = ArrayField(
+        models.CharField(choices=Capability.choices, max_length=30, blank=True),
+        null=True,
+        default=Capability.default
+    )
+The resulting migration contained the following:
+ # ...
+     migrations.AddField(
+         model_name='profile',
+         name='capabilities',
+         field=django.contrib.postgres.fields.ArrayField(base_field=models.CharField(blank=True, choices=[('BASIC', 'Basic'), ('PROFESSIONAL', 'Professional')], max_length=30), default=appname.models.Capability.default, null=True, size=None),
+     ),
+ # ...
+As you can see, migrations.AddField is passed as argument "default" a wrong value "appname.models.Capability.default", which leads to an error when trying to migrate. The right value should be "appname.models.Profile.Capability.default".
+
+FILES INSPECTED
+---------------
+- django/db/migrations/serializer.py [Read: 1]
+- tests [Grep: 1]
+- tests/migrations/test_writer.py [Read: 3]
+
+SEARCH ANCHORS
+--------------
+- [16] Grep pattern='FunctionTypeSerializer' path='tests'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15/testbed -type f -name "*.py" | grep -E "(migration|serial)" | head -20
+- [other/reproduction] python3 --version && which python3
+- [diagnostic] ls /usr/bin/python* 2>/dev/null || ls /usr/local/bin/python* 2>/dev/null || which -a python3
+- [other/reproduction] /usr/bin/python3 --version
+- [other/reproduction] for v in 3.10 3.11 3.12 3.13; do which python$v 2>/dev/null && python$v --version; done
+- [diagnostic] find django -type f -name "*.py" | grep -E "(serial|migration)" | head -20
+- [diagnostic] find django/db/migrations -type f -name "*.py" | head -20
+- [diagnostic] find tests -type f -name "*serial*.py" -o -name "*migration*.py" | head -20
+- [diagnostic] find tests/migrations -type f -name "*.py" | grep -i serial
+- [diagnostic] ls tests/migrations/test_*.py | head -20
+- [other/reproduction] python3.11 -m pytest tests/migrations/test_writer.py::WriterTests::test_serialize_class_method_from_nested_class -xvs
+- [other/reproduction] python3.11 tests/runtests.py migrations.test_writer.WriterTests.test_serialize_class_method_from_nested_class --settings=test_sqlite
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ERROR: found no collectors for ./swebench_9_15/testbed/tests/migrations/test_writer.py::WriterTests::test_serialize_class_method_from_nested_class
+- E   django.core.exceptions.ImproperlyConfigured: Requested setting INSTALLED_APPS, but settings are not configured. You must either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing settings.
+- ERROR tests/migrations/test_writer.py - django.core.exceptions.ImproperlyConf...
+- FAIL: test_serialize_class_method_from_nested_class (migrations.test_writer.WriterTests.test_serialize_class_method_from_nested_class)
+- AssertionError: Tuples differ: ('mig[15 chars]iter.WriterTests.test_serialize_class_method_f[95 chars]er'}) != ('mig[15 chars]iter.OuterClass.InnerClass.my_class_method', {[28 chars]er'})
+- FAILED (failures=1)
+- ModuleNotFoundError: No module named 'test_sqlite'
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #4]
+  /usr/bin/python3
+- [Diagnostic Output after action #10]
+  django/core/management/commands/squashmigrations.py
+  django/core/management/commands/optimizemigration.py
+  django/core/management/commands/makemigrations.py
+  django/core/management/commands/showmigrations.py
+  django/core/serializers/pyyaml.py
+  django/core/serializers/__init__.py
+  django/core/serializers/xml_serializer.py
+  django/core/serializers/jsonl.py
+  django/core/serializers/python.py
+  django/core/serializers/json.py
+  django/core/serializers/base.py
+  django/contrib/auth/migrations/0012_alter_user_first_name_max_length.py
+  django/contrib/auth/migrations/0004_alter_user_username_opts.py
+  django/contrib/auth/migrations/0010_alter_group_name_max_length.py
+  django/contrib/auth/migrations/__init__.py
+  django/contrib/auth/migrations/0005_alter_user_last_login_null.py
+  django/contrib/auth/migrations/0009_alter_user_last_name_max_length.py
+  django/contrib/auth/migrations/0003_alter_user_email_max_length.py
+  django/contrib/auth/migrations/0007_alter_validators_add_error_messages.py
+  django/contrib/auth/migrations/0006_require_contenttypes_0002.py
+- [Diagnostic Output after action #12]
+  django/db/migrations/questioner.py
+  django/db/migrations/graph.py
+  django/db/migrations/recorder.py
+  django/db/migrations/__init__.py
+  django/db/migrations/autodetector.py
+  django/db/migrations/operations/models.py
+  django/db/migrations/operations/fields.py
+  django/db/migrations/operations/__init__.py
+  django/db/migrations/operations/special.py
+  django/db/migrations/operations/base.py
+  django/db/migrations/utils.py
+  django/db/migrations/loader.py
+  django/db/migrations/optimizer.py
+  django/db/migrations/serializer.py
+  django/db/migrations/exceptions.py
+  django/db/migrations/writer.py
+  django/db/migrations/migration.py
+  django/db/migrations/executor.py
+  django/db/migrations/state.py
+- [Read Result after action #14]
+       1→import builtins
+       2→import collections.abc
+       3→import datetime
+       4→import decimal
+       5→import enum
+       6→import functools
+       7→import math
+       8→import os
+       9→import pathlib
+      10→import re
+      11→import types
+      12→import uuid
+      13→
+      14→from django.conf import SettingsReference
+      15→from django.db import models
+      16→from django.db.migrations.operations.base import Operation
+      17→from django.db.migrations.utils import COMPILED_REGEX_TYPE, RegexObject
+      18→from django.utils.functional import LazyObject, Promise
+      19→from django.utils.version import PY311, get_docs_version
+      20→
+      21→
+      22→class BaseSerializer:
+      23→    def __init__(self, value):
+      24→        self.value = value
+      25→
+      26→    def serialize(self):
+      27→        raise NotImplementedError(
+      28→            "Subclasses of BaseSerializer must implement the serialize() method."
+      29→        )
+      30→
+      31→
+      32→class BaseSequenceSerializer(BaseSerializer):
+      33→    def _format(self):
+      34→        raise NotImplementedError(
+      35→            "Subclasses of BaseSequenceSerializer must implement the _format() method."
+      36→        )
+      37→
+      38→    def
+  [... truncated ...]
+- [Diagnostic Output after action #17]
+  tests/auth_tests/test_migrations.py
+  tests/migrations/test_migrations_conflict_long_name/0002_conflicting_second_migration_with_long_name.py
+  tests/test_utils/test_serializemixin.py
+  tests/contenttypes_tests/test_migrations.py
+  tests/serializers/test_deserializedobject.py
+  tests/gis_tests/geoapp/test_serializers.py
+- [Diagnostic Output after action #20]
+  tests/migrations/test_autodetector.py
+  tests/migrations/test_base.py
+  tests/migrations/test_commands.py
+  tests/migrations/test_deprecated_fields.py
+  tests/migrations/test_exceptions.py
+  tests/migrations/test_executor.py
+  tests/migrations/test_graph.py
+  tests/migrations/test_loader.py
+  tests/migrations/test_multidb.py
+  tests/migrations/test_operations.py
+  tests/migrations/test_optimizer.py
+  tests/migrations/test_questioner.py
+  tests/migrations/test_state.py
+  tests/migrations/test_writer.py
+- [Read Result after action #22]
+       1→import datetime
+       2→import decimal
+       3→import enum
+       4→import functools
+       5→import math
+       6→import os
+       7→import pathlib
+       8→import re
+       9→import sys
+      10→import time
+      11→import uuid
+      12→import zoneinfo
+      13→from types import NoneType
+      14→from unittest import mock
+      15→
+      16→import custom_migration_operations.more_operations
+      17→import custom_migration_operations.operations
+      18→
+      19→from django import get_version
+      20→from django.conf import SettingsReference, settings
+      21→from django.core.validators import EmailValidator, RegexValidator
+      22→from django.db import migrations, models
+      23→from django.db.migrations.serializer import BaseSerializer
+      24→from django.db.migrations.writer import MigrationWriter, OperationWriter
+      25→from django.test import SimpleTestCase
+      26→from django.utils.deconstruct import deconstructible
+      27→from django.utils.functional import SimpleLazyObject
+      28→from django.utils.timezone import get_default_timezone, get_fixed_timezone
+      29→from django.utils.translation import gettext_lazy as _
+      30→
+      31→from .models import FoodManager, FoodQuerySet
+      32→
+      33→
+      34→class
+  [... truncated ...]
+- [Read Result after action #25]
+     455→            "(datetime.date(1969, 11, 19), 'Second date')], "
+     456→            "default=datetime.date(1969, 11, 19))",
+     457→        )
+     458→
+     459→    def test_serialize_nested_class(self):
+     460→        for nested_cls in [self.NestedEnum, self.NestedChoices]:
+     461→            cls_name = nested_cls.__name__
+     462→            with self.subTest(cls_name):
+     463→                self.assertSerializedResultEqual(
+     464→                    nested_cls,
+     465→                    (
+     466→                        "migrations.test_writer.WriterTests.%s" % cls_name,
+     467→                        {"import migrations.test_writer"},
+     468→                    ),
+     469→                )
+     470→
+     471→    def test_serialize_uuid(self):
+     472→        self.assertSerializedEqual(uuid.uuid1())
+     473→        self.assertSerializedEqual(uuid.uuid4())
+     474→
+
+- [Read Result after action #32]
+     201→class WriterTests(SimpleTestCase):
+     202→    """
+     203→    Tests the migration writer (makes migration files from Migration instances)
+     204→    """
+     205→
+     206→    class NestedEnum(enum.IntEnum):
+     207→        A = 1
+     208→        B = 2
+     209→
+     210→    class NestedChoices(models.TextChoices):
+     211→        X = "X", "X value"
+     212→        Y = "Y", "Y value"
+     213→
+     214→    def safe_exec(self, string, value=None):
+     215→        d = {}
+     216→        try:
+     217→            exec(string, globals(), d)
+     218→        except Exception as e:
+     219→            if value:
+     220→                self.fail(
+
+- [Diagnostic Output after action #40]
+  Exit code 1
+  Error processing line 1 of /opt/homebrew/Cellar/python@3.11/3.11.6_1/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/matplotlib-3.8.0.dev1164+gf6a781f77.d20251208-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "<frozen site>", line 186, in addpackage
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 570, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "/tmp/test_issue.py", line 11, in <module>
+      django.setup()
+    File "./swebench_9_15/testbed/django/__init__.py", line 19, in setup
+      configure_logging(settings.LOGGING_CONFIG, settings.LOGGING)
+                        ^^^^^^^^^^^^^^^^^^^^^^^
+    File "./swebench_9_15/testbed/django/conf/__init__.py", line 84, in __getattr__
+      self._setup(name)
+    File "./swebench_9_15/testbed/django/conf/__init__.py", line 71, in _setup
+      self._wrapped = Settings(settings_module)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "./swebench_9_15/testbed/django/conf/__init__.py", line 185, in __init__
+      mod = importlib.import_module(self.SETTINGS_MODULE)
+
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/migrations/serializer.py
+  Tool: Edit action #24
+  old_text_sha256: 0af4abbb865ac2c33d650e4afe9d2f1453a3861f6cd58e4edeafc8532565a4dc
+  new_text_sha256: e8f566c77ff627e4ea40ae039905e3515041c6bc06747ccab101c60df60e6f61
+- tests/migrations/test_writer.py
+  Tool: Edit action #27
+  old_text_sha256: 2eb06e014c6eadda3a7f24d91e2e0ca556c6f6b61794e4b85d8598bbfb14bf78
+  new_text_sha256: efe3915550a3e27fa60afc22fddf78e5d16f4a75afefea1c9c282e545738986e
+- tests/migrations/test_writer.py
+  Tool: Edit action #34
+  old_text_sha256: 22d21d119142934e89949e85216028a488b78975ddd0375c0a8a77be421f007e
+  new_text_sha256: a0143eec35022698338a56594448cc160c99cc8ed77868cf16196c3f70b226ca
+- tests/migrations/test_writer.py
+  Tool: Edit action #35
+  old_text_sha256: beb415941f630bbc3f94397ee3783485a144362c6788c0d70ec495a7c1a5b89d
+  new_text_sha256: 84b2b280ba9c2f4a5bd408b40f57b25ccbd563e3031e6caf3bf1e72f564be998
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

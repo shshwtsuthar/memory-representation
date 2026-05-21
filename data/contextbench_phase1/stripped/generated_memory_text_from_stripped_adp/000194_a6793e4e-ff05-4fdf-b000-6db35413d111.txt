@@ -1,0 +1,396 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: a6793e4e-ff05-4fdf-b000-6db35413d111
+- repo: django/django
+- instance_id: django__django-16408
+- base_commit: ef85b6bf0bc5a8b194f0724cf5bbedbcee402b96
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Multi-level FilteredRelation with select_related() may set wrong related object.
+Description
+
+test case:
+# add to known_related_objects.tests.ExistingRelatedInstancesTests
+    def test_wrong_select_related(self):
+        with self.assertNumQueries(3):
+            p = list(PoolStyle.objects.annotate(
+                tournament_pool=FilteredRelation('pool__tournament__pool'),
+                ).select_related('tournament_pool'))
+            self.assertEqual(p[0].pool.tournament, p[0].tournament_pool.tournament)
+result:
+======================================================================
+FAIL: test_wrong_select_related (known_related_objects.tests.ExistingRelatedInstancesTests.test_wrong_select_related)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+ File "D:\Work\django\tests\known_related_objects\tests.py", line 171, in test_wrong_select_related
+    self.assertEqual(p[0].pool.tournament, p[0].tournament_pool.tournament)
+AssertionError: <Tournament: Tournament object (1)> != <PoolStyle: PoolStyle object (1)>
+----------------------------------------------------------------------
+
+FILES INSPECTED
+---------------
+- tests/known_related_objects/tests.py [Read: 2]
+- tests/known_related_objects/models.py [Read: 1]
+- swebench_9_15/testbed [Grep: 1]
+- django/db/models [Grep: 5]
+- django/db/models/query_utils.py [Read: 1]
+- django/db/models/sql [Grep: 5]
+- django/db/models/sql/compiler.py [Grep: 9, Read: 4]
+- django/db/models/sql/query.py [Grep: 1, Read: 1]
+- django/db/models/query.py [Grep: 2, Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [7] Grep pattern='class FilteredRelation' path='swebench_9_15/testbed'
+- [9] Grep pattern='def select_related' path='django/db/models'
+- [13] Grep pattern='klass_info' path='django/db/models/sql'
+- [15] Grep pattern='get_related_selections' path='django/db/models/sql'
+- [19] Grep pattern='def klass_info' path='django/db/models/sql/compiler.py'
+- [21] Grep pattern='klass_info =' path='django/db/models/sql/compiler.py'
+- [23] Grep pattern='def get_related_selections' path='django/db/models/sql/compiler.py'
+- [27] Grep pattern='def setup_joins' path='django/db/models/sql'
+- [29] Grep pattern='return.*final_field.*opts' path='django/db/models/sql/query.py'
+- [31] Grep pattern='JoinInfo =' path='django/db/models/sql'
+- [35] Grep pattern='apply_converters|get_converters' path='django/db/models/sql/compiler.py'
+- [37] Grep pattern='local_setter|remote_setter' path='django/db/models/sql/compiler.py'
+- [39] Grep pattern='klass_info\\[.local_setter.\\]|klass_info\\[.remote_setter.\\]' path='django/db/models/sql/compiler.py'
+- [41] Grep pattern='local_setter.*obj.*from_obj' path='django/db/models/sql/compiler.py'
+- [43] Grep pattern='def results_iter' path='django/db/models/sql/compiler.py'
+- [45] Grep pattern='class ModelIterable' path='django/db/models'
+- [47] Grep pattern='class ModelIterable' path='django/db/models/query.py'
+- [49] Grep pattern='def get_related_populators' path='django/db/models'
+- [51] Grep pattern='class RelatedPopulator' path='django/db/models/query.py'
+- [64] Grep pattern='def set_cached_value' path='django/db/models'
+- [66] Grep pattern='def get_cache_name' path='django/db/models'
+- [82] Grep pattern='_filtered_relations.*=' path='django/db/models/sql'
+- [87] Grep pattern='^from.*LOOKUP_SEP' path='django/db/models/sql/compiler.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction] python3 --version && which python3
+- [diagnostic] wc -l ./swebench_9_15/testbed/django/db/models/sql/compiler.py
+- [test] cd testbed && python test_issue.py 2>&1
+- [test] cd testbed && python test_issue.py 2>&1
+- [test] cd testbed && python test_issue.py 2>&1
+- [test] cd testbed && python -m pytest tests/known_related_objects/tests.py::ExistingRelatedInstancesTests::test_reverse_fk_select_related_multiple -xvs 2>&1 | head -50
+- [test] cd testbed/tests && python runtests.py known_related_objects.tests.ExistingRelatedInstancesTests.test_reverse_fk_select_related_multiple 2>&1 | head -50
+- [test] python tests/runtests.py known_related_objects.tests.ExistingRelatedInstancesTests.test_wrong_select_related -v2 2>&1 | tail -50
+- [diagnostic] cd tests && python -c "import sys; print(sys.version)" 2>&1
+- [other/reproduction] git restore --staged test_issue.py && rm test_issue.py
+- [diagnostic] find . -name "test_issue.py" -type f 2>/dev/null | head -5
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #3]
+       1→from django.db.models import FilteredRelation
+       2→from django.test import TestCase
+       3→
+       4→from .models import Organiser, Pool, PoolStyle, Tournament
+       5→
+       6→
+       7→class ExistingRelatedInstancesTests(TestCase):
+       8→    @classmethod
+       9→    def setUpTestData(cls):
+      10→        cls.t1 = Tournament.objects.create(name="Tourney 1")
+      11→        cls.t2 = Tournament.objects.create(name="Tourney 2")
+      12→        cls.o1 = Organiser.objects.create(name="Organiser 1")
+      13→        cls.p1 = Pool.objects.create(
+      14→            name="T1 Pool 1", tournament=cls.t1, organiser=cls.o1
+      15→        )
+      16→        cls.p2 = Pool.objects.create(
+      17→            name="T1 Pool 2", tournament=cls.t1, organiser=cls.o1
+      18→        )
+      19→        cls.p3 = Pool.objects.create(
+      20→            name="T2 Pool 1", tournament=cls.t2, organiser=cls.o1
+      21→        )
+      22→        cls.p4 = Pool.objects.create(
+      23→            name="T2 Pool 2", tournament=cls.t2, organiser=cls.o1
+      24→        )
+      25→        cls.ps1 = PoolStyle.objects.create(name="T1 Pool 2 Style", pool=cls.p2)
+      26→        cls.ps2 = PoolStyle.objects.create(name="T2 Pool 1 Style"
+  [... truncated ...]
+- [Read Result after action #5]
+       1→"""
+       2→Existing related object instance caching.
+       3→
+       4→Queries are not redone when going back through known relations.
+       5→"""
+       6→
+       7→from django.db import models
+       8→
+       9→
+      10→class Tournament(models.Model):
+      11→    name = models.CharField(max_length=30)
+      12→
+      13→
+      14→class Organiser(models.Model):
+      15→    name = models.CharField(max_length=30)
+      16→
+      17→
+      18→class Pool(models.Model):
+      19→    name = models.CharField(max_length=30)
+      20→    tournament = models.ForeignKey(Tournament, models.CASCADE)
+      21→    organiser = models.ForeignKey(Organiser, models.CASCADE)
+      22→
+      23→
+      24→class PoolStyle(models.Model):
+      25→    name = models.CharField(max_length=30)
+      26→    pool = models.OneToOneField(Pool, models.CASCADE)
+      27→    another_pool = models.OneToOneField(
+      28→        Pool, models.CASCADE, null=True, related_name="another_style"
+      29→    )
+      30→
+
+- [Grep Result after action #7]
+  Found 2 files
+  testbed/tests/filtered_relation/tests.py
+  testbed/django/db/models/query_utils.py
+- [Grep Result after action #9]
+  Found 2 files
+  testbed/django/db/models/query_utils.py
+  testbed/django/db/models/query.py
+- [Read Result after action #11]
+       1→"""
+       2→Various data structures used in query construction.
+       3→
+       4→Factored out from django.db.models.query to avoid making the main module very
+       5→large and/or so that they can be used by other modules without getting into
+       6→circular import difficulties.
+       7→"""
+       8→import functools
+       9→import inspect
+      10→import logging
+      11→from collections import namedtuple
+      12→
+      13→from django.core.exceptions import FieldError
+      14→from django.db import DEFAULT_DB_ALIAS, DatabaseError, connections
+      15→from django.db.models.constants import LOOKUP_SEP
+      16→from django.utils import tree
+      17→
+      18→logger = logging.getLogger("django.db.models")
+      19→
+      20→# PathInfo is used when converting lookups (fk__somecol). The contents
+      21→# describe the relation in Model terms (model Options and Fields for both
+      22→# sides of the relation. The join_field is the field backing the relation.
+      23→PathInfo = namedtuple(
+      24→    "PathInfo",
+      25→    "from_opts to_opts target_fields join_field m2m direct filtered_relation",
+      26→)
+      27→
+      28→
+      29→def subclasses(cls):
+      30→    yield cls
+      31→    for subclass in cls.__subclasses
+  [... truncated ...]
+- [Grep Result after action #13]
+  Found 1 file
+  testbed/django/db/models/sql/compiler.py
+- [Grep Result after action #15]
+  Found 1 file
+  testbed/django/db/models/sql/compiler.py
+- [Diagnostic Output after action #17]
+      2058 ./swebench_9_15/testbed/django/db/models/sql/compiler.py
+- [Grep Result after action #19]
+  No matches found
+- [Grep Result after action #21]
+  51:        self.klass_info = None
+  52-        self._meta_ordering = None
+  53-
+  54-    def __repr__(self):
+  55-        return (
+  56-            f"<{self.__class__.__qualname__} "
+  --
+  239:        klass_info = None
+  240-        annotations = {}
+  241-        select_idx = 0
+  242-        for alias, (sql, params) in self.query.extra_select.items():
+  243-            annotations[alias] = select_idx
+  244-            select.append((RawSQL(sql, params), alias))
+  --
+  260:            klass_info = {
+  261-                "model": self.query.model,
+  262-                "select_fields": select_list,
+  263-            }
+  264-        for alias, annotation in self.query.annotation_select.items():
+  265-            annotations[alias] = select_idx
+  --
+  1183:            klass_info = {
+  1184-                "model": f.remote_field.model,
+  1185-                "field": f,
+  1186-                "reverse": False,
+  1187-                "local_setter": f.set_cached_value,
+  1188-                "remote_setter": f.remote_field.set_cached_value
+  --
+  1240:                klass_info = {
+  1241-                    "model": model,
+  1242-                    "field": related_field,
+  1243-                    "reverse": True,
+  1244-                    "lo
+  [... truncated ...]
+- [Grep Result after action #23]
+  1112:    def get_related_selections(
+- [Read Result after action #25]
+    1112→    def get_related_selections(
+    1113→        self,
+    1114→        select,
+    1115→        select_mask,
+    1116→        opts=None,
+    1117→        root_alias=None,
+    1118→        cur_depth=1,
+    1119→        requested=None,
+    1120→        restricted=None,
+    1121→    ):
+    1122→        """
+    1123→        Fill in the information needed for a select_related query. The current
+    1124→        depth is measured as the number of connections away from the root model
+    1125→        (for example, cur_depth=1 means we are looking at models with direct
+    1126→        connections to the root model).
+    1127→        """
+    1128→
+    1129→        def _get_field_choices():
+    1130→            direct_choices = (f.name for f in opts.fields if f.is_relation)
+    1131→            reverse_choices = (
+    1132→                f.field.related_query_name()
+    1133→                for f in opts.related_objects
+    1134→                if f.field.unique
+    1135→            )
+    1136→            return chain(
+    1137→                direct_choices, reverse_choices, self.query._filtered_relations
+    1138→            )
+    1139→
+    1140→        related_klass_infos = []
+    1141→        if not restricted and cur_depth > self.que
+  [... truncated ...]
+- [Grep Result after action #27]
+  testbed/django/db/models/sql/query.py:1721:    def setup_joins(
+  ./swebench_9_15/testbed/django/db/models/sql/query.py-1722-        self,
+  ./swebench_9_15/testbed/django/db/models/sql/query.py-1723-        names,
+  ./swebench_9_15/testbed/django/db/models/sql/query.py-1724-        opts,
+  ./swebench_9_15/testbed/django/db/models/sql/query.py-1725-        alias,
+  ./swebench_9_15/testbed/django/db/models/sql/query.py-1726-        can_reuse=None,
+  ./swebench_9_15/testbed/django/db/models/sql/query.py-1727-        allow_many=True,
+  ./swebench_9_15/testbed/django/db/models/sql/query.py-1728-        reuse_with_filtered_relation=False,
+  testbed/django/db/models/sql/query.py-1729-    ):
+  ./swebench_9_15/testbed/django/db/models/sql/query.py-1730-        """
+  ./swebench_9_15/testbed/django/db/models/sql/query.py-1731-        Compute the necessary table joins for the passage through the fields
+  ./swebench_9_15/testbed/django/db/models/sql/query.py-1732-        given in 'names'. 'opts' is the Options class for the current model
+  ./swebench_9_15/testbed/django/db/models/sql/query.py-1733-        (which gives the table we are starting from), 'alias' is the alias for
+  ./swebench_9_15/testbed/django/db/models/s
+  [... truncated ...]
+- [Grep Result after action #29]
+  1839-                reuse_with_filtered_relation=reuse_with_filtered_relation,
+  1840-            )
+  1841-            joins.append(alias)
+  1842-            if filtered_relation:
+  1843-                filtered_relation.path = joins[:]
+  1844:        return JoinInfo(final_field, targets, opts, joins, path, final_transformer)
+  1845-
+  1846-    def trim_joins(self, targets, joins, path):
+  1847-        """
+  1848-        The 'target' parameter is the final field being joined to, 'joins'
+  1849-        is the full list of join aliases. The 'path' contain the PathInfos
+- [Grep Result after action #31]
+  testbed/django/db/models/sql/query.py:76:JoinInfo = namedtuple(
+- [Read Result after action #33]
+      76→JoinInfo = namedtuple(
+      77→    "JoinInfo",
+      78→    ("final_field", "targets", "opts", "joins", "path", "transform_function"),
+      79→)
+      80→
+
+- [Grep Result after action #35]
+  1445:    def get_converters(self, expressions):
+  1446-        converters = {}
+  1447-        for i, expression in enumerate(expressions):
+  --
+  1455:    def apply_converters(self, rows, converters):
+  1456-        connection = self.connection
+  1457-        converters = list(converters.items())
+  --
+  1479:        converters = self.get_converters(fields)
+  1480-        rows = chain.from_iterable(results)
+  1481-        if converters:
+  1482:            rows = self.apply_converters(rows, converters)
+  1483-            if tuple_expected:
+  1484-                rows = map(tuple, rows)
+  --
+  1811:        converters = self.get_converters(cols)
+  1812-        if converters:
+  1813:            rows = list(self.apply_converters(rows, converters))
+  1814-        return rows
+  1815-
+- [Grep Result after action #37]
+  1182-            related_select_mask = select_mask.get(f) or {}
+  1183-            klass_info = {
+  1184-                "model": f.remote_field.model,
+  1185-                "field": f,
+  1186-                "reverse": False,
+  1187:                "local_setter": f.set_cached_value,
+  1188:                "remote_setter": f.remote_field.set_cached_value
+  1189-                if f.unique
+  1190-                else lambda x, y: None,
+  1191-                "from_parent": False,
+  1192-            }
+  1193-            related_klass_infos.append(klass_info)
+  --
+  1239-                from_parent = issubclass(model, opts.model) and model is not opts.model
+  1240-                klass_info = {
+  1241-                    "model": model,
+  1242-                    "field": related_field,
+  1243-                    "reverse": True,
+  1244:                    "local_setter": related_field.remote_field.set_cached_value,
+  1245:                    "remote_setter": related_field.set_cached_value,
+  1246-                    "from_parent": from_parent,
+  1247-                }
+  1248-                related_klass_infos.append(klass_info)
+  1249-                select_fields = []
+  1250-                columns = self.get_default_columns(
+
+  [... truncated ...]
+- [Grep Result after action #39]
+  No matches found
+- [Grep Result after action #41]
+  1267-                    next,
+  1268-                    restricted,
+  1269-                )
+  1270-                get_related_klass_infos(klass_info, next_klass_infos)
+  1271-
+  1272:            def local_setter(final_field, obj, from_obj):
+  1273-                # Set a reverse fk object when relation is non-empty.
+  1274-                if from_obj:
+  1275-                    final_field.remote_field.set_cached_value(from_obj, obj)
+  1276-
+  1277-            def remote_setter(name, obj, from_obj):
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/models/sql/compiler.py
+  Tool: Edit action #70
+  old_text_sha256: c8e17294fda04cadb17ae0d350fda40ae7f683929406285779ae361d9641e034
+  new_text_sha256: 2da60716a3df5117ead84d61ceef6f4a7b16426b3252f9498fd4e229a06a2f5b
+- django/db/models/sql/compiler.py
+  Tool: Edit action #86
+  old_text_sha256: c7ab8ae73bf600c96dcc7a5d5e027c48efaabb2abe900e70c5e23377939a8b9b
+  new_text_sha256: ddcc8d4dca7b04afe1c7b60e38bafbd4156623e3f8f6c72f532625da59dc8a92
+- tests/known_related_objects/tests.py
+  Tool: Edit action #73
+  old_text_sha256: 9f282d6654c94daf09ce2351c1659770a921fa8883af37ff5be7b04d90a5882b
+  new_text_sha256: e6a6b06b28b93563271b7e90b30010b4575c3d1da6b4ab532455de2d5d44fd03
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

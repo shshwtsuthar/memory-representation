@@ -1,0 +1,569 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: f89b98ef-d0f5-417a-aab2-4ab75af0c732
+- repo: sympy/sympy
+- instance_id: sympy__sympy-18057
+- base_commit: 62000f37b8821573ba00280524ffb4ac4a380875
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Sympy incorrectly attempts to eval reprs in its __eq__ method
+Passing strings produced by unknown objects into eval is **very bad**. It is especially surprising for an equality check to trigger that kind of behavior. This should be fixed ASAP.
+
+Repro code:
+
+```
+import sympy
+class C:
+    def __repr__(self):
+        return 'x.y'
+_ = sympy.Symbol('x') == C()
+```
+
+Results in:
+
+```
+E   AttributeError: 'Symbol' object has no attribute 'y'
+```
+
+On the line:
+
+```
+    expr = eval(
+        code, global_dict, local_dict)  # take local objects in preference
+```
+
+Where code is:
+
+```
+Symbol ('x' ).y
+```
+
+Full trace:
+
+```
+FAILED                   [100%]
+        class C:
+            def __repr__(self):
+                return 'x.y'
+
+>       _ = sympy.Symbol('x') == C()
+
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+sympy/core/expr.py:124: in __eq__
+    other = sympify(other)
+sympy/core/sympify.py:385: in sympify
+    expr = parse_expr(a, local_dict=locals, transformations=transformations, evaluate=evaluate)
+sympy/parsing/sympy_parser.py:1011: in parse_expr
+    return eval_expr(code, local_dict, global_dict)
+sympy/parsing/sympy_parser.py:906: in eval_expr
+    code, global_dict, local_dict)  # take local objects in preference
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+>   ???
+E   AttributeError: 'Symbol' object has no attribute 'y'
+
+<string>:1: AttributeError
+```
+
+Related issue: an unknown object whose repr is `x` will incorrectly compare as equal to a sympy symbol x:
+
+```
+    class C:
+        def __repr__(self):
+            return 'x'
+
+    assert sympy.Symbol('x') != C()  # fails
+```
+
+FILES INSPECTED
+---------------
+- sympy/core/expr.py [Read: 1, Grep: 1]
+- sympy/core/sympify.py [Read: 4]
+
+SEARCH ANCHORS
+--------------
+- [25] Grep pattern='def __eq__' path='sympy/core/expr.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [test] cd ./swebench_9_15 && python test_issue.py
+- [test] cd ./swebench_9_15 && python test_issue.py
+- [test] cd ./swebench_9_15 && python test_issue.py
+- [diagnostic] python -c "import mpmath; print(mpmath.__version__)"
+- [other/reproduction] which python && python --version
+- [other/reproduction] which python3 && python3 --version
+- [test] cd ./swebench_9_15 && python3 test_issue.py
+- [test] python3 test_issue.py
+- [test] python3 test_issue.py
+- [test] cd ./swebench_9_15/testbed && python3 -m pytest sympy/core/tests/test_sympify.py -v
+- [diagnostic] cd ./swebench_9_15/testbed && git diff sympy/core/expr.py
+- [other/reproduction] git stash
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: SymPy now depends on mpmath as an external library. See https://docs.sympy.org/latest/install.html#mpmath for more information.
+- ERROR: Should not be equal!
+- ERROR: Should have raised AttributeError or returned False
+- E           ValueError: Name node can't be used with 'False' constant
+- FAILED sympy/core/tests/test_sympify.py::test_evaluate_false - ValueError: Na...
+- FAILED sympy/core/tests/test_sympify.py::test_numpy_sympify_args - ValueError...
+- FAILED sympy/core/tests/test_sympify.py::test_issue_17811 - ValueError: Name ...
+- Traceback (most recent call last):
+- ImportError: No module named mpmath
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Test Output after action #1]
+  Exit code 1
+    File "test_issue.py", line 14
+      print(f"  Result: {result}")
+                                ^
+  SyntaxError: invalid syntax
+- [Test Output after action #3]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 5, in <module>
+      import sympy
+    File "./swebench_9_15/testbed/sympy/__init__.py", line 21, in <module>
+      raise ImportError("SymPy now depends on mpmath as an external library. "
+  ImportError: SymPy now depends on mpmath as an external library. See https://docs.sympy.org/latest/install.html#mpmath for more information.
+- [Test Output after action #5]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 5, in <module>
+      import sympy
+    File "./swebench_9_15/testbed/sympy/__init__.py", line 21, in <module>
+      raise ImportError("SymPy now depends on mpmath as an external library. "
+  ImportError: SymPy now depends on mpmath as an external library. See https://docs.sympy.org/latest/install.html#mpmath for more information.
+- [Diagnostic Output after action #7]
+  Exit code 1
+  Traceback (most recent call last):
+    File "<string>", line 1, in <module>
+  ImportError: No module named mpmath
+- [Test Output after action #13]
+  Test 1: Testing x.y repr that causes AttributeError
+    AttributeError (BUG): 'Symbol' object has no attribute 'y'
+
+  Test 2: Testing 'x' repr that incorrectly compares as equal
+    Result: True
+    ERROR: Should not be equal!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Read Result after action #15]
+       1→from __future__ import print_function, division
+       2→
+       3→from .sympify import sympify, _sympify, SympifyError
+       4→from .basic import Basic, Atom
+       5→from .singleton import S
+       6→from .evalf import EvalfMixin, pure_complex
+       7→from .decorators import _sympifyit, call_highest_priority
+       8→from .cache import cacheit
+       9→from .compatibility import reduce, as_int, default_sort_key, range, Iterable
+      10→from sympy.utilities.misc import func_name
+      11→from mpmath.libmp import mpf_log, prec_to_dps
+      12→
+      13→from collections import defaultdict
+      14→
+      15→class Expr(Basic, EvalfMixin):
+      16→    """
+      17→    Base class for algebraic expressions.
+      18→
+      19→    Everything that requires arithmetic operations to be defined
+      20→    should subclass this class, instead of Basic (which should be
+      21→    used only for argument storage and expression manipulation, i.e.
+      22→    pattern matching, substitutions, etc).
+      23→
+      24→    See Also
+      25→    ========
+      26→
+      27→    sympy.core.basic.Basic
+      28→    """
+      29→
+      30→    __slots__ = []
+      31→
+      32→    is_scalar = True  # self derivative is 1
+      33→
+      34→    @property
+
+  [... truncated ...]
+- [Read Result after action #17]
+     350→        try:
+     351→            return type(a)([sympify(x, locals=locals, convert_xor=convert_xor,
+     352→                rational=rational) for x in a.items()])
+     353→        except TypeError:
+     354→            # Not all iterables are rebuildable with their type.
+     355→            pass
+     356→
+     357→    # At this point we were given an arbitrary expression
+     358→    # which does not inherit from Basic and doesn't implement
+     359→    # _sympy_ (which is a canonical and robust way to convert
+     360→    # anything to SymPy expression).
+     361→    #
+     362→    # As a last chance, we try to take "a"'s normal form via unicode()
+     363→    # and try to parse it. If it fails, then we have no luck and
+     364→    # return an exception
+     365→    try:
+     366→        from .compatibility import unicode
+     367→        a = unicode(a)
+     368→    except Exception as exc:
+     369→        raise SympifyError(a, exc)
+     370→
+     371→    from sympy.parsing.sympy_parser import (parse_expr, TokenError,
+     372→                                            standard_transformations)
+     373→    from sympy.parsing.sympy_parser import convert_xor as t_convert_xor
+     374→    from sympy.parsing.sympy_pa
+  [... truncated ...]
+- [Read Result after action #19]
+       1→"""sympify -- convert objects SymPy internal format"""
+       2→
+       3→from __future__ import print_function, division
+       4→
+       5→from inspect import getmro
+       6→
+       7→from .core import all_classes as sympy_classes
+       8→from .compatibility import iterable, string_types, range
+       9→from .evaluate import global_evaluate
+      10→
+      11→
+      12→class SympifyError(ValueError):
+      13→    def __init__(self, expr, base_exc=None):
+      14→        self.expr = expr
+      15→        self.base_exc = base_exc
+      16→
+      17→    def __str__(self):
+      18→        if self.base_exc is None:
+      19→            return "SympifyError: %r" % (self.expr,)
+      20→
+      21→        return ("Sympify of expression '%s' failed, because of exception being "
+      22→            "raised:\n%s: %s" % (self.expr, self.base_exc.__class__.__name__,
+      23→            str(self.base_exc)))
+      24→
+      25→converter = {}  # See sympify docstring.
+      26→
+      27→class CantSympify(object):
+      28→    """
+      29→    Mix in this trait to a class to disallow sympification of its instances.
+      30→
+      31→    Examples
+      32→    ========
+      33→
+      34→    >>> from sympy.core.sympify import sympify, CantSympify
+
+  [... truncated ...]
+- [Read Result after action #21]
+     250→    autosimplification is no longer done, the ``kernS`` function might be of
+     251→    some use. In the example below you can see how an expression reduces to
+     252→    -1 by autosimplification, but does not do so when ``kernS`` is used.
+     253→
+     254→    >>> from sympy.core.sympify import kernS
+     255→    >>> from sympy.abc import x
+     256→    >>> -2*(-(-x + 1/x)/(x*(x - 1/x)**2) - 1/(x*(x - 1/x))) - 1
+     257→    -1
+     258→    >>> s = '-2*(-(-x + 1/x)/(x*(x - 1/x)**2) - 1/(x*(x - 1/x))) - 1'
+     259→    >>> sympify(s)
+     260→    -1
+     261→    >>> kernS(s)
+     262→    -2*(-(-x + 1/x)/(x*(x - 1/x)**2) - 1/(x*(x - 1/x))) - 1
+     263→
+     264→    """
+     265→    is_sympy = getattr(a, '__sympy__', None)
+     266→    if is_sympy is not None:
+     267→        return a
+     268→
+     269→    if isinstance(a, CantSympify):
+     270→        raise SympifyError(a)
+     271→    cls = getattr(a, "__class__", None)
+     272→    if cls is None:
+     273→        cls = type(a)  # Probably an old-style class
+     274→    conv = converter.get(cls, None)
+     275→    if conv is not None:
+     276→        return conv(a)
+     277→
+     278→    for superclass in getmro(cls):
+     279→        try:
+     280→            return conv
+  [... truncated ...]
+- [Read Result after action #23]
+     390→
+     391→
+     392→def _sympify(a):
+     393→    """
+     394→    Short version of sympify for internal usage for __add__ and __eq__ methods
+     395→    where it is ok to allow some things (like Python integers and floats) in
+     396→    the expression. This excludes things (like strings) that are unwise to
+     397→    allow into such an expression.
+     398→
+     399→    >>> from sympy import Integer
+     400→    >>> Integer(1) == 1
+     401→    True
+     402→
+     403→    >>> Integer(1) == '1'
+     404→    False
+     405→
+     406→    >>> from sympy.abc import x
+     407→    >>> x + 1
+     408→    x + 1
+     409→
+     410→    >>> x + '1'
+     411→    Traceback (most recent call last):
+     412→    ...
+     413→    TypeError: unsupported operand type(s) for +: 'Symbol' and 'str'
+     414→
+     415→    see: sympify
+     416→
+     417→    """
+     418→    return sympify(a, strict=True)
+     419→
+
+- [Grep Result after action #25]
+  122:    def __eq__(self, other):
+  123-        try:
+  124-            other = sympify(other)
+  125-            if not isinstance(other, Expr):
+  126-                return False
+  127-        except (SympifyError, SyntaxError):
+  128-            return False
+  129-        # check for pure number expr
+  130-        if  not (self.is_Number and other.is_Number) and (
+  131-                type(self) != type(other)):
+  132-            return False
+- [Test Output after action #28]
+  Test 1: Testing x.y repr that causes AttributeError
+    Result: False
+    ERROR: Should have raised AttributeError or returned False
+
+  Test 2: Testing 'x' repr that incorrectly compares as equal
+    Result: False
+    OK: Correctly not equal
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #30]
+  Test 1: Testing x.y repr that previously caused AttributeError
+    Result: False
+    PASS: Correctly returns False without error
+
+  Test 2: Testing 'x' repr that previously incorrectly compared as equal
+    Result: False
+    PASS: Correctly returns False
+
+  Test 3: Ensure strings still work correctly
+    Result: False
+    PASS: Strings correctly return False
+
+  Test 4: Ensure integers still work correctly
+    Result: True
+    PASS: Integers correctly compare as equal
+
+  Test 5: Ensure floats still work correctly
+    Result: True
+    PASS: Floats correctly compare as equal
+
+  All tests completed!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #32]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 49 items
+
+  sympy/core/tests/test_sympify.py::test_issue_3538 PASSED                 [  2%]
+  sympy/core/tests/test_sympify.py::test_sympify1 PASSED                   [  4%]
+  sympy/core/tests/test_sympify.py::test_sympify_Fraction PASSED
+  [... truncated ...]
+- [Test Output after action #37]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 1 item
+
+  sympy/core/tests/test_sympify.py::test_evaluate_false FAILED
+
+  =================================== FAILURES ===================================
+  _____________________________ test_evaluate_false ______________________________
+
+      def
+  [... truncated ...]
+- [Test Output after action #41]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 97 items / 96 deselected / 1 selected
+
+  sympy/core/tests/test_expr.py::test_equals PASSED                        [100%]
+
+  =============================== warnings summary ===============================
+  ../../../../../opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441
+    /opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441: PytestConfigWarning: Unknown config option: doctestplus
+
+      self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+  -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+  ================= 1 passed, 96 deselected, 1 warning in 1.87s ==================
+  Error processing line 1 of /
+  [... truncated ...]
+- [Test Output after action #43]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 22 items / 21 deselected / 1 selected
+
+  sympy/core/tests/test_basic.py::test_equality PASSED                     [100%]
+
+  =============================== warnings summary ===============================
+  ../../../../../opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441
+    /opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441: PytestConfigWarning: Unknown config option: doctestplus
+
+      self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+  -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+  ================= 1 passed, 21 deselected, 1 warning in 0.36s ==================
+  Error processing line 1 of /
+  [... truncated ...]
+- [Test Output after action #45]
+  Exit code 2
+  python3: can't open file 'test_issue.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #47]
+  Test 1: Testing x.y repr that previously caused AttributeError
+    Result: False
+    PASS: Correctly returns False without error
+
+  Test 2: Testing 'x' repr that previously incorrectly compared as equal
+    Result: False
+    PASS: Correctly returns False
+
+  Test 3: Ensure strings still work correctly
+    Result: False
+    PASS: Strings correctly return False
+
+  Test 4: Ensure integers still work correctly
+    Result: True
+    PASS: Integers correctly compare as equal
+
+  Test 5: Ensure floats still work correctly
+    Result: True
+    PASS: Floats correctly compare as equal
+
+  All tests completed!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/core/expr.py
+  Tool: Edit action #27
+  old_text_sha256: 403df25ac3a6a18a5ff77eba864a98bccc452206c8e26f14247e4dfd9de289da
+  new_text_sha256: 54c9f23b57ffe8502c1cdb982e7d0988467d804c0c4b4263a1605342c0e02396
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

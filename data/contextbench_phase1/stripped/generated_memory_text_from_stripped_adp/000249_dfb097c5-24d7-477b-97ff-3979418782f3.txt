@@ -1,0 +1,244 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: dfb097c5-24d7-477b-97ff-3979418782f3
+- repo: pytest-dev/pytest
+- instance_id: pytest-dev__pytest-5692
+- base_commit: 29e336bd9bf87eaef8e2683196ee1975f1ad4088
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Hostname and timestamp properties in generated JUnit XML reports
+Pytest enables generating JUnit XML reports of the tests.
+
+However, there are some properties missing, specifically `hostname` and `timestamp` from the `testsuite` XML element. Is there an option to include them?
+
+Example of a pytest XML report:
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<testsuite errors="0" failures="2" name="check" skipped="0" tests="4" time="0.049">
+    <testcase classname="test_sample.TestClass" file="test_sample.py" line="3" name="test_addOne_normal" time="0.001"></testcase>
+    <testcase classname="test_sample.TestClass" file="test_sample.py" line="6" name="test_addOne_edge" time="0.001"></testcase>
+</testsuite>
+```
+
+Example of a junit XML report:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="location.GeoLocationTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2019-04-22T10:32:27" hostname="Anass-MacBook-Pro.local" time="0.048">
+  <properties/>
+  <testcase name="testIoException()" classname="location.GeoLocationTest" time="0.044"/>
+  <testcase name="testJsonDeserialization()" classname="location.GeoLocationTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
+```
+
+FILES INSPECTED
+---------------
+- src/_pytest/junitxml.py [Read: 1]
+- testing/test_junitxml.py [Grep: 1]
+- junit_report.xml [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Grep pattern='junit|junitxml'
+- [2] Glob glob='**/*junit*.py'
+- [3] Glob glob='**/*xml*.py'
+- [4] Grep pattern='testsuite'
+- [5] Glob glob='testbed/**/*xml*.py'
+- [7] Grep pattern='junit' path='testbed'
+- [11] Grep pattern='hostname|timestamp' path='testing/test_junitxml.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [test] cd testbed && python -m pytest test_sample.py --junitxml=junit_report.xml -v
+- [test] cd testbed && pytest test_sample.py --junitxml=junit_report.xml -v
+- [test] cd testbed && pytest testing/test_junitxml.py -v -x
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- E       assert 1 == 2
+- E         -1
+- E         +2
+- E       assert 2 == 3
+- E         -2
+- E         +3
+- FAILED test_sample.py::TestClass::test_failing - assert 1 == 2
+- FAILED test_sample.py::TestClass::test_another_failing - assert 2 == 3
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #5]
+  ./swebench_9_15/testbed/src/_pytest/junitxml.py
+  ./swebench_9_15/testbed/testing/test_junitxml.py
+- [Grep Result after action #7]
+  Found 29 files
+  testbed/testing/test_junitxml.py
+  testbed/testing/test_doctest.py
+  testbed/testing/test_conftest.py
+  testbed/src/_pytest/junitxml.py
+  testbed/src/_pytest/config/__init__.py
+  testbed/doc/en/usage.rst
+  testbed/doc/en/reference.rst
+  testbed/doc/en/getting-started.rst
+  testbed/doc/en/example/simple.rst
+  testbed/doc/en/builtin.rst
+  testbed/doc/en/announce/release-2.9.1.rst
+  testbed/doc/en/announce/release-2.9.0.rst
+  testbed/doc/en/announce/release-2.8.6.rst
+  testbed/doc/en/announce/release-2.8.5.rst
+  testbed/doc/en/announce/release-2.7.2.rst
+  testbed/doc/en/announce/release-2.5.1.rst
+  testbed/doc/en/announce/release-2.5.0.rst
+  testbed/doc/en/announce/release-2.4.0.rst
+  testbed/doc/en/announce/release-2.3.5.rst
+  testbed/doc/en/announce/release-2.3.0.rst
+  testbed/doc/en/announce/release-2.1.1.rst
+  testbed/doc/en/announce/release-2.1.0.rst
+  testbed/changelog/5477.bugfix.rst
+  testbed/azure-pipelines.yml
+  testbed/CHANGELOG.rst
+  testbed/doc/en/announce/release-2.2.4.rst
+  testbed/doc/en/announce/release-2.1.3.rst
+  testbed/doc/en/announce/release-2.0.3.rst
+  testbed/.github/labels.toml
+- [Read Result after action #9]
+       1→"""
+       2→    report test results in JUnit-XML format,
+       3→    for use with Jenkins and build integration servers.
+       4→
+       5→
+       6→Based on initial code from Ross Lawley.
+       7→
+       8→Output conforms to https://github.com/jenkinsci/xunit-plugin/blob/master/
+       9→src/main/resources/org/jenkinsci/plugins/xunit/types/model/xsd/junit-10.xsd
+      10→"""
+      11→import functools
+      12→import os
+      13→import re
+      14→import sys
+      15→import time
+      16→
+      17→import py
+      18→
+      19→import pytest
+      20→from _pytest import nodes
+      21→from _pytest.config import filename_arg
+      22→
+      23→
+      24→class Junit(py.xml.Namespace):
+      25→    pass
+      26→
+      27→
+      28→# We need to get the subset of the invalid unicode ranges according to
+      29→# XML 1.0 which are valid in this python build.  Hence we calculate
+      30→# this dynamically instead of hardcoding it.  The spec range of valid
+      31→# chars is: Char ::= #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD]
+      32→#                    | [#x10000-#x10FFFF]
+      33→_legal_chars = (0x09, 0x0A, 0x0D)
+      34→_legal_ranges = ((0x20, 0x7E), (0x80, 0xD7FF), (0xE000, 0xFFFD), (0x10000, 0x10FFFF))
+      35→_legal_xml_re =
+  [... truncated ...]
+- [Grep Result after action #11]
+  No matches found
+- [Test Output after action #16]
+  Exit code 1
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #18]
+  Exit code 1
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-5.0.2.dev185+g29e336bd9, py-1.10.0, pluggy-0.13.1 -- /opt/anaconda3/bin/python
+  cachedir: .pytest_cache
+  rootdir: ./swebench_9_15/testbed, inifile: tox.ini
+  plugins: anyio-3.6.2
+  collecting ... collected 4 items
+
+  test_sample.py::TestClass::test_addOne_normal PASSED                     [ 25%]
+  test_sample.py::TestClass::test_addOne_edge PASSED                       [ 50%]
+  test_sample.py::TestClass::test_failing FAILED                           [ 75%]
+  test_sample.py::TestClass::test_another_failing FAILED                   [100%]
+
+  =================================== FAILURES ===================================
+  ____________________________ TestClass.test_failing ____________________________
+
+  self = <test_sample.TestClass object at 0x7faef822da60>
+
+      def test_failing(self):
+  >       assert 1 == 2
+  E       assert 1 == 2
+  E         -1
+  E         +2
+
+  test_sample.py:9: AssertionError
+  ________________________ TestClass.test_another_failing ________________________
+
+  self = <test_sample.TestClass object at 0x7faee8069550>
+
+      def test_another_failing(self):
+  >       as
+  [... truncated ...]
+- [Read Result after action #20]
+       1→<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite errors="0" failures="2" hostname="s-MacBook-Pro-5.local" name="pytest" skipped="0" tests="4" time="0.064" timestamp="2025-11-28T02:17:45"><testcase classname="test_sample.TestClass" file="test_sample.py" line="1" name="test_addOne_normal" time="0.000"></testcase><testcase classname="test_sample.TestClass" file="test_sample.py" line="4" name="test_addOne_edge" time="0.000"></testcase><testcase classname="test_sample.TestClass" file="test_sample.py" line="7" name="test_failing" time="0.001"><failure message="assert 1 == 2
+       2→  -1
+       3→  +2">self = &lt;test_sample.TestClass object at 0x7faef822da60&gt;
+       4→
+       5→    def test_failing(self):
+       6→&gt;       assert 1 == 2
+       7→E       assert 1 == 2
+       8→E         -1
+       9→E         +2
+      10→
+      11→test_sample.py:9: AssertionError</failure></testcase><testcase classname="test_sample.TestClass" file="test_sample.py" line="10" name="test_another_failing" time="0.000"><failure message="assert 2 == 3
+      12→  -2
+      13→  +3">self = &lt;test_sample.TestClass object at 0x7faee8069550&gt;
+      14→
+      15→    def test_another_failing(self):
+      16→&gt;       as
+  [... truncated ...]
+- [Test Output after action #22]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-5.0.2.dev185+g29e336bd9, py-1.10.0, pluggy-0.13.1 -- /opt/anaconda3/bin/python
+  cachedir: .pytest_cache
+  rootdir: ./swebench_9_15/testbed, inifile: tox.ini
+  plugins: anyio-3.6.2
+  collecting ... collected 70 items
+
+  testing/test_junitxml.py::test_mangle_test_address PASSED                [  1%]
+  testing/test_junitxml.py::test_dont_configure_on_slaves PASSED           [  2%]
+  testing/test_junitxml.py::test_invalid_xml_escape PASSED                 [  4%]
+  testing/test_junitxml.py::test_logxml_path_expansion PASSED              [  5%]
+  testing/test_junitxml.py::TestPython::test_summing_simple PASSED         [  7%]
+  testing/test_junitxml.py::TestPython::test_summing_simple_with_errors PASSED [  8%]
+  testing/test_junitxml.py::TestPython::test_timing_function PASSED        [ 10%]
+  testing/test_junitxml.py::TestPython::test_junit_duration_report[call] PASSED [ 11%]
+  testing/test_junitxml.py::TestPython::test_junit_duration_report[total] PASSED [ 12%]
+  testing/test_junitxml.py::TestPython::test_setup_error PASSED            [ 14%]
+  testing/test_junitxml.py::TestPython::test_teardown_er
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- src/_pytest/junitxml.py
+  Tool: Edit action #13
+  old_text_sha256: 5ad750fd7d3fec889d5d6a07bfb7dc88e3e8aa95307f46afb33419704fe8685d
+  new_text_sha256: 5d3b061cc148169db5ae6458646d31937adab338e5b8190b061a0f50ee308f36
+- src/_pytest/junitxml.py
+  Tool: Edit action #14
+  old_text_sha256: 1577fa43e33e8659158c385f6a816a90f217080ce09cae0a7001a1f167845be0
+  new_text_sha256: 125c39bfb58b738bb58a67d1d4e7049c2fcf5ad35ce16c32a5c2b01517f2917b
+- test_sample.py
+  Tool: Write action #15
+  new_text_sha256: 2b08aa140870b3152ea5286cbc643b72643f88174fa9c42ae66d19108760f678
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

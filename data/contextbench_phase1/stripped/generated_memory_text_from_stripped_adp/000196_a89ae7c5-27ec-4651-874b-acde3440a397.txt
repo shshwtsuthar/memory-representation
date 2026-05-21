@@ -1,0 +1,448 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: a89ae7c5-27ec-4651-874b-acde3440a397
+- repo: sympy/sympy
+- instance_id: sympy__sympy-18087
+- base_commit: 9da013ad0ddc3cd96fe505f2e47c63e372040916
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Simplify of simple trig expression fails
+trigsimp in various versions, including 1.5, incorrectly simplifies cos(x)+sqrt(sin(x)**2) as though it were cos(x)+sin(x) for general complex x. (Oddly it gets this right if x is real.)
+
+Embarrassingly I found this by accident while writing sympy-based teaching material...
+
+FILES INSPECTED
+---------------
+- sympy/__init__.py [Read: 1]
+- sympy/simplify/trigsimp.py [Read: 3]
+- sympy/simplify/powsimp.py [Read: 2]
+- sympy/simplify/fu.py [Read: 4]
+- sympy/simplify/sqrtdenest.py [Read: 1]
+- sympy/core/power.py [Read: 6]
+- sympy/core/exprtools.py [Read: 2]
+
+SEARCH ANCHORS
+--------------
+(none)
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [test] python3 test_issue.py
+- [diagnostic] find testbed/sympy -name "*.py" -type f | xargs grep -l "def trigsimp" | head -10
+- [diagnostic] grep -n "^def trigsimp" testbed/sympy/simplify/trigsimp.py
+- [diagnostic] grep -n "^def futrig" testbed/sympy/simplify/trigsimp.py
+- [diagnostic] cd testbed && grep -r "sqrt.*\*\*2" --include="*.py" sympy/simplify/ | head -20
+- [diagnostic] cd testbed && find sympy/core -name "*.py" | xargs grep -l "class Pow" | head -5
+- [diagnostic] find testbed/sympy/core -name "*.py" | xargs grep -l "class Pow" | head -5
+- [diagnostic] find sympy/core -name "power.py"
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: SymPy now depends on mpmath as an external library. See https://docs.sympy.org/latest/install.html#mpmath for more information.
+- ERROR: file or directory not found: sympy/simplify/tests/test_trigsimp.py
+- Traceback (most recent call last):
+- ImportError: cannot import name 'PrecisionExhausted' from 'sympy.core.numbers' (./swebench_9_15/testbed/sympy/core/numbers.py)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Test Output after action #2]
+  Exit code 1
+    File "test_issue.py", line 11
+      print(f"Expression: {expr}")
+                                ^
+  SyntaxError: invalid syntax
+- [Test Output after action #4]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 5, in <module>
+      from sympy import symbols, cos, sin, sqrt, trigsimp
+    File "./swebench_9_15/testbed/sympy/__init__.py", line 21, in <module>
+      raise ImportError("SymPy now depends on mpmath as an external library. "
+  ImportError: SymPy now depends on mpmath as an external library. See https://docs.sympy.org/latest/install.html#mpmath for more information.
+- [Test Output after action #6]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 5, in <module>
+      from sympy import symbols, cos, sin, sqrt, trigsimp
+    File "./swebench_9_15/testbed/sympy/__init__.py", line 21, in <module>
+      raise ImportError("SymPy now depends on mpmath as an external library. "
+  ImportError: SymPy now depends on mpmath as an external library. See https://docs.sympy.org/latest/install.html#mpmath for more information.
+- [Read Result after action #8]
+       1→"""
+       2→SymPy is a Python library for symbolic mathematics. It aims to become a
+       3→full-featured computer algebra system (CAS) while keeping the code as simple
+       4→as possible in order to be comprehensible and easily extensible.  SymPy is
+       5→written entirely in Python. It depends on mpmath, and other external libraries
+       6→may be optionally for things like plotting support.
+       7→
+       8→See the webpage for more information and documentation:
+       9→
+      10→    https://sympy.org
+      11→
+      12→"""
+      13→
+      14→
+      15→from __future__ import absolute_import, print_function
+      16→del absolute_import, print_function
+      17→
+      18→try:
+      19→    import mpmath
+      20→except ImportError:
+      21→    raise ImportError("SymPy now depends on mpmath as an external library. "
+      22→    "See https://docs.sympy.org/latest/install.html#mpmath for more information.")
+      23→
+      24→del mpmath
+      25→
+      26→from sympy.release import __version__
+      27→
+      28→if 'dev' in __version__:
+      29→    def enable_warnings():
+      30→        import warnings
+      31→        warnings.filterwarnings('default',   '.*',   DeprecationWarning, module='sympy.*')
+      32→        del warn
+  [... truncated ...]
+- [Test Output after action #10]
+  Test 1: General complex x
+  Expression: sqrt(sin(x)**2) + cos(x)
+  trigsimp result: sqrt(2)*sin(x + pi/4)
+  Expected: cos(x) + sqrt(sin(x)**2) (should not simplify to cos(x) + sin(x))
+  Is it incorrectly simplified to cos(x) + sin(x)? False
+
+  Test 2: Real x
+  Expression: cos(x) + Abs(sin(x))
+  trigsimp result: cos(x) + Abs(sin(x))
+  Expected: cos(x) + Abs(sin(x)) for real x
+
+  Test 3: Just sqrt(sin(x)**2) for complex x
+  Expression: sqrt(sin(x)**2)
+  trigsimp result: sqrt(sin(x)**2)
+  Is it incorrectly simplified to sin(x)? False
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Diagnostic Output after action #12]
+  testbed/sympy/core/expr.py
+  testbed/sympy/simplify/trigsimp.py
+  testbed/sympy/vector/basisdependent.py
+- [Read Result after action #14]
+       1→from __future__ import print_function, division
+       2→
+       3→from collections import defaultdict
+       4→
+       5→from sympy.core import (sympify, Basic, S, Expr, expand_mul, factor_terms,
+       6→    Mul, Dummy, igcd, FunctionClass, Add, symbols, Wild, expand)
+       7→from sympy.core.cache import cacheit
+       8→from sympy.core.compatibility import reduce, iterable, SYMPY_INTS
+       9→from sympy.core.function import count_ops, _mexpand
+      10→from sympy.core.numbers import I, Integer
+      11→from sympy.functions import sin, cos, exp, cosh, tanh, sinh, tan, cot, coth
+      12→from sympy.functions.elementary.hyperbolic import HyperbolicFunction
+      13→from sympy.functions.elementary.trigonometric import TrigonometricFunction
+      14→from sympy.polys import Poly, factor, cancel, parallel_poly_from_expr
+      15→from sympy.polys.domains import ZZ
+      16→from sympy.polys.polyerrors import PolificationFailed
+      17→from sympy.polys.polytools import groebner
+      18→from sympy.simplify.cse_main import cse
+      19→from sympy.strategies.core import identity
+      20→from sympy.strategies.tree import greedy
+      21→from sympy.utilities.misc import debug
+      22→
+      23→
+      24→
+      25→def trigsimp_g
+  [... truncated ...]
+- [Diagnostic Output after action #16]
+  25:def trigsimp_groebner(expr, hints=[], quick=False, order="grlex",
+  424:def trigsimp(expr, **opts):
+  607:def trigsimp_old(expr, **opts):
+- [Read Result after action #18]
+     424→def trigsimp(expr, **opts):
+     425→    """
+     426→    reduces expression by using known trig identities
+     427→
+     428→    Notes
+     429→    =====
+     430→
+     431→    method:
+     432→    - Determine the method to use. Valid choices are 'matching' (default),
+     433→    'groebner', 'combined', and 'fu'. If 'matching', simplify the
+     434→    expression recursively by targeting common patterns. If 'groebner', apply
+     435→    an experimental groebner basis algorithm. In this case further options
+     436→    are forwarded to ``trigsimp_groebner``, please refer to its docstring.
+     437→    If 'combined', first run the groebner basis algorithm with small
+     438→    default parameters, then run the 'matching' algorithm. 'fu' runs the
+     439→    collection of trigonometric transformations described by Fu, et al.
+     440→    (see the `fu` docstring).
+     441→
+     442→
+     443→    Examples
+     444→    ========
+     445→
+     446→    >>> from sympy import trigsimp, sin, cos, log
+     447→    >>> from sympy.abc import x, y
+     448→    >>> e = 2*sin(x)**2 + 2*cos(x)**2
+     449→    >>> trigsimp(e)
+     450→    2
+     451→
+     452→    Simplification occurs wherever trigonometric functions are located.
+     453→
+
+  [... truncated ...]
+- [Diagnostic Output after action #20]
+  1069:def futrig(e, **kwargs):
+- [Read Result after action #22]
+    1069→def futrig(e, **kwargs):
+    1070→    """Return simplified ``e`` using Fu-like transformations.
+    1071→    This is not the "Fu" algorithm. This is called by default
+    1072→    from ``trigsimp``. By default, hyperbolics subexpressions
+    1073→    will be simplified, but this can be disabled by setting
+    1074→    ``hyper=False``.
+    1075→
+    1076→    Examples
+    1077→    ========
+    1078→
+    1079→    >>> from sympy import trigsimp, tan, sinh, tanh
+    1080→    >>> from sympy.simplify.trigsimp import futrig
+    1081→    >>> from sympy.abc import x
+    1082→    >>> trigsimp(1/tan(x)**2)
+    1083→    tan(x)**(-2)
+    1084→
+    1085→    >>> futrig(sinh(x)/tanh(x))
+    1086→    cosh(x)
+    1087→
+    1088→    """
+    1089→    from sympy.simplify.fu import hyper_as_trig
+    1090→    from sympy.simplify.simplify import bottom_up
+    1091→
+    1092→    e = sympify(e)
+    1093→
+    1094→    if not isinstance(e, Basic):
+    1095→        return e
+    1096→
+    1097→    if not e.args:
+    1098→        return e
+    1099→
+    1100→    old = e
+    1101→    e = bottom_up(e, lambda x: _futrig(x, **kwargs))
+    1102→
+    1103→    if kwargs.pop('hyper', True) and e.has(HyperbolicFunction):
+    1104→        e, f = hyper_as_trig(e)
+    1105→        e = f(_f
+  [... truncated ...]
+- [Diagnostic Output after action #24]
+  sympy/simplify//powsimp.py:    >>> powdenest(sqrt(x**2))
+  sympy/simplify//powsimp.py:    sqrt(x**2)
+  sympy/simplify//powsimp.py:    >>> powdenest(sqrt(p**2))
+  sympy/simplify//tests/test_powsimp.py:    assert all(powsimp(e) == e for e in (sqrt(x**a), sqrt(x**2)))
+  sympy/simplify//tests/test_powsimp.py:    assert powdenest(sqrt(p**2)) == p
+  sympy/simplify//tests/test_powsimp.py:    e = (-1 - a**2)*sqrt(1 + a**2)
+  sympy/simplify//tests/test_simplify.py:        /(a*(x**2 - y**2)))/(a*(x**2 - y**2)) + x*(-2*x**2*sqrt(-x**2*y**2 + x**2
+  sympy/simplify//tests/test_simplify.py:        + y**2 - 1)*sin(z)/(a*(x**2 - y**2)**2) - x**2*sqrt(-x**2*y**2 + x**2 +
+  sympy/simplify//tests/test_simplify.py:        y**2 - 1)*sin(z)/(a*(x**2 - 1)*(x**2 - y**2)) + (x**2*sqrt((-x**2 + 1)*
+  sympy/simplify//tests/test_simplify.py:        (y**2 - 1))*sqrt(-x**2*y**2 + x**2 + y**2 - 1)*sin(z)/(x**2 - 1) + sqrt(
+  sympy/simplify//tests/test_simplify.py:        (-x**2 + 1)*(y**2 - 1))*(x*(-x*y**2 + x)/sqrt(-x**2*y**2 + x**2 + y**2 -
+  sympy/simplify//tests/test_simplify.py:        1) + sqrt(-x**2*y**2 + x**2 + y**2 - 1))*sin(z))/(a*sqrt((-x**2 + 1)*(
+  sympy/simplify//tests/test_simplify.py:        y**2 - 1))*(x**2 - y**2)))*
+  [... truncated ...]
+- [Read Result after action #26]
+       1→from __future__ import print_function, division
+       2→
+       3→from collections import defaultdict
+       4→
+       5→from sympy.core.function import expand_log, count_ops
+       6→from sympy.core import sympify, Basic, Dummy, S, Add, Mul, Pow, expand_mul, factor_terms
+       7→from sympy.core.compatibility import ordered, default_sort_key, reduce
+       8→from sympy.core.numbers import Integer, Rational
+       9→from sympy.core.mul import prod, _keep_coeff
+      10→from sympy.core.rules import Transform
+      11→from sympy.functions import exp_polar, exp, log, root, polarify, unpolarify
+      12→from sympy.polys import lcm, gcd
+      13→from sympy.ntheory.factor_ import multiplicity
+      14→
+      15→
+      16→
+      17→def powsimp(expr, deep=False, combine='all', force=False, measure=count_ops):
+      18→    """
+      19→    reduces expression by combining powers with similar bases and exponents.
+      20→
+      21→    Notes
+      22→    =====
+      23→
+      24→    If deep is True then powsimp() will also simplify arguments of
+      25→    functions. By default deep is set to False.
+      26→
+      27→    If force is True then bases will be combined without checking for
+      28→    assumptions, e.g. sqrt(x)*sqrt(y) ->
+  [... truncated ...]
+- [Diagnostic Output after action #30]
+  sympy/core/power.py
+- [Test Output after action #33]
+  ============================================================
+  Testing sqrt(sin(x)**2) simplification
+  ============================================================
+
+  1. Just sqrt(sin(x)**2):
+     Original: sqrt(sin(x)**2)
+     After simplify: sqrt(sin(x)**2)
+     After powsimp: sqrt(sin(x)**2)
+     After trigsimp: sqrt(sin(x)**2)
+
+  2. cos(x) + sqrt(sin(x)**2):
+     Original: sqrt(sin(x)**2) + cos(x)
+     After simplify: sqrt(2)*sin(x + pi/4)
+     After powsimp: sqrt(sin(x)**2) + cos(x)
+     After powsimp(deep=True): sqrt(sin(x)**2) + cos(x)
+
+  3. Testing TR rules:
+     After TR1: sqrt(sin(x)**2) + cos(x)
+     After TR2: sqrt(sin(x)**2) + cos(x)
+     After TR3: sqrt(sin(x)**2) + cos(x)
+     After TR5: sqrt(1 - cos(x)**2) + cos(x)
+
+  4. Trigsimp:
+     After trigsimp: sqrt(2)*sin(x + pi/4)
+
+  5. Real x:
+     Original: cos(x) + Abs(sin(x))
+     After trigsimp: cos(x) + Abs(sin(x))
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError:
+  [... truncated ...]
+- [Diagnostic Output after action #36]
+  ./testbed/sympy/simplify/fu.py
+- [Diagnostic Output after action #38]
+  529:def TR5(rv, max=4, pow=False):
+- [Read Result after action #40]
+     529→def TR5(rv, max=4, pow=False):
+     530→    """Replacement of sin**2 with 1 - cos(x)**2.
+     531→
+     532→    See _TR56 docstring for advanced use of ``max`` and ``pow``.
+     533→
+     534→    Examples
+     535→    ========
+     536→
+     537→    >>> from sympy.simplify.fu import TR5
+     538→    >>> from sympy.abc import x
+     539→    >>> from sympy import sin
+     540→    >>> TR5(sin(x)**2)
+     541→    1 - cos(x)**2
+     542→    >>> TR5(sin(x)**-2)  # unchanged
+     543→    sin(x)**(-2)
+     544→    >>> TR5(sin(x)**4)
+     545→    (1 - cos(x)**2)**2
+     546→    """
+     547→    return _TR56(rv, sin, cos, lambda x: 1 - x, max=max, pow=pow)
+     548→
+     549→
+     550→def TR6(rv, max=4, pow=False):
+     551→    """Replacement of cos**2 with 1 - sin(x)**2.
+     552→
+     553→    See _TR56 docstring for advanced use of ``max`` and ``pow``.
+     554→
+     555→    Examples
+     556→    ========
+     557→
+     558→    >>> from sympy.simplify.fu import TR6
+     559→    >>> from sympy.abc import x
+     560→    >>> from sympy import cos
+     561→    >>> TR6(cos(x)**2)
+     562→    1 - sin(x)**2
+     563→    >>> TR6(cos(x)**-2)  #unchanged
+     564→    cos(x)**(-2)
+     565→    >>> TR6(cos(x)**4)
+     566→    (1 - sin(x)**2)**2
+     567→    """
+     568
+  [... truncated ...]
+- [Diagnostic Output after action #42]
+  489:    (1 - cos(x)**2)**3
+  493:    (1 - cos(x)**2)**4
+  530:    """Replacement of sin**2 with 1 - cos(x)**2.
+  541:    1 - cos(x)**2
+  545:    (1 - cos(x)**2)**2
+- [Diagnostic Output after action #44]
+  489:def powdenest(eq, force=False, polar=False):
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/core/power.py
+  Tool: Edit action #86
+  old_text_sha256: cca03c752494e98d0d66ec83891c8c3ef7bb00b6b992301ddc7140f26a252937
+  new_text_sha256: cbf9c1a33f3e094d46b4992ab5b0e9ce14320f56b85f46dbc808c8c3e8cb3288
+- sympy/core/power.py
+  Tool: Edit action #117
+  old_text_sha256: a6b35cb28c9a8dab189e343a932089af7f8b49e103a5ba47030f2454ef801111
+  new_text_sha256: 4c7f02530f0a8fd6c21aaf11ad8adf91c591a6ac1d935527099a8aed69efae2f
+- sympy/core/power.py
+  Tool: Edit action #126
+  old_text_sha256: 4c7f02530f0a8fd6c21aaf11ad8adf91c591a6ac1d935527099a8aed69efae2f
+  new_text_sha256: a6b35cb28c9a8dab189e343a932089af7f8b49e103a5ba47030f2454ef801111
+- sympy/core/exprtools.py
+  Tool: Edit action #156
+  old_text_sha256: 1dbe58138d432a29843b9c7244212ebd151953902a3af838cffb3af52b5df111
+  new_text_sha256: dd7fbe73dc1fbb9b6cf850a7114293f1a9d572df349731485c1b58ac436730b3
+- swebench_9_15/test_trace.py
+  Tool: Write action #53
+  new_text_sha256: 8103f303f3546fee176e48088b044626d70e90e44b407e404c383c7bea81f227
+- swebench_9_15/test_sqrt_sin.py
+  Tool: Write action #56
+  new_text_sha256: f97fd5460d0764cffc76f85465a38b36e10fbc229f40bdff0983185d331d1abf
+- swebench_9_15/test_assumptions.py
+  Tool: Write action #78
+  new_text_sha256: 45c95fd562814010d23adecaf62273917f6a9b67e1a8ec90be34989ac3dfa064
+- swebench_9_15/test_fix.py
+  Tool: Write action #83
+  new_text_sha256: b7f1e7c50e900514b6ea26717b475bca4c76d57e7fc7a7225398b15a90b52da7
+- swebench_9_15/test_debug_power.py
+  Tool: Write action #112
+  new_text_sha256: 842ef08468e23e8a200bcc20aec78b16f59510450753ed4c5389c7f480165866
+- swebench_9_15/test_detailed_trace.py
+  Tool: Write action #127
+  new_text_sha256: 70d5c93ace54d1a32a9f5cf4fa2bd7e1335d904c128fbb092f02eecf2c6e20f9
+- swebench_9_15/test_tr10i.py
+  Tool: Write action #130
+  new_text_sha256: 76578b7c1d2c87bf01af554e37e604e672285164a1a6ececd9740a0c76f56869
+- swebench_9_15/test_trig_split.py
+  Tool: Write action #133
+  new_text_sha256: 739726d1992cd6dc13bd97895d05525c63709d1d3b89acba7ccaca4fe9fdb857
+- swebench_9_15/test_pow_cos_sin.py
+  Tool: Write action #136
+  new_text_sha256: 8cd4db766a63c562ba18c1e641f154830e53b5ccc39d6275c39f324c3c9efa4f
+- swebench_9_15/test_factors.py
+  Tool: Write action #139
+  new_text_sha256: 0c70d28098e177cc777df53aa4c66e8f2af71f3911a2680478d0901e0cbe6015
+- swebench_9_15/test_final.py
+  Tool: Write action #173
+  new_text_sha256: 20680c0fceb11f5eeb510eeef2769c7a81eaef6cc17e48b9f065448d8af75840
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

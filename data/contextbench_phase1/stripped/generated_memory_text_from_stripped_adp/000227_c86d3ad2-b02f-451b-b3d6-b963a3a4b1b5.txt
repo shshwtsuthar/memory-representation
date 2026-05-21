@@ -1,0 +1,363 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: c86d3ad2-b02f-451b-b3d6-b963a3a4b1b5
+- repo: scikit-learn/scikit-learn
+- instance_id: scikit-learn__scikit-learn-15535
+- base_commit: 70b0ddea992c01df1a41588fa9e2d130fb6b13f8
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+regression in input validation of clustering metrics
+```python
+from sklearn.metrics.cluster import mutual_info_score
+import numpy as np
+
+x = np.random.choice(['a', 'b'], size=20).astype(object)
+mutual_info_score(x, x)
+```
+ValueError: could not convert string to float: 'b'
+
+while
+```python
+x = np.random.choice(['a', 'b'], size=20)
+mutual_info_score(x, x)
+```
+works with a warning?
+
+this worked in 0.21.1 without a warning (as I think it should)
+
+
+Edit by @ogrisel: I removed the `.astype(object)` in the second code snippet.
+
+FILES INSPECTED
+---------------
+- sklearn/metrics/cluster/_supervised.py [Read: 7, Grep: 2]
+- sklearn/metrics/cluster [Grep: 3]
+- sklearn/utils [Grep: 1]
+- sklearn/utils/validation.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [9] Grep pattern='def mutual_info_score' path='sklearn/metrics/cluster'
+- [15] Grep pattern='^def check_array' path='sklearn/utils'
+- [19] Grep pattern='check_array.*dtype=None' path='sklearn/metrics/cluster'
+- [26] Grep pattern='np\\.int[^0-9_]' path='sklearn/metrics/cluster/_supervised.py'
+- [40] Grep pattern='np\\.int[^0-9_]' path='sklearn/metrics/cluster/_supervised.py'
+- [42] Grep pattern='check_clusterings' path='sklearn/metrics/cluster'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [test] python3 test_issue.py
+- [test] python3 test_issue.py
+- [test] python3 test_issue.py
+- [test] python3 comprehensive_test.py
+- [diagnostic] find testbed/sklearn/metrics/cluster/tests -name "*.py" -type f | head -5
+- [test] cd testbed && python3 -m pytest sklearn/metrics/cluster/tests/test_supervised.py -xvs 2>&1 | head -100
+- [diagnostic] cd testbed && grep -r "np\.int[^0-9_]" sklearn/metrics/cluster/_supervised.py
+- [diagnostic] grep -B 20 "check_clusterings" ./swebench_9_15/testbed/sklearn/metrics/cluster/_supervised.py | grep "^def " | head -10
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named sklearn.metrics.cluster
+- FAILED: ValueError: could not convert string to float: 'a'
+- FAILED: AttributeError: module 'numpy' has no attribute 'int'.
+- E           AttributeError: module 'numpy' has no attribute 'int'.
+- E           `np.int` was a deprecated alias for the builtin `int`. To avoid this error in existing code, use `int` by itself. Doing this will not modify any behavior and is safe. When replacing `np.int`, you may wish to use e.g. `np.int64` or `np.int32` to specify the precision. If you wish to review your current use, check the release note link for additional information.
+- E           The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
+- E               https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Test Output after action #1]
+  Exit code 1
+    File "test_issue.py", line 11
+      print(f"SUCCESS: mutual_info_score returned {result}")
+                                                          ^
+  SyntaxError: invalid syntax
+- [Test Output after action #3]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 5, in <module>
+      from sklearn.metrics.cluster import mutual_info_score
+  ImportError: No module named sklearn.metrics.cluster
+- [Test Output after action #5]
+  Test 1: object dtype array (should work but currently fails)
+  FAILED: ValueError: could not convert string to float: 'a'
+
+  Test 2: regular string array (works with warning)
+  FAILED: AttributeError: module 'numpy' has no attribute 'int'.
+  `np.int` was a deprecated alias for the builtin `int`. To avoid this error in existing code, use `int` by itself. Doing this will not modify any behavior and is safe. When replacing `np.int`, you may wish to use e.g. `np.int64` or `np.int32` to specify the precision. If you wish to review your current use, check the release note link for additional information.
+  The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
+      https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
+  ./swebench_9_15/testbed/sklearn/metrics/cluster/_supervised.py:45: FutureWarning: Beginning in version 0.22, arrays of bytes/strings will be converted to decimal numbers if dtype='numeric'. It is recommended that you convert the array to a float dtype before using it in scikit-learn, for example by using your_array = your_array.astype(np.float64).
+    labels_true = check_array(
+  ./swebench_9_15/testbed/sklearn/metri
+  [... truncated ...]
+- [Read Result after action #7]
+       1→"""Utilities to evaluate the clustering performance of models.
+       2→
+       3→Functions named as *_score return a scalar value to maximize: the higher the
+       4→better.
+       5→"""
+       6→
+       7→# Authors: Olivier Grisel <olivier.grisel@ensta.org>
+       8→#          Wei LI <kuantkid@gmail.com>
+       9→#          Diego Molla <dmolla-aliod@gmail.com>
+      10→#          Arnaud Fouchet <foucheta@gmail.com>
+      11→#          Thierry Guillemot <thierry.guillemot.work@gmail.com>
+      12→#          Gregory Stupp <stuppie@gmail.com>
+      13→#          Joel Nothman <joel.nothman@gmail.com>
+      14→#          Arya McCarthy <arya@jhu.edu>
+      15→# License: BSD 3 clause
+      16→
+      17→
+      18→from math import log
+      19→
+      20→import numpy as np
+      21→from scipy import sparse as sp
+      22→
+      23→from ._expected_mutual_info_fast import expected_mutual_information
+      24→from ...utils.validation import check_array, check_consistent_length
+      25→from ...utils.fixes import comb, _astype_copy_false
+      26→
+      27→
+      28→def _comb2(n):
+      29→    # the exact version is faster for k == 2: use it by default globally in
+      30→    # this module instead of the float approximate variant
+      31→
+  [... truncated ...]
+- [Grep Result after action #9]
+  testbed/sklearn/metrics/cluster/_supervised.py:565:def mutual_info_score(labels_true, labels_pred, contingency=None):
+- [Read Result after action #11]
+     565→def mutual_info_score(labels_true, labels_pred, contingency=None):
+     566→    """Mutual Information between two clusterings.
+     567→
+     568→    The Mutual Information is a measure of the similarity between two labels of
+     569→    the same data. Where :math:`|U_i|` is the number of the samples
+     570→    in cluster :math:`U_i` and :math:`|V_j|` is the number of the
+     571→    samples in cluster :math:`V_j`, the Mutual Information
+     572→    between clusterings :math:`U` and :math:`V` is given as:
+     573→
+     574→    .. math::
+     575→
+     576→        MI(U,V)=\\sum_{i=1}^{|U|} \\sum_{j=1}^{|V|} \\frac{|U_i\\cap V_j|}{N}
+     577→        \\log\\frac{N|U_i \\cap V_j|}{|U_i||V_j|}
+     578→
+     579→    This metric is independent of the absolute values of the labels:
+     580→    a permutation of the class or cluster label values won't change the
+     581→    score value in any way.
+     582→
+     583→    This metric is furthermore symmetric: switching ``label_true`` with
+     584→    ``label_pred`` will return the same score value. This can be useful to
+     585→    measure the agreement of two independent label assignments strategies
+     586→    on the same dataset when the real ground truth is not
+  [... truncated ...]
+- [Read Result after action #13]
+     615→    adjusted_mutual_info_score: Adjusted against chance Mutual Information
+     616→    normalized_mutual_info_score: Normalized Mutual Information
+     617→    """
+     618→    if contingency is None:
+     619→        labels_true, labels_pred = check_clusterings(labels_true, labels_pred)
+     620→        contingency = contingency_matrix(labels_true, labels_pred, sparse=True)
+     621→    else:
+     622→        contingency = check_array(contingency,
+     623→                                  accept_sparse=['csr', 'csc', 'coo'],
+     624→                                  dtype=[int, np.int32, np.int64])
+     625→
+     626→    if isinstance(contingency, np.ndarray):
+     627→        # For an array
+     628→        nzx, nzy = np.nonzero(contingency)
+     629→        nz_val = contingency[nzx, nzy]
+     630→    elif sp.issparse(contingency):
+     631→        # For a sparse matrix
+     632→        nzx, nzy, nz_val = sp.find(contingency)
+     633→    else:
+     634→        raise ValueError("Unsupported type for 'contingency': %s" %
+     635→                         type(contingency))
+     636→
+     637→    contingency_sum = contingency.sum()
+     638→    pi = np.ravel(contingency.sum(axis=1))
+     639→    pj = np.ravel(contingen
+  [... truncated ...]
+- [Grep Result after action #15]
+  testbed/sklearn/utils/validation.py:338:def check_array(array, accept_sparse=False, accept_large_sparse=True,
+- [Read Result after action #17]
+     338→def check_array(array, accept_sparse=False, accept_large_sparse=True,
+     339→                dtype="numeric", order=None, copy=False, force_all_finite=True,
+     340→                ensure_2d=True, allow_nd=False, ensure_min_samples=1,
+     341→                ensure_min_features=1, warn_on_dtype=None, estimator=None):
+     342→
+     343→    """Input validation on an array, list, sparse matrix or similar.
+     344→
+     345→    By default, the input is checked to be a non-empty 2D array containing
+     346→    only finite values. If the dtype of the array is object, attempt
+     347→    converting to float, raising on failure.
+     348→
+     349→    Parameters
+     350→    ----------
+     351→    array : object
+     352→        Input object to check / convert.
+     353→
+     354→    accept_sparse : string, boolean or list/tuple of strings (default=False)
+     355→        String[s] representing allowed sparse matrix formats, such as 'csc',
+     356→        'csr', etc. If the input is sparse but not in the allowed format,
+     357→        it will be converted to the first listed format. True allows the input
+     358→        to be any format. False means that a sparse matrix input will
+     359→        raise an erro
+  [... truncated ...]
+- [Grep Result after action #19]
+  No matches found
+- [Read Result after action #21]
+      79→def contingency_matrix(labels_true, labels_pred, eps=None, sparse=False):
+      80→    """Build a contingency matrix describing the relationship between labels.
+      81→
+      82→    Parameters
+      83→    ----------
+      84→    labels_true : int array, shape = [n_samples]
+      85→        Ground truth class labels to be used as a reference
+      86→
+      87→    labels_pred : array-like of shape (n_samples,)
+      88→        Cluster labels to evaluate
+      89→
+      90→    eps : None or float, optional.
+      91→        If a float, that value is added to all values in the contingency
+      92→        matrix. This helps to stop NaN propagation.
+      93→        If ``None``, nothing is adjusted.
+      94→
+      95→    sparse : boolean, optional.
+      96→        If True, return a sparse CSR continency matrix. If ``eps is not None``,
+      97→        and ``sparse is True``, will throw ValueError.
+      98→
+      99→        .. versionadded:: 0.18
+     100→
+     101→    Returns
+     102→    -------
+     103→    contingency : {array-like, sparse}, shape=[n_classes_true, n_classes_pred]
+     104→        Matrix :math:`C` such that :math:`C_{i, j}` is the number of samples in
+     105→        true class :math:`i` and in predicted
+  [... truncated ...]
+- [Test Output after action #24]
+  Test 1: object dtype array (should work but currently fails)
+  FAILED: AttributeError: module 'numpy' has no attribute 'int'.
+  `np.int` was a deprecated alias for the builtin `int`. To avoid this error in existing code, use `int` by itself. Doing this will not modify any behavior and is safe. When replacing `np.int`, you may wish to use e.g. `np.int64` or `np.int32` to specify the precision. If you wish to review your current use, check the release note link for additional information.
+  The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
+      https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
+
+  Test 2: regular string array (works with warning)
+  FAILED: AttributeError: module 'numpy' has no attribute 'int'.
+  `np.int` was a deprecated alias for the builtin `int`. To avoid this error in existing code, use `int` by itself. Doing this will not modify any behavior and is safe. When replacing `np.int`, you may wish to use e.g. `np.int64` or `np.int32` to specify the precision. If you wish to review your current use, check the release note link for additional information.
+  The aliases was originally deprecated in NumPy 1
+  [... truncated ...]
+- [Grep Result after action #26]
+  124:                                dtype=np.int)
+- [Read Result after action #28]
+     118→    # Using coo_matrix to accelerate simple histogram calculation,
+     119→    # i.e. bins are consecutive integers
+     120→    # Currently, coo_matrix is faster than histogram2d for simple cases
+     121→    contingency = sp.coo_matrix((np.ones(class_idx.shape[0]),
+     122→                                 (class_idx, cluster_idx)),
+     123→                                shape=(n_classes, n_clusters),
+     124→                                dtype=np.int)
+     125→    if sparse:
+     126→        contingency = contingency.tocsr()
+     127→        contingency.sum_duplicates()
+
+- [Test Output after action #31]
+  Test 1: object dtype array (should work but currently fails)
+  SUCCESS: mutual_info_score returned 0.6881388137135882
+
+  Test 2: regular string array (works with warning)
+  SUCCESS: mutual_info_score returned 0.6730116670092563
+- [Test Output after action #33]
+  Testing mutual_info_score with different dtypes:
+  ============================================================
+
+  1. Integer labels:
+    SUCCESS: mutual_info_score = 1.0986122886681096
+
+  2. String labels as object dtype:
+    SUCCESS: mutual_info_score = 1.0986122886681096
+
+  3. Regular string array:
+    SUCCESS: mutual_info_score = 1.0986122886681096
+
+  4. Object array with integers:
+    SUCCESS: mutual_info_score = 1.0986122886681096
+
+  5. Float labels:
+    SUCCESS: mutual_info_score = 1.0986122886681096
+
+
+  Testing other clustering metrics with object dtype:
+  ============================================================
+    adjusted_mutual_info_score: SUCCESS (result = -0.2499999999999995)
+    normalized_mutual_info_score: SUCCESS (result = 0.3690702464285424)
+    adjusted_rand_score: SUCCESS (result = -0.25)
+    completeness_score: SUCCESS (result = 0.3690702464285424)
+    homogeneity_score: SUCCESS (result = 0.3690702464285424)
+    v_measure_score: SUCCESS (result = 0.3690702464285424)
+
+  ============================================================
+  All tests completed!
+- [Diagnostic Output after action #35]
+  testbed/sklearn/metrics/cluster/tests/test_supervised.py
+  testbed/sklearn/metrics/cluster/tests/test_common.py
+  testbed/sklearn/metrics/cluster/tests/__init__.py
+  testbed/sklearn/metrics/cluster/tests/test_bicluster.py
+  testbed/sklearn/metrics/cluster/tests/test_unsupervised.py
+- [Test Output after action #37]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-6.2.3, py-1.10.0, pluggy-0.13.1 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  rootdir: ./swebench_9_15/testbed, configfile: setup.cfg
+  plugins: anyio-3.6.2
+  collecting ... collected 19 items
+
+  sklearn/metrics/cluster/tests/test_supervised.py::test_error_messages_on_wrong_input PASSED
+  sklearn/metrics/cluster/tests/test_supervised.py::test_generalized_average PASSED
+  sklearn/metrics/cluster/tests/test_supervised.py::test_perfect_matches PASSED
+  sklearn/metrics/cluster/tests/test_supervised.py::test_homogeneous_but_not_complete_labeling PASSED
+  sklearn/metrics/cluster/tests/test_supervised.py::test_complete_but_not_homogeneous_labeling PASSED
+  sklearn/metrics/cluster/tests/test_supervised.py::test_not_complete_and_not_homogeneous_labeling PASSED
+  sklearn/metrics/cluster/tests/test_supervised.py::test_beta_parameter PASSED
+  sklearn/metrics/cluster/tests/test_supervised.py::test_non_consecutive_labels PASSED
+  sklearn/metrics/cluster/tests/test_supervised.py::test_adjustment_for_chance PASSED
+  sklearn/metrics/cluster/tests/test_supervised.py::test_adjusted_mutual_info_sco
+  [... truncated ...]
+- [Grep Result after action #40]
+  No matches found
+- [Grep Result after action #42]
+  sklearn/metrics/cluster/_supervised.py:34:def check_clusterings(labels_true, labels_pred):
+  sklearn/metrics/cluster/_supervised.py:219:    labels_true, labels_pred = check_clusterings(labels_true, labels_pred)
+  sklearn/metrics/cluster/_supervised.py:302:    labels_true, labels_pred = check_clusterings(labels_true, labels_pred)
+  sklearn/metrics/cluster/_supervised.py:619:        labels_true, labels_pred = check_clusterings(labels_true, labels_pred)
+  sklearn/metrics/cluster/_supervised.py:739:    labels_true, labels_pred = check_clusterings(labels_true, labels_pred)
+  sklearn/metrics/cluster/_supervised.py:848:    labels_true, labels_pred = check_clusterings(labels_true, labels_pred)
+  sklearn/metrics/cluster/_supervised.py:937:    labels_true, labels_pred = check_clusterings(labels_true, labels_pred)
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sklearn/metrics/cluster/_supervised.py
+  Tool: Edit action #23
+  old_text_sha256: 046a223f7c2e9f018ae293deafa9ebc6de2552399ab63e2696b07f1e7580f3f6
+  new_text_sha256: 741e25e571f219058f30eb1f1045316574bcf7f17e4cab45b57198b137705772
+- sklearn/metrics/cluster/_supervised.py
+  Tool: Edit action #30
+  old_text_sha256: a57c43a3674f5189ec58f5fb34bc842f4398ff2d2ce1d3c981d96487d02aa086
+  new_text_sha256: 523a147475262ab82ee07b89c17c21a7c3b7b00b91dc0cb45320ad1874636356
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

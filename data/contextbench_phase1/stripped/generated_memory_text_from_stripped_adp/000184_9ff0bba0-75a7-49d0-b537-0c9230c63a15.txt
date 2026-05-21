@@ -1,0 +1,412 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 9ff0bba0-75a7-49d0-b537-0c9230c63a15
+- repo: django/django
+- instance_id: django__django-14730
+- base_commit: 4fe3774c729f3fd5105b3001fe69a70bdca95ac3
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Prevent developers from defining a related_name on symmetrical ManyToManyFields
+Description
+
+In ManyToManyField, if the symmetrical argument is passed, or if it's a self-referential ManyToMany relationship, the related field on the target model is not created. However, if a developer passes in the related_name not understanding this fact, they may be confused until they find the information about symmetrical relationship. Thus, it is proposed to raise an error when the user defines a ManyToManyField in this condition.
+
+FILES INSPECTED
+---------------
+- django/db/models/fields/related.py [Read: 2]
+- django/db/models/fields/reverse_related.py [Read: 1]
+- tests/invalid_models_tests/test_relative_fields.py [Read: 2, Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [3] Grep pattern='class ManyToManyField'
+- [7] Glob glob='**/related.py'
+- [22] Grep pattern='symmetrical' path='tests/invalid_models_tests/test_relative_fields.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15/testbed -name "*.py" -path "*/fields/*" -name "*many*" -type f 2>/dev/null | head -20
+- [other/reproduction]
+- [diagnostic] find ./swebench_9_15/testbed -name "*.py" -type f -exec grep -l "class ManyToManyField" {} \; 2>/dev/null | head -5
+- [diagnostic] ls -la ./swebench_9_15/testbed 2>/dev/null | head -20
+- [diagnostic] find ./swebench_9_15 -name "*14730*" -type f 2>/dev/null
+- [diagnostic] find testbed -name "*.py" -path "*/tests/*" -exec grep -l "ManyToManyField.*symmetrical" {} \; 2>/dev/null | head -10
+- [diagnostic] find testbed -name "*.py" -path "*/tests/*" -name "*field*check*" -type f 2>/dev/null | head -10
+- [diagnostic] find testbed/tests -name "*.py" -type f | grep -i "invalid" | head -10
+- [diagnostic] ls tests/ | grep -i "invalid\|check"
+- [diagnostic] ls tests/invalid_models_tests/
+- [test] python test_issue.py
+- [test] python test_issue.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- TypeError: Error when calling the metaclass bases
+- ModuleNotFoundError: No module named 'django.contenttypes'
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #7]
+  ./swebench_9_15/testbed/django/db/models/fields/related.py
+- [Read Result after action #9]
+       1→import functools
+       2→import inspect
+       3→from functools import partial
+       4→
+       5→from django import forms
+       6→from django.apps import apps
+       7→from django.conf import SettingsReference, settings
+       8→from django.core import checks, exceptions
+       9→from django.db import connection, router
+      10→from django.db.backends import utils
+      11→from django.db.models import Q
+      12→from django.db.models.constants import LOOKUP_SEP
+      13→from django.db.models.deletion import CASCADE, SET_DEFAULT, SET_NULL
+      14→from django.db.models.query_utils import PathInfo
+      15→from django.db.models.utils import make_model_tuple
+      16→from django.utils.functional import cached_property
+      17→from django.utils.translation import gettext_lazy as _
+      18→
+      19→from . import Field
+      20→from .mixins import FieldCacheMixin
+      21→from .related_descriptors import (
+      22→    ForeignKeyDeferredAttribute, ForwardManyToOneDescriptor,
+      23→    ForwardOneToOneDescriptor, ManyToManyDescriptor,
+      24→    ReverseManyToOneDescriptor, ReverseOneToOneDescriptor,
+      25→)
+      26→from .related_lookups import (
+      27→    RelatedExact, RelatedGreaterThan, RelatedGreaterThanOrEqual,
+  [... truncated ...]
+- [Read Result after action #11]
+       1→"""
+       2→"Rel objects" for related fields.
+       3→
+       4→"Rel objects" (for lack of a better name) carry information about the relation
+       5→modeled by a related field and provide some utility functions. They're stored
+       6→in the ``remote_field`` attribute of the field.
+       7→
+       8→They also act as reverse fields for the purposes of the Meta API because
+       9→they're the closest concept currently available.
+      10→"""
+      11→
+      12→from django.core import exceptions
+      13→from django.utils.functional import cached_property
+      14→from django.utils.hashable import make_hashable
+      15→
+      16→from . import BLANK_CHOICE_DASH
+      17→from .mixins import FieldCacheMixin
+      18→
+      19→
+      20→class ForeignObjectRel(FieldCacheMixin):
+      21→    """
+      22→    Used by ForeignObject to store information about the relation.
+      23→
+      24→    ``_meta.get_fields()`` returns this class to provide access to the field
+      25→    flags for the reverse relation.
+      26→    """
+      27→
+      28→    # Field flags
+      29→    auto_created = True
+      30→    concrete = False
+      31→    editable = False
+      32→    is_relation = True
+      33→
+      34→    # Reverse relations are always nu
+  [... truncated ...]
+- [Diagnostic Output after action #16]
+  admin_checks
+  check_framework
+  invalid_models_tests
+- [Diagnostic Output after action #18]
+  __init__.py
+  test_backend_specific.py
+  test_custom_fields.py
+  test_deprecated_fields.py
+  test_models.py
+  test_ordinary_fields.py
+  test_relative_fields.py
+- [Read Result after action #20]
+       1→from unittest import mock
+       2→
+       3→from django.core.checks import Error, Warning as DjangoWarning
+       4→from django.db import connection, models
+       5→from django.test.testcases import SimpleTestCase
+       6→from django.test.utils import isolate_apps, modify_settings, override_settings
+       7→
+       8→
+       9→@isolate_apps('invalid_models_tests')
+      10→class RelativeFieldTests(SimpleTestCase):
+      11→
+      12→    def test_valid_foreign_key_without_accessor(self):
+      13→        class Target(models.Model):
+      14→            # There would be a clash if Model.field installed an accessor.
+      15→            model = models.IntegerField()
+      16→
+      17→        class Model(models.Model):
+      18→            field = models.ForeignKey(Target, models.CASCADE, related_name='+')
+      19→
+      20→        field = Model._meta.get_field('field')
+      21→        self.assertEqual(field.check(), [])
+      22→
+      23→    def test_foreign_key_to_missing_model(self):
+      24→        # Model names are resolved when a model is being created, so we cannot
+      25→        # test relative fields in isolation and we need to attach them to a
+      26→        # model.
+      27→        class Model(models.Mode
+  [... truncated ...]
+- [Grep Result after action #22]
+  293:            friends = models.ManyToManyField('self', through="InvalidRelationship", symmetrical=False)
+  1228:            first_m2m = models.ManyToManyField('self', symmetrical=False)
+  1229:            second_m2m = models.ManyToManyField('self', symmetrical=False)
+  1260:            model_set = models.ManyToManyField("self", symmetrical=False)
+  1279:            model = models.ManyToManyField("self", symmetrical=False)
+  1298:            m2m = models.ManyToManyField("self", symmetrical=False, related_name='clash')
+  1327:            first = models.ManyToManyField("self", symmetrical=False, related_name='first_accessor')
+  1328:            second = models.ManyToManyField("self", symmetrical=False, related_name='second_accessor')
+- [Test Output after action #24]
+  Exit code 1
+    File "test_issue.py", line 46
+      print(f"Field: {field}")
+                            ^
+  SyntaxError: invalid syntax
+- [Test Output after action #26]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 7, in <module>
+      import django
+    File "./swebench_9_15/testbed/django/__init__.py", line 1, in <module>
+      from django.utils.version import get_version
+    File "./swebench_9_15/testbed/django/utils/version.py", line 7, in <module>
+      from django.utils.regex_helper import _lazy_re_compile
+    File "./swebench_9_15/testbed/django/utils/regex_helper.py", line 10, in <module>
+      from django.utils.functional import SimpleLazyObject
+    File "./swebench_9_15/testbed/django/utils/functional.py", line 364, in <module>
+      class SimpleLazyObject(LazyObject):
+  TypeError: Error when calling the metaclass bases
+      'property' object is not callable
+- [Test Output after action #30]
+  Testing symmetrical ManyToManyField with related_name...
+
+  Test 1: Explicit symmetrical=True with related_name
+  ------------------------------------------------------------
+  Field: test.Person.friends
+  Symmetrical: True
+  Related name: friends_rel_+
+  Errors: [<Error: level=40, msg="Field defines a relation with model 'Person', which is either not installed, or is abstract.", hint=None, obj=<django.db.models.fields.related.ManyToManyField: friends>, id='fields.E300'>, <Error: level=40, msg="Field specifies a many-to-many relation through model 'test.Person_friends', which has not been installed.", hint=None, obj=<django.db.models.fields.related.ManyToManyField: friends>, id='fields.E331'>]
+
+  Test 2: Implicit symmetrical (self-referential) with related_name
+  ------------------------------------------------------------
+  Field: test.Employee.colleagues
+  Symmetrical: True
+  Related name: colleagues_rel_+
+  Errors: [<Error: level=40, msg="Field defines a relation with model 'Employee', which is either not installed, or is abstract.", hint=None, obj=<django.db.models.fields.related.ManyToManyField: colleagues>, id='fields.E300'>, <Error: level=40, msg="Field specifies a many-to-many relation through mod
+  [... truncated ...]
+- [Read Result after action #32]
+    1230→    def _check_ignored_options(self, **kwargs):
+    1231→        warnings = []
+    1232→
+    1233→        if self.has_null_arg:
+    1234→            warnings.append(
+    1235→                checks.Warning(
+    1236→                    'null has no effect on ManyToManyField.',
+    1237→                    obj=self,
+    1238→                    id='fields.W340',
+    1239→                )
+    1240→            )
+    1241→
+    1242→        if self._validators:
+    1243→            warnings.append(
+    1244→                checks.Warning(
+    1245→                    'ManyToManyField does not support validators.',
+    1246→                    obj=self,
+    1247→                    id='fields.W341',
+    1248→                )
+    1249→            )
+    1250→        if (self.remote_field.limit_choices_to and self.remote_field.through and
+    1251→                not self.remote_field.through._meta.auto_created):
+    1252→            warnings.append(
+    1253→                checks.Warning(
+    1254→                    'limit_choices_to has no effect on ManyToManyField '
+    1255→                    'with a through model.',
+    1256→                    obj=self,
+    1257→                    id='fields.W343',
+    1258→                )
+
+  [... truncated ...]
+- [Test Output after action #35]
+  Test 1: Explicit symmetrical=True with related_name
+  ------------------------------------------------------------
+  Field: test.Person.friends
+  Symmetrical: True
+  Related name: friends_rel_+
+  Errors: [<Error: level=40, msg="Field defines a relation with model 'Person', which is either not installed, or is abstract.", hint=None, obj=<django.db.models.fields.related.ManyToManyField: friends>, id='fields.E300'>, <Error: level=40, msg="Field specifies a many-to-many relation through model 'test.Person_friends', which has not been installed.", hint=None, obj=<django.db.models.fields.related.ManyToManyField: friends>, id='fields.E331'>, <Error: level=40, msg='related_name has no effect on ManyToManyField with symmetrical=True.', hint='Remove the related_name argument, or set symmetrical=False if a reverse relation is desired.', obj=<django.db.models.fields.related.ManyToManyField: friends>, id='fields.E344'>]
+- [Test Output after action #37]
+  Test 2: Implicit symmetrical (self-referential) with related_name
+  ------------------------------------------------------------
+  Field: test.Employee.colleagues
+  Symmetrical: True
+  Related name: colleagues_rel_+
+  Errors: [<Error: level=40, msg="Field defines a relation with model 'Employee', which is either not installed, or is abstract.", hint=None, obj=<django.db.models.fields.related.ManyToManyField: colleagues>, id='fields.E300'>, <Error: level=40, msg="Field specifies a many-to-many relation through model 'test.Employee_colleagues', which has not been installed.", hint=None, obj=<django.db.models.fields.related.ManyToManyField: colleagues>, id='fields.E331'>, <Error: level=40, msg='related_name has no effect on ManyToManyField with symmetrical=True.', hint='Remove the related_name argument, or set symmetrical=False if a reverse relation is desired.', obj=<django.db.models.fields.related.ManyToManyField: colleagues>, id='fields.E344'>]
+- [Test Output after action #39]
+  Test 3: Non-symmetrical (symmetrical=False) with related_name
+  ------------------------------------------------------------
+  Field: test.User.followers
+  Symmetrical: False
+  Related name: following
+  Errors: [<Error: level=40, msg="Field defines a relation with model 'User', which is either not installed, or is abstract.", hint=None, obj=<django.db.models.fields.related.ManyToManyField: followers>, id='fields.E300'>, <Error: level=40, msg="Field specifies a many-to-many relation through model 'test.User_followers', which has not been installed.", hint=None, obj=<django.db.models.fields.related.ManyToManyField: followers>, id='fields.E331'>]
+- [Test Output after action #41]
+  Test 4: Non-self-referential ManyToManyField with related_name
+  ------------------------------------------------------------
+  Field: test.Book.authors
+  Symmetrical: False
+  Related name: books
+  Errors: [<Error: level=40, msg="Field defines a relation with model 'Author', which is either not installed, or is abstract.", hint=None, obj=<django.db.models.fields.related.ManyToManyField: authors>, id='fields.E300'>, <Error: level=40, msg="Field specifies a many-to-many relation through model 'test.Book_authors', which has not been installed.", hint=None, obj=<django.db.models.fields.related.ManyToManyField: authors>, id='fields.E331'>]
+- [Test Output after action #44]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "test_edge_case.py", line 27, in <module>
+      django.setup()
+    File "./swebench_9_15/testbed/django/__init__.py", line 24, in setup
+      apps.populate(settings.INSTALLED_APPS)
+    File "./swebench_9_15/testbed/django/apps/registry.py", line 91, in populate
+      app_config = AppConfig.create(entry)
+    File "./swebench_9_15/testbed/django/apps/config.py", line 223, in create
+      import_module(entry)
+    File "/opt/anaconda3/lib/python3.8/importlib/__init__.py", line 127, in import_module
+      return _bootstrap._gcd_import(name[level:], package, level)
+    File "<frozen importlib._bootstrap>", line 1014, in _gcd_import
+    File "<frozen importlib._bootstrap>", line 991, in _find_and_load
+    File "<frozen importlib._bootstrap>", li
+  [... truncated ...]
+- [Test Output after action #47]
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Test: Symmetrical ManyToManyField with related_name ending with '+'
+  ------------------------------------------------------------
+  Field: test.Person.friends
+  Symmetrical: True
+  Related name: friends_rel_+
+  Has E344 error: False
+
+  SUCCESS: No E344 error (as expected)
+- [Test Output after action #49]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  rootdir: ./swebench_9_15/testbed
+  configfile: pyproject.toml
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 85 items
+
+  tests/invalid_models_tests/test_relative_fields.py::RelativeFieldTests::test_ambiguous_relationship_model_from ERROR [  1%]
+  tests/invalid_models_tests/test_relative_fields.py::RelativeFieldTests::test_ambiguous_relationship_model_to ERROR [  2%]
+  tests/invalid_models_tests/test_relative_fields.py::RelativeFieldTests::test_foreign_key_to_abstract_model ERROR [  3%]
+  tests/invalid_models_tests/test_relative_fields.py::RelativeFieldTests::test_foreign_key_to_isolate_apps_model ERROR [  4%]
+  tests/invalid_models_tests/test_relative_fields.py::RelativeFieldTests::test_foreign_key_to_missing_model ERROR [  5%]
+  tests/invalid_models_tests/test_relative_fields.py::RelativeFieldTests::test_foreign_key_to_non_unique_field ERROR [
+  [... truncated ...]
+- [Test Output after action #51]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Importing application invalid_models_tests
+  Found 85 test(s).
+  Skipping setup of unused database(s): default, other.
+  System check identified no issues (0 silenced).
+  test_clash_between_accessors (invalid_models_tests.test_relative_fields.AccessorClashTests) ... ok
+  test_fk_to_fk (invalid_models_tests.test_relative_fields.AccessorClashTests) ... ok
+  test_fk_to_integer (invalid_models_tests.test_relative_fields.AccessorClashTests) ... ok
+  test_fk_to_m2m (invalid_models_tests.test_relative_fields.AccessorClashTests) ... ok
+  test_m2m_to_fk (invalid_models_tests.test_relative_fields.AccessorClashTests) ... ok
+  test_m2m_to_integer (invalid_models_tests.test_relative_fields.AccessorClashTests) ... ok
+  test_m2m_to_m2
+  [... truncated ...]
+- [Read Result after action #53]
+      90→
+      91→        self.assertEqual(ModelM2M.check(), [])
+      92→
+      93→    def test_many_to_many_with_useless_options(self):
+      94→        class Model(models.Model):
+      95→            name = models.CharField(max_length=20)
+      96→
+      97→        class ModelM2M(models.Model):
+      98→            m2m = models.ManyToManyField(
+      99→                Model,
+     100→                null=True,
+     101→                validators=[lambda x: x],
+     102→                limit_choices_to={'name': 'test_name'},
+     103→                through='ThroughModel',
+     104→                through_fields=('modelm2m', 'model'),
+     105→            )
+     106→
+     107→        class ThroughModel(models.Model):
+     108→            model = models.ForeignKey('Model', models.CASCADE)
+     109→            modelm2m = models.ForeignKey('ModelM2M', models.CASCADE)
+     110→
+     111→        field = ModelM2M._meta.get_field('m2m')
+     112→        self.assertEqual(ModelM2M.check(), [
+     113→            DjangoWarning(
+     114→                'null has no effect on ManyToManyField.',
+     115→                obj=field,
+     116→                id='fields.W340',
+     117→            ),
+     118→            DjangoWarning(
+     119→
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/models/fields/related.py
+  Tool: Edit action #34
+  old_text_sha256: 634908a40c16ea8e67beb7e8f74a1f5c07cbf57e3b2edcf693e5606be5fb9096
+  new_text_sha256: e190c78df1f12bd5c14e8cfadd08111662dfe089a3ddd29218438cfdce1341f0
+- test_edge_case.py
+  Tool: Write action #43
+  new_text_sha256: e922a882b9f4dc2907c4ae61a1fa95a460f3e80df784e367d82dc2e742900741
+- test_edge_case.py
+  Tool: Edit action #46
+  old_text_sha256: 4feee0f963b77c2ef2ee47900d458f9a90f750e586f4156c4e9d8c7cd9b00bee
+  new_text_sha256: efd60e36023c954ceb0c376eaa3490a97575320a04e960883fac1c6c9f4731ac
+- tests/invalid_models_tests/test_relative_fields.py
+  Tool: Edit action #55
+  old_text_sha256: 7f47dc41b4eed37a0c726e94b0b46294b6c06a4546eb4cac8a3841b061b0dfcd
+  new_text_sha256: b1ef2d5dce71be8c215bc583b92d4318a3f24846df2b211bbd6825b9e278282c
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

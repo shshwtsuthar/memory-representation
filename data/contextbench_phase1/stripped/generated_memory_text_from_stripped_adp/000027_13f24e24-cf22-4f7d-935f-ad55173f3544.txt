@@ -1,0 +1,587 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 13f24e24-cf22-4f7d-935f-ad55173f3544
+- repo: sympy/sympy
+- instance_id: sympy__sympy-11897
+- base_commit: e2918c1205c47345eb73c9be68b14c0f15fdeb17
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+LaTeX printer inconsistent with pretty printer
+The LaTeX printer should always give the same output as the pretty printer, unless better output is possible from LaTeX. In some cases it is inconsistent. For instance:
+
+``` py
+In [9]: var('x', positive=True)
+Out[9]: x
+
+In [10]: latex(exp(-x)*log(x))
+Out[10]: '\\frac{1}{e^{x}} \\log{\\left (x \\right )}'
+
+In [11]: pprint(exp(-x)*log(x))
+ -x
+ℯ  ⋅log(x)
+```
+
+(I also don't think the assumptions should affect printing).
+
+``` py
+In [14]: var('x y')
+Out[14]: (x, y)
+
+In [15]: latex(1/(x + y)/2)
+Out[15]: '\\frac{1}{2 x + 2 y}'
+
+In [16]: pprint(1/(x + y)/2)
+    1
+─────────
+2⋅(x + y)
+```
+
+FILES INSPECTED
+---------------
+- sympy/printing/latex.py [Read: 4, Grep: 3]
+- sympy/printing/pretty/pretty.py [Grep: 1, Read: 1]
+- sympy/printing/tests/test_latex.py [Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [7] Glob glob='**/latex.py'
+- [11] Grep pattern='def _print_Mul' path='sympy/printing/latex.py'
+- [12] Grep pattern='def _print_Mul' path='sympy/printing/latex.py'
+- [16] Glob glob='**/pretty/pretty.py'
+- [18] Grep pattern='def _print_Mul' path='sympy/printing/pretty/pretty.py'
+- [30] Grep pattern='def _print_exp' path='sympy/printing/latex.py'
+- [39] Glob glob='**/test_latex.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction]
+- [other/reproduction] cd testbed && python3 << 'EOF'
+from sympy import var, exp, log, latex
+from sympy.printing.pretty import pretty
+
+# Test case 1
+var('x', positive=True)
+expr1 = exp(-x)*log(x)
+print("Test 1: exp(-x)*log(x)")
+print("LaTeX:", latex(expr1))
+print("Pretty:", pretty(expr1))
+print()
+
+# Test case 2
+var('x y')
+expr2 = 1/(x + y)/2
+print("Test 2: 1/(x + y)/2")
+print("LaTeX:", latex(expr2))
+print("Pretty:", pretty(expr2))
+EOF
+
+- [other/reproduction] cd testbed && python3 << 'EOF'
+from sympy import var, exp, log, latex
+from sympy.printing.pretty import pretty, pprint
+
+# Test case 1 with positive=True
+print("Test 1: exp(-x)*log(x) with x positive")
+x = var('x', positive=True)
+expr1 = exp(-x)*log(x)
+print("LaTeX output:", latex(expr1))
+print("Expected LaTeX issue: \\frac{1}{e^{x}} \\log{\\left (x \\right )}")
+print("Pretty output:")
+pprint(expr1)
+print()
+
+# Test case 2
+print("Test 2: 1/(x + y)/2")
+x, y = var('x y')
+expr2 = 1/(x + y)/2
+print("L
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+from sympy import var, exp, log, latex
+from sympy.printing.pretty import pretty, pprint
+
+# Test case 1 with positive=True
+print("Test 1: exp(-x)*log(x) with x positive")
+x = var('x', positive=True)
+expr1 = exp(-x)*log(x)
+print("LaTeX output:", latex(expr1))
+print("Expected LaTeX issue: \\frac{1}{e^{x}} \\log{\\left (x \\right )}")
+print("Pretty output:")
+pprint(expr1)
+print()
+
+# Test case 2
+print("Test 2: 1/(x + y)/2")
+x, y = var('x y')
+expr2 = 1/(x + y)/2
+print("LaTeX output:",
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+from sympy import var, exp, log, Mul, Pow
+from sympy.simplify import fraction
+
+# Test case 1
+x = var('x', positive=True)
+expr1 = exp(-x)*log(x)
+print("Test 1: exp(-x)*log(x)")
+print("Expression:", expr1)
+print("Fraction result:", fraction(expr1, exact=True))
+print()
+
+# Test without positive assumption
+x = var('x')
+expr1b = exp(-x)*log(x)
+print("Test 1b: exp(-x)*log(x) without positive")
+print("Expression:", expr1b)
+print("Fraction result:", fraction(expr1b, exact=True))
+print()
+
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+from sympy import var, Mul, Pow, Rational, S
+
+x, y = var('x y')
+expr2 = 1/(x + y)/2
+
+print("Expression:", expr2)
+print("Type:", type(expr2))
+print("Args:", expr2.args)
+print()
+
+# Let's trace through the pretty printer logic
+a = []  # numerator
+b = []  # denominator
+
+for item in expr2.args:
+    print(f"Processing item: {item}")
+    print(f"  is_commutative: {item.is_commutative}")
+    print(f"  is_Pow: {item.is_Pow}")
+    if item.is_Pow:
+        print(f"  exp.is_Rational: {item.e
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+from sympy import var, exp, log, Mul, Pow, Rational, S
+
+x = var('x', positive=True)
+expr1 = exp(-x)*log(x)
+
+print("Expression:", expr1)
+print("Type:", type(expr1))
+print("Args:", expr1.args)
+print()
+
+# Let's trace through the pretty printer logic
+a = []  # numerator
+b = []  # denominator
+
+for item in expr1.args:
+    print(f"Processing item: {item}")
+    print(f"  is_commutative: {item.is_commutative}")
+    print(f"  is_Pow: {item.is_Pow}")
+    if hasattr(item, 'exp'):
+        pr
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+from sympy import var, exp, log
+from sympy.simplify import fraction
+
+# With positive assumption
+x = var('x', positive=True)
+expr1 = exp(-x)*log(x)
+print("With positive assumption:")
+print("  Expression:", expr1)
+print("  fraction():", fraction(expr1, exact=True))
+
+# Let's check if exp(-x) gets rewritten
+exp_neg_x = exp(-x)
+print("  exp(-x):", exp_neg_x)
+print("  exp(-x) fraction:", fraction(exp_neg_x, exact=True))
+print()
+
+# Without positive assumption
+x = var('x')
+expr2 = exp(-
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+from sympy import var, exp, log, latex
+from sympy.printing.pretty import pretty
+
+# Test case 1 with positive=True
+print("Test 1: exp(-x)*log(x) with x positive")
+x = var('x', positive=True)
+expr1 = exp(-x)*log(x)
+print("LaTeX output:", latex(expr1))
+print("Pretty output:", pretty(expr1))
+print()
+
+# Test case 2
+print("Test 2: 1/(x + y)/2")
+x, y = var('x y')
+e
+  [... truncated ...]
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- E       AssertionError: assert '\\frac{1}{4}...2 \\right )}}' == '\\frac{1}{4 ... \\right )}}}'
+- E         - \frac{1}{4 \cdot 4^{\log{\left (2 \right )}}}
+- E         ?           ^^^^^^                            -
+- E         + \frac{1}{4} 4^{- \log{\left (2 \right )}}
+- E         ?           ^    ++
+- FAILED sympy/printing/tests/test_latex.py::test_latex_issue_4381 - AssertionE...
+- Traceback (most recent call last):
+- FAILED sympy/printing/tests/test_latex.py::test_issue_8470 - ValueError: Name...
+- E           ValueError: Name node can't be used with 'False' constant
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #7]
+  ./swebench_9_15/testbed/sympy/printing/latex.py
+- [Read Result after action #9]
+       1→"""
+       2→A Printer which converts an expression into its LaTeX equivalent.
+       3→"""
+       4→
+       5→from __future__ import print_function, division
+       6→
+       7→import itertools
+       8→
+       9→from sympy.core import S, Add, Symbol, Mod
+      10→from sympy.core.function import _coeff_isneg
+      11→from sympy.core.sympify import SympifyError
+      12→from sympy.core.alphabets import greeks
+      13→from sympy.core.operations import AssocOp
+      14→from sympy.core.containers import Tuple
+      15→from sympy.logic.boolalg import true
+      16→
+      17→## sympy.printing imports
+      18→from sympy.printing.precedence import precedence_traditional
+      19→from .printer import Printer
+      20→from .conventions import split_super_sub, requires_partial
+      21→from .precedence import precedence, PRECEDENCE
+      22→
+      23→import mpmath.libmp as mlib
+      24→from mpmath.libmp import prec_to_dps
+      25→
+      26→from sympy.core.compatibility import default_sort_key, range
+      27→from sympy.utilities.iterables import has_variety
+      28→
+      29→import re
+      30→
+      31→# Hand-picked functions which can be used directly in both LaTeX and MathJax
+      32→# Complete list at http://www.mathjax.org/docs/1.1/te
+  [... truncated ...]
+- [Grep Result after action #12]
+  348:    def _print_Mul(self, expr):
+- [Read Result after action #14]
+     348→    def _print_Mul(self, expr):
+     349→        include_parens = False
+     350→        if _coeff_isneg(expr):
+     351→            expr = -expr
+     352→            tex = "- "
+     353→            if expr.is_Add:
+     354→                tex += "("
+     355→                include_parens = True
+     356→        else:
+     357→            tex = ""
+     358→
+     359→        from sympy.simplify import fraction
+     360→        numer, denom = fraction(expr, exact=True)
+     361→        separator = self._settings['mul_symbol_latex']
+     362→        numbersep = self._settings['mul_symbol_latex_numbers']
+     363→
+     364→        def convert(expr):
+     365→            if not expr.is_Mul:
+     366→                return str(self._print(expr))
+     367→            else:
+     368→                _tex = last_term_tex = ""
+     369→
+     370→                if self.order not in ('old', 'none'):
+     371→                    args = expr.as_ordered_factors()
+     372→                else:
+     373→                    args = expr.args
+     374→
+     375→                for i, term in enumerate(args):
+     376→                    term_tex = self._print(term)
+     377→
+     378→                    if self._needs_mul_brackets(term, first=(i == 0)
+  [... truncated ...]
+- [Glob Result after action #16]
+  ./swebench_9_15/testbed/sympy/printing/pretty/pretty.py
+- [Grep Result after action #18]
+  1393:    def _print_Mul(self, product):
+- [Read Result after action #20]
+    1393→    def _print_Mul(self, product):
+    1394→        a = []  # items in the numerator
+    1395→        b = []  # items that are in the denominator (if any)
+    1396→
+    1397→        if self.order not in ('old', 'none'):
+    1398→            args = product.as_ordered_factors()
+    1399→        else:
+    1400→            args = product.args
+    1401→
+    1402→        # Gather terms for numerator/denominator
+    1403→        for item in args:
+    1404→            if item.is_commutative and item.is_Pow and item.exp.is_Rational and item.exp.is_negative:
+    1405→                if item.exp != -1:
+    1406→                    b.append(Pow(item.base, -item.exp, evaluate=False))
+    1407→                else:
+    1408→                    b.append(Pow(item.base, -item.exp))
+    1409→            elif item.is_Rational and item is not S.Infinity:
+    1410→                if item.p != 1:
+    1411→                    a.append( Rational(item.p) )
+    1412→                if item.q != 1:
+    1413→                    b.append( Rational(item.q) )
+    1414→            else:
+    1415→                a.append(item)
+    1416→
+    1417→        from sympy import Integral, Piecewise, Product, Sum
+    1418→
+    1419→        # Convert to pretty forms.
+  [... truncated ...]
+- [Grep Result after action #30]
+  954:    def _print_expint(self, expr, exp=None):
+- [Read Result after action #32]
+     100→    'bold': lambda s: r'\boldsymbol{'+s+r'}',
+     101→    'bm': lambda s: r'\boldsymbol{'+s+r'}',
+     102→    'cal': lambda s: r'\mathcal{'+s+r'}',
+     103→    'scr': lambda s: r'\mathscr{'+s+r'}',
+     104→    'frak': lambda s: r'\mathfrak{'+s+r'}',
+     105→    # Brackets
+     106→    'norm': lambda s: r'\left\|{'+s+r'}\right\|',
+     107→    'avg': lambda s: r'\left\langle{'+s+r'}\right\rangle',
+     108→    'abs': lambda s: r'\left|{'+s+r'}\right|',
+     109→    'mag': lambda s: r'\left|{'+s+r'}\right|',
+     110→}
+     111→
+     112→greek_letters_set = frozenset(greeks)
+     113→
+     114→_between_two_numbers_p = (
+     115→    re.compile(r'[0-9][} ]*$'),  # search
+     116→    re.compile(r'[{ ]*[-+0-9]'),  # match
+     117→)
+     118→
+     119→
+     120→class LatexPrinter(Printer):
+     121→    printmethod = "_latex"
+     122→
+     123→    _default_settings = {
+     124→        "order": None,
+     125→        "mode": "plain",
+     126→        "itex": False,
+     127→        "fold_frac_powers": False,
+     128→        "fold_func_brackets": False,
+     129→        "fold_short_frac": None,
+     130→        "long_frac_ratio": 2,
+     131→        "mul_symbol": None,
+     132→        "inv_trig_style": "abbreviated",
+     133→        "ma
+  [... truncated ...]
+- [Read Result after action #34]
+     348→    def _print_Mul(self, expr):
+     349→        include_parens = False
+     350→        if _coeff_isneg(expr):
+     351→            expr = -expr
+     352→            tex = "- "
+     353→            if expr.is_Add:
+     354→                tex += "("
+     355→                include_parens = True
+     356→        else:
+     357→            tex = ""
+     358→
+     359→        from sympy.simplify import fraction
+     360→        numer, denom = fraction(expr, exact=True)
+     361→        separator = self._settings['mul_symbol_latex']
+     362→        numbersep = self._settings['mul_symbol_latex_numbers']
+     363→
+     364→        def convert(expr):
+     365→            if not expr.is_Mul:
+     366→                return str(self._print(expr))
+     367→            else:
+     368→                _tex = last_term_tex = ""
+     369→
+     370→                if self.order not in ('old', 'none'):
+     371→                    args = expr.as_ordered_factors()
+     372→                else:
+     373→                    args = expr.args
+     374→
+     375→                for i, term in enumerate(args):
+     376→                    term_tex = self._print(term)
+     377→
+     378→                    if self._needs_mul_brackets(term, first=(i == 0)
+  [... truncated ...]
+- [Glob Result after action #39]
+  ./swebench_9_15/testbed/sympy/printing/tests/test_latex.py
+- [Test Output after action #41]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 107 items
+
+  sympy/printing/tests/test_latex.py::test_printmethod PASSED
+  sympy/printing/tests/test_latex.py::test_latex_basic PASSED
+  sympy/printing/tests/test_latex.py::test_latex_builtins PASSED
+  sympy/printing/tests/test_latex.py::test_latex_SingularityFunction PASSED
+  sympy/printing/tests/test_latex.py::test_latex_cycle PASSED
+  sympy/printing/tests/test_latex.py::test_latex_permutation PASSED
+  sympy/printing/tests/test_latex.py::test_latex_Float PASSED
+  sympy/printing/tests/test_latex.py::test_latex_symbols PASSED
+  sympy/printing/tests/test_latex.py::test_latex_symbols_failing XFAIL
+  sympy/printing/tests/test_latex.py::test_latex_functions PASSED
+  sympy/printing/tests/test_latex.py::test_hyper_pr
+  [... truncated ...]
+- [Read Result after action #56]
+     955→def test_latex_issue_4381():
+     956→    y = 4*4**log(2)
+     957→    assert latex(y) == r'4 \cdot 4^{\log{\left (2 \right )}}'
+     958→    assert latex(1/y) == r'\frac{1}{4 \cdot 4^{\log{\left (2 \right )}}}'
+     959→
+     960→
+     961→def test_latex_issue_4576():
+     962→    assert latex(Symbol("beta_13_2")) == r"\beta_{13 2}"
+     963→    assert latex(Symbol("beta_132_20")) == r"\beta_{132 20}"
+     964→    assert latex(Symbol("beta_13")) == r"\beta_{13}"
+
+- [Read Result after action #60]
+     955→def test_latex_issue_4381():
+     956→    y = 4*4**log(2)
+     957→    assert latex(y) == r'4 \cdot 4^{\log{\left (2 \right )}}'
+     958→    assert latex(1/y) == r'\frac{1}{4 \cdot 4^{\log{\left (2 \right )}}}'
+     959→
+
+- [Test Output after action #63]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 1 item
+
+  sympy/printing/tests/test_latex.py::test_latex_issue_4381 PASSED
+
+  =============================== warnings summary ===============================
+  sympy/core/basic.py:3
+    ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+      from collections import Mapping
+
+  sympy/plotting/plot.py:28
+    ./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+      from collections impor
+  [... truncated ...]
+- [Test Output after action #65]
+      from collections import Callable
+
+  sympy/utilities/pytest.py:154
+    ./swebench_9_15/testbed/sympy/utilities/pytest.py:154: PytestUnknownMarkWarning: Unknown pytest.mark.slow - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+      slow = py.test.mark.slow
+
+  sympy/physics/quantum/matrixutils.py:46
+    ./swebench_9_15/testbed/sympy/physics/quantum/matrixutils.py:46: DeprecationWarning: Please use `spmatrix` from the `scipy.sparse` namespace, the `scipy.sparse.base` namespace is deprecated.
+      scipy_sparse_matrix = sparse.base.spmatrix
+
+  sympy/printing/tests/test_latex.py::test_latex_indexed
+    ./swebench_9_15/testbed/sympy/tensor/indexed.py:155: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+      if isinstance(base, (NDimArray, collections.Iterable, Tuple, MatrixBase)) and all([i.is_number for i in args]):
+
+  sympy/printing/tests/test_latex.py::test_latex_RandomDomain
+    ./swebench_9_15/testbed/sympy/stats/rv.py:470: DeprecationWarning: invalid escape sequence \/
+      """ Conditional Rand
+  [... truncated ...]
+- [Test Output after action #67]
+  sympy/printing/tests/test_latex.py::test_issue_8470 FAILED
+
+  =================================== FAILURES ===================================
+  _______________________________ test_issue_8470 ________________________________
+
+      def test_issue_8470():
+          from sympy.parsing.sympy_parser import parse_expr
+  >       e = parse_expr("-B*A", evaluate=False)
+
+  sympy/printing/tests/test_latex.py:1564:
+  _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+  s = '-B*A', local_dict = {}
+  transformations = (<function lambda_notation at 0x7fc3409fd0d0>, <function auto_symbol at 0x7fc3409fd040>, <function auto_number at 0x7fc3409fd280>, <function factorial_notation at 0x7fc3409fd160>)
+  global_dict = {'Abs': Abs, 'AccumBounds': <class 'sympy.calculus.util.AccumulationBounds'>, 'Add': <class 'sympy.core.add.Add'>, 'Adjoint': <class 'sympy.matrices.expressions.adjoint.Adjoint'>, ...}
+  evaluate = False
+
+      def parse_expr(s, local_dict=None, transformations=standard_transformations,
+                     global_dict=None, evaluate=True):
+          """Converts the string ``s`` to a SymPy expression, in ``local_dict``
+
+          Parameters
+          ==========
+
+          s : str
+
+  [... truncated ...]
+- [Test Output after action #71]
+  sympy/printing/tests/test_latex.py::test_issue_8470 FAILED
+
+  =================================== FAILURES ===================================
+  _______________________________ test_issue_8470 ________________________________
+
+      def test_issue_8470():
+  --
+  FAILED sympy/printing/tests/test_latex.py::test_issue_8470 - ValueError: Name...
+  !!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ======================== 1 failed, 17 warnings in 1.15s ========================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+- [Test Output after action #75]
+  sympy/physics/quantum/matrixutils.py:46
+    ./swebench_9_15/testbed/sympy/physics/quantum/matrixutils.py:46: DeprecationWarning: Please use `spmatrix` from the `scipy.sparse` namespace, the `scipy.sparse.base` namespace is deprecated.
+      scipy_sparse_matrix = sparse.base.spmatrix
+
+  sympy/printing/tests/test_latex.py::test_latex_indexed
+    ./swebench_9_15/testbed/sympy/tensor/indexed.py:155: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+      if isinstance(base, (NDimArray, collections.Iterable, Tuple, MatrixBase)) and all([i.is_number for i in args]):
+
+  -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+  ========== 104 passed, 1 deselected, 2 xfailed, 18 warnings in 1.53s ===========
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has n
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/printing/latex.py
+  Tool: Edit action #36
+  old_text_sha256: 51118e222fcfd86def6f5745c6693c26b2204c2ea9a3f22fe4096b7c136963f2
+  new_text_sha256: 8e0dcefa7464f28e76955a9be1cb497612fc48bbc17746016a7d1b805cfc506f
+- sympy/printing/tests/test_latex.py
+  Tool: Edit action #62
+  old_text_sha256: 8f7d8484e8cd1a7db7abf1ef885aaa5f3da507a09f7ee90c4574c43d733b7d7f
+  new_text_sha256: d7c75cd8e47bde468c77fdd732410eb124dbe360c69ce3460be2547257997be5
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

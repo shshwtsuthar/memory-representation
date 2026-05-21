@@ -1,0 +1,1009 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: dbc3df6d-3049-44aa-a039-0c1e9e6f0822
+- repo: django/django
+- instance_id: django__django-14667
+- base_commit: 6a970a8b4600eb91be25f38caed0a52269d6303d
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-14667
+base_commit: 6a970a8b4600eb91be25f38caed0a52269d6303d
+problem_statement:
+QuerySet.defer() doesn't clear deferred field when chaining with only().
+Description
+
+Considering a simple Company model with four fields: id, name, trade_number and country. If we evaluate a queryset containing a .defer() following a .only(), the generated sql query selects unexpected fields. For example:
+Company.objects.only("name").defer("name")
+loads all the fields with the following query:
+SELECT "company"."id", "company"."name", "company"."trade_number", "company"."country" FROM "company"
+and
+Company.objects.only("name").defer("name").defer("country")
+also loads all the fields with the same query:
+SELECT "company"."id", "company"."name", "company"."trade_number", "company"."country" FROM "company"
+In those two cases, i would expect the sql query to be:
+SELECT "company"."id" FROM "company"
+In the following example, we get the expected behavior:
+Company.objects.only("name", "country").defer("name")
+only loads "id" and "country" fields with the following query:
+SELECT "company"."id", "company"."country" FROM "company"
+sha256: 7cb929547b31dc908c772fa4048f941ecab047757be242761750e7d48acf3141
+truncated: false
+
+[ADP ACTION current=1 original=15: api_action Glob]
+path: testbed
+payload:
+{
+  "path": "testbed",
+  "pattern": "**/queryset.py"
+}
+sha256: a98bf45917088c4ae04896dea1fd7cc89db9863f834b72c287722f96a23f87d3
+truncated: false
+
+[ADP ACTION current=2 original=17: code_action bash]
+payload:
+find testbed -name "*query*.py" -type f | grep -E "(models|db)" | head -20
+sha256: 608ce8ac15bf25646184a54ef9f890fc78bfcc3d4066bccaffe5d7a0b78c089d
+truncated: false
+
+[ADP OBSERVATION current=3 original=18 source=environment]
+name: Bash:toolu_01UnvzsJFht3YYxWwavpo7pP
+excerpt:
+testbed/django/db/models/query.py
+testbed/django/db/models/query_utils.py
+testbed/django/db/models/sql/query.py
+sha256: 75cb2d653cb37f49cbe1a93110d8ce78017b2ebddcf03fbc3e4a3a8658dbd478
+truncated: false
+
+[ADP ACTION current=4 original=19: api_action Grep]
+path: django/db/models/query.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/query.py",
+  "pattern": "def (defer|only)\\("
+}
+sha256: 2e7de90777a13a7da3d69dc9a7e466691c9fbe7795716939cc4e199077b98759
+truncated: false
+
+[ADP OBSERVATION current=5 original=20 source=environment]
+name: Grep:toolu_015VA7ZfJpcEQiwqq78oHesX
+excerpt:
+1210:    def defer(self, *fields):
+1227:    def only(self, *fields):
+sha256: d739039f052f37dbcc022b450bcf6a1de4529e764e10d8bb2c6a1b45fc228086
+truncated: false
+
+[ADP ACTION current=6 original=21: api_action Read]
+path: django/db/models/query.py
+payload:
+{
+  "file_path": "testbed/django/db/models/query.py",
+  "limit": 50,
+  "offset": 1210
+}
+sha256: 0b5cf850423603e6864aac790e23edaa593614f77e2b52830d5d96ec132fd6b8
+truncated: false
+
+[ADP OBSERVATION current=7 original=22 source=environment]
+name: Read:toolu_01CRxicEX3Dsw4DDjioyNzpS
+excerpt:
+  1210→    def defer(self, *fields):
+  1211→        """
+  1212→        Defer the loading of data for certain fields until they are accessed.
+  1213→        Add the set of deferred fields to any existing set of deferred fields.
+  1214→        The only exception to this is if None is passed in as the only
+  1215→        parameter, in which case removal all deferrals.
+  1216→        """
+  1217→        self._not_support_combined_queries('defer')
+  1218→        if self._fields is not None:
+  1219→            raise TypeError("Cannot call defer() after .values() or .values_list()")
+  1220→        clone = self._chain()
+  1221→        if fields == (None,):
+  1222→            clone.query.clear_deferred_loading()
+  1223→        else:
+  1224→            clone.query.add_deferred_loading(fields)
+  1225→        return clone
+  1226→
+  1227→    def only(self, *fields):
+  1228→        """
+  1229→        Essentially, the opposite of defer(). Only the fields passed into this
+  1230→        method and that are not already specified as deferred are loaded
+  1231→        immediately when the queryset is evaluated.
+  1232→        """
+  1233→        self._not_support_combined_queries('only')
+  1234→        if self._fields is not None:
+  1235→            raise TypeError("Cannot call only() after .values() or .values_list()")
+  1236→        if fields == (None,):
+  1237→            # Can only pass None to defer(), not only(), as the rest option.
+  1238→            # That won't stop people trying to do this, so let's be explicit.
+  1239→            raise TypeError("Cannot pass None as an argument to only().")
+  1240→        for field in fields:
+  1241→            field = field.split(LOOKUP_SEP, 1)[0]
+  1242→            if field in self.query._filtered_relations:
+  1243→                raise ValueError('only() is not supported with FilteredRelation.')
+  1244→        clone = self._chain()
+  1245→        clone.query.add_immediate_loading(fields)
+  1246→        return clone
+  1247→
+  1248→    def u
+sha256: 76cf764bf3925aebd125aeee25705a456f3bfd377babde585f3460eb66420cfe
+truncated: true
+
+[ADP ACTION current=8 original=23: api_action Grep]
+path: django/db/models/sql/query.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql/query.py",
+  "pattern": "def (add_deferred_loading|add_immediate_loading|clear_deferred_loading)\\("
+}
+sha256: 4bb899d3e5f4dfd4fc56309bb3c3c79f1cc4ddfe42d0c60dd239615e33ecd1aa
+truncated: false
+
+[ADP OBSERVATION current=9 original=24 source=environment]
+name: Grep:toolu_019njRhnE7w2dFGaSmmv8ECL
+excerpt:
+2067:    def clear_deferred_loading(self):
+2071:    def add_deferred_loading(self, field_names):
+2091:    def add_immediate_loading(self, field_names):
+sha256: 73022c2d85384ab6a085454ebeff541bc8f8b5d38bcfb6bbf4be6a5251102a37
+truncated: false
+
+[ADP ACTION current=10 original=25: api_action Read]
+path: django/db/models/sql/query.py
+payload:
+{
+  "file_path": "testbed/django/db/models/sql/query.py",
+  "limit": 50,
+  "offset": 2067
+}
+sha256: 4f05c50914a45f2e3ea2453623eb56bb53bdf5e64b2576c8ebcb17eaad02cc5d
+truncated: false
+
+[ADP OBSERVATION current=11 original=26 source=environment]
+name: Read:toolu_01KvmbwEX3m7jcgD9mPN5Vcs
+excerpt:
+  2067→    def clear_deferred_loading(self):
+  2068→        """Remove any fields from the deferred loading set."""
+  2069→        self.deferred_loading = (frozenset(), True)
+  2070→
+  2071→    def add_deferred_loading(self, field_names):
+  2072→        """
+  2073→        Add the given list of model field names to the set of fields to
+  2074→        exclude from loading from the database when automatic column selection
+  2075→        is done. Add the new field names to any existing field names that
+  2076→        are deferred (or removed from any existing field names that are marked
+  2077→        as the only ones for immediate loading).
+  2078→        """
+  2079→        # Fields on related models are stored in the literal double-underscore
+  2080→        # format, so that we can use a set datastructure. We do the foo__bar
+  2081→        # splitting and handling when computing the SQL column names (as part of
+  2082→        # get_columns()).
+  2083→        existing, defer = self.deferred_loading
+  2084→        if defer:
+  2085→            # Add to existing deferred names.
+  2086→            self.deferred_loading = existing.union(field_names), True
+  2087→        else:
+  2088→            # Remove names from the set of any existing "immediate load" names.
+  2089→            self.deferred_loading = existing.difference(field_names), False
+  2090→
+  2091→    def add_immediate_loading(self, field_names):
+  2092→        """
+  2093→        Add the given list of model field names to the set of fields to
+  2094→        retrieve when the SQL is executed ("immediate loading" fields). The
+  2095→        field names replace any existing immediate loading field names. If
+  2096→        there are field names already specified for deferred loading, remove
+  2097→        those names from the new field_names before storing the new names
+  2098→        for immediate loading. (That is, immediate loading overrides any
+  2099→        existing immediate values, but respects existing deferra
+sha256: 3717f55762068dbed0f9a25e56b3ca2cedf3a1baf593eef0405bccb58502ed43
+truncated: true
+
+[ADP ACTION current=12 original=27: api_action Grep]
+path: django/db/models/sql/query.py
+payload:
+{
+  "-C": 2,
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql/query.py",
+  "pattern": "self\\.deferred_loading"
+}
+sha256: 78de769e770ce908316c7d0490072e2b5a7b9b08fa759f640e1c2cdcde2de174
+truncated: false
+
+[ADP OBSERVATION current=13 original=28 source=environment]
+name: Grep:toolu_01JL58pfMXYQ2EnJnXhcceU9
+excerpt:
+225-        # are the fields to defer, or False if these are the only fields to
+226-        # load.
+227:        self.deferred_loading = (frozenset(), True)
+228-
+229-        self._filtered_relations = {}
+--
+666-    def deferred_to_data(self, target, callback):
+667-        """
+668:        Convert the self.deferred_loading data structure to an alternate data
+669-        structure, describing the field that *will* be loaded. This is used to
+670-        compute the columns to select from the database and also by the
+--
+678-        "target", and the model and list of fields being added for that model.
+679-        """
+680:        field_names, defer = self.deferred_loading
+681-        if not field_names:
+682-            return
+--
+2067-    def clear_deferred_loading(self):
+2068-        """Remove any fields from the deferred loading set."""
+2069:        self.deferred_loading = (frozenset(), True)
+2070-
+2071-    def add_deferred_loading(self, field_names):
+--
+2081-        # splitting and handling when computing the SQL column names (as part of
+2082-        # get_columns()).
+2083:        existing, defer = self.deferred_loading
+2084-        if defer:
+2085-            # Add to existing deferred names.
+2086:            self.deferred_loading = existing.union(field_names), True
+2087-        else:
+2088-            # Remove names from the set of any existing "immediate load" names.
+2089:            self.deferred_loading = existing.difference(field_names), False
+2090-
+2091-    def add_immediate_loading(self, field_names):
+--
+2099-        existing immediate values, but respects existing deferrals.)
+2100-        """
+2101:        existing, defer = self.deferred_loading
+2102-        field_names = set(field_names)
+2103-        if 'pk' in field_names:
+--
+2108-            # Remove any existing deferred names from the current set before
+2109-            # setting the new names.
+2110:            self.deferred_loading = field_names.difference(existing), False
+2111-        else:
+2112-
+sha256: 8007390fc57bcc910de6896cce790827b73465ecd96c2c7cb7efe26ef11e6e5f
+truncated: true
+
+[ADP ACTION current=14 original=29: api_action Read]
+path: django/db/models/sql/query.py
+payload:
+{
+  "file_path": "testbed/django/db/models/sql/query.py",
+  "limit": 30,
+  "offset": 666
+}
+sha256: 41ec37762fbd879cb3fc30c14562092310488120d3f9b5ed166f54c8aa4547e4
+truncated: false
+
+[ADP OBSERVATION current=15 original=30 source=environment]
+name: Read:toolu_01LjEcMixHwAfUJraRDVNkPL
+excerpt:
+   666→    def deferred_to_data(self, target, callback):
+   667→        """
+   668→        Convert the self.deferred_loading data structure to an alternate data
+   669→        structure, describing the field that *will* be loaded. This is used to
+   670→        compute the columns to select from the database and also by the
+   671→        QuerySet class to work out which fields are being initialized on each
+   672→        model. Models that have all their fields included aren't mentioned in
+   673→        the result, only those that have field restrictions in place.
+   674→
+   675→        The "target" parameter is the instance that is populated (in place).
+   676→        The "callback" is a function that is called whenever a (model, field)
+   677→        pair need to be added to "target". It accepts three parameters:
+   678→        "target", and the model and list of fields being added for that model.
+   679→        """
+   680→        field_names, defer = self.deferred_loading
+   681→        if not field_names:
+   682→            return
+   683→        orig_opts = self.get_meta()
+   684→        seen = {}
+   685→        must_include = {orig_opts.concrete_model: {orig_opts.pk}}
+   686→        for field_name in field_names:
+   687→            parts = field_name.split(LOOKUP_SEP)
+   688→            cur_model = self.model._meta.concrete_model
+   689→            opts = orig_opts
+   690→            for name in parts[:-1]:
+   691→                old_model = cur_model
+   692→                if name in self._filtered_relations:
+   693→                    name = self._filtered_relations[name].relation_name
+   694→                source = opts.get_field(name)
+   695→                if is_reverse_o2o(source):
+
+sha256: f7cb4a9a563ebcca55f21e7f4cd9a8e9acb4b7189674ae0d925632d0d5015898
+truncated: false
+
+[ADP ACTION current=16 original=31: code_action bash]
+payload:
+find testbed/tests -name "*.py" -type f -exec grep -l "defer\|only" {} \; | grep -i defer | head -5
+sha256: ca50b308938ab2aee0822cac40e23923b04b4f21bccc78d6c9d76521149483f6
+truncated: false
+
+[ADP OBSERVATION current=17 original=32 source=environment]
+name: Bash:toolu_01T6AdBC8P7qHVnGKwST1Hwv
+excerpt:
+testbed/tests/defer/models.py
+testbed/tests/defer/tests.py
+testbed/tests/defer_regress/models.py
+testbed/tests/defer_regress/tests.py
+sha256: 925068d5a151791634ce0f7880523c321dd05d155650596a1723e93cadb3f131
+truncated: false
+
+[ADP ACTION current=18 original=33: api_action Read]
+path: tests/defer/tests.py
+payload:
+{
+  "file_path": "testbed/tests/defer/tests.py"
+}
+sha256: 78f05fbde75d74256b7181c5b195018983b9144d7b6b661de6a1ba2d357468bb
+truncated: false
+
+[ADP OBSERVATION current=19 original=34 source=environment]
+name: Read:toolu_016E75ek1wcpvpUUfKHTv5Ez
+excerpt:
+     1→from django.core.exceptions import FieldError
+     2→from django.test import TestCase
+     3→
+     4→from .models import (
+     5→    BigChild, Child, ChildProxy, Primary, RefreshPrimaryProxy, Secondary,
+     6→    ShadowChild,
+     7→)
+     8→
+     9→
+    10→class AssertionMixin:
+    11→    def assert_delayed(self, obj, num):
+    12→        """
+    13→        Instances with deferred fields look the same as normal instances when
+    14→        we examine attribute values. Therefore, this method returns the number
+    15→        of deferred fields on returned instances.
+    16→        """
+    17→        count = len(obj.get_deferred_fields())
+    18→        self.assertEqual(count, num)
+    19→
+    20→
+    21→class DeferTests(AssertionMixin, TestCase):
+    22→    @classmethod
+    23→    def setUpTestData(cls):
+    24→        cls.s1 = Secondary.objects.create(first="x1", second="y1")
+    25→        cls.p1 = Primary.objects.create(name="p1", value="xx", related=cls.s1)
+    26→
+    27→    def test_defer(self):
+    28→        qs = Primary.objects.all()
+    29→        self.assert_delayed(qs.defer("name")[0], 1)
+    30→        self.assert_delayed(qs.defer("name").get(pk=self.p1.pk), 1)
+    31→        self.assert_delayed(qs.defer("related__first")[0], 0)
+    32→        self.assert_delayed(qs.defer("name").defer("value")[0], 2)
+    33→
+    34→    def test_only(self):
+    35→        qs = Primary.objects.all()
+    36→        self.assert_delayed(qs.only("name")[0], 2)
+    37→        self.assert_delayed(qs.only("name").get(pk=self.p1.pk), 2)
+    38→        self.assert_delayed(qs.only("name").only("value")[0], 2)
+    39→        self.assert_delayed(qs.only("related__first")[0], 2)
+    40→        # Using 'pk' with only() should result in 3 deferred fields, namely all
+    41→        # of them except the model's primary key see #15494
+    42→        self.assert_delayed(qs.only("pk")[0], 3)
+    43→        # You can use 'pk' with reverse foreign key lookups.
+    44→        # The r
+sha256: cbd91ab8e443bb1c30395737b165a11c5df458b2fe17b5d3b8b8368790b4cece
+truncated: true
+
+[ADP ACTION current=20 original=35: api_action Read]
+path: tests/defer/models.py
+payload:
+{
+  "file_path": "testbed/tests/defer/models.py"
+}
+sha256: 711973b351fa9af577ac55432b1198fd71edef1d462fa9cf9a663144290a8cae
+truncated: false
+
+[ADP OBSERVATION current=21 original=36 source=environment]
+name: Read:toolu_01GgUanHrNdGLdFw5P5eKLQM
+excerpt:
+     1→"""
+     2→Tests for defer() and only().
+     3→"""
+     4→
+     5→from django.db import models
+     6→
+     7→
+     8→class Secondary(models.Model):
+     9→    first = models.CharField(max_length=50)
+    10→    second = models.CharField(max_length=50)
+    11→
+    12→
+    13→class Primary(models.Model):
+    14→    name = models.CharField(max_length=50)
+    15→    value = models.CharField(max_length=50)
+    16→    related = models.ForeignKey(Secondary, models.CASCADE)
+    17→
+    18→    def __str__(self):
+    19→        return self.name
+    20→
+    21→
+    22→class Child(Primary):
+    23→    pass
+    24→
+    25→
+    26→class BigChild(Primary):
+    27→    other = models.CharField(max_length=50)
+    28→
+    29→
+    30→class ChildProxy(Child):
+    31→    class Meta:
+    32→        proxy = True
+    33→
+    34→
+    35→class RefreshPrimaryProxy(Primary):
+    36→    class Meta:
+    37→        proxy = True
+    38→
+    39→    def refresh_from_db(self, using=None, fields=None, **kwargs):
+    40→        # Reloads all deferred fields if any of the fields is deferred.
+    41→        if fields is not None:
+    42→            fields = set(fields)
+    43→            deferred_fields = self.get_deferred_fields()
+    44→            if fields.intersection(deferred_fields):
+    45→                fields = fields.union(deferred_fields)
+    46→        super().refresh_from_db(using, fields, **kwargs)
+    47→
+    48→
+    49→class ShadowParent(models.Model):
+    50→    """
+    51→    ShadowParent declares a scalar, rather than a field. When this is
+    52→    overridden, the field value, rather than the scalar value must still be
+    53→    used when the field is deferred.
+    54→    """
+    55→    name = 'aphrodite'
+    56→
+    57→
+    58→class ShadowChild(ShadowParent):
+    59→    name = models.CharField(default='adonis', max_length=6)
+    60→
+
+sha256: f189ef4e6acf41643862d27852a7964aededd85cda020608e4098e13589da212
+truncated: false
+
+[ADP ACTION current=22 original=41: code_action bash]
+payload:
+python test_issue.py
+sha256: 023c01adda9bd0278f778ed9f7cf5e4f364a1f19d5e31d18c3155903fbea7596
+truncated: false
+
+[ADP OBSERVATION current=23 original=42 source=environment]
+name: Bash:toolu_01GZwJ84TA3HEX4MGqHKMhes:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 52
+    print(f"Query: {qs.query}")
+                             ^
+SyntaxError: invalid syntax
+sha256: ea87efe6d50bcd994d786464eda2ce3608cc854db652b2a8b432a40a1bff59df
+truncated: false
+
+[ADP ACTION current=24 original=45: code_action bash]
+payload:
+python test_issue.py
+sha256: 10f4d02dfdd41716df25c3163660c750dff1450f3367259ef5d8c16eaf108dc6
+truncated: false
+
+[ADP OBSERVATION current=25 original=46 source=environment]
+name: Bash:toolu_01PGvr7arEqNt9DvPvAsx9k5:error
+excerpt:
+Exit code 1
+Traceback (most recent call last):
+  File "test_issue.py", line 5, in <module>
+    import django
+ImportError: No module named django
+sha256: 9afc477ebab4c9f6f86c980911acffff66d3da543bac1e853504ccf10fc06f1f
+truncated: false
+
+[ADP ACTION current=26 original=47: code_action bash]
+payload:
+python3 test_issue.py
+sha256: 75f0efd510848df4c2b66532ffbbe633ba8119b3c34e83f956a2287620a97f69
+truncated: false
+
+[ADP OBSERVATION current=27 original=48 source=environment]
+name: Bash:toolu_018Q1uYKDwQfX9pxqzs1dtrT
+excerpt:
+Testing: Company.objects.only('name').defer('name')
+Query: SELECT "test_app_company"."id", "test_app_company"."name", "test_app_company"."trade_number", "test_app_company"."country" FROM "test_app_company"
+Deferred loading: (set(), False)
+Deferred fields: set()
+Expected deferred fields: {{'name', 'trade_number', 'country'}}
+Test PASSED: False
+
+Testing: Company.objects.only('name').defer('name').defer('country')
+Query: SELECT "test_app_company"."id", "test_app_company"."name", "test_app_company"."trade_number", "test_app_company"."country" FROM "test_app_company"
+Deferred loading: (set(), False)
+Deferred fields: set()
+Expected deferred fields: {{'name', 'trade_number', 'country'}}
+Test PASSED: False
+
+Testing: Company.objects.only('name', 'country').defer('name')
+Query: SELECT "test_app_company"."id", "test_app_company"."country" FROM "test_app_company"
+Deferred loading: ({'country'}, False)
+Deferred fields: {'name', 'trade_number'}
+Expected deferred fields: {{'name', 'trade_number'}}
+Test PASSED: True
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: f4454234ae867fbc861a4677fec4e40294ea0c629121690f2cc44ecd04c54fa2
+truncated: false
+
+[ADP ACTION current=28 original=49: api_action Grep]
+path: django/db/models/sql/query.py
+payload:
+{
+  "-C": 3,
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql/query.py",
+  "pattern": "deferred_to_data"
+}
+sha256: 22c608b9ce6781ae90009bc87d01e62a2e2b4c36884846c31fed89e00e3d7beb
+truncated: false
+
+[ADP OBSERVATION current=29 original=50 source=environment]
+name: Grep:toolu_01UPK6VBUu9wZgM6o7gvUhUW
+excerpt:
+663-        self.order_by = rhs.order_by or self.order_by
+664-        self.extra_order_by = rhs.extra_order_by or self.extra_order_by
+665-
+666:    def deferred_to_data(self, target, callback):
+667-        """
+668-        Convert the self.deferred_loading data structure to an alternate data
+669-        structure, describing the field that *will* be loaded. This is used to
+--
+2127-            return self._loaded_field_names_cache
+2128-        except AttributeError:
+2129-            collection = {}
+2130:            self.deferred_to_data(collection, self.get_loaded_field_names_cb)
+2131-            self._loaded_field_names_cache = collection
+2132-            return collection
+2133-
+sha256: 943e89439582d1beda90a27266605a89364fd1ed66144975104419c9433e38e0
+truncated: false
+
+[ADP ACTION current=30 original=51: api_action Grep]
+path: django/db/models/sql/query.py
+payload:
+{
+  "-C": 10,
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql/query.py",
+  "pattern": "def get_loaded_field_names_cb"
+}
+sha256: 6ee09a2a1cf24c20d3143014eb2815a3bd284aac3a726eb82df4eb7eb0a812b1
+truncated: false
+
+[ADP OBSERVATION current=31 original=52 source=environment]
+name: Grep:toolu_013hojjqTV51jjgApabBqC8e
+excerpt:
+2124-        # We cache this because we call this function multiple times
+2125-        # (compiler.fill_related_selections, query.iterator)
+2126-        try:
+2127-            return self._loaded_field_names_cache
+2128-        except AttributeError:
+2129-            collection = {}
+2130-            self.deferred_to_data(collection, self.get_loaded_field_names_cb)
+2131-            self._loaded_field_names_cache = collection
+2132-            return collection
+2133-
+2134:    def get_loaded_field_names_cb(self, target, model, fields):
+2135-        """Callback used by get_deferred_field_names()."""
+2136-        target[model] = {f.attname for f in fields}
+2137-
+2138-    def set_annotation_mask(self, names):
+2139-        """Set the mask of annotations that will be returned by the SELECT."""
+2140-        if names is None:
+2141-            self.annotation_select_mask = None
+2142-        else:
+2143-            self.annotation_select_mask = set(names)
+2144-        self._annotation_select_cache = None
+sha256: 76121b3ca04c107117c757ff37dd91891cff3de807b543d8a7016e483f3db6c4
+truncated: false
+
+[ADP ACTION current=32 original=53: api_action Read]
+path: django/db/models/sql/query.py
+payload:
+{
+  "file_path": "testbed/django/db/models/sql/query.py",
+  "limit": 80,
+  "offset": 666
+}
+sha256: 43817fb5a90c75477f94613090a6ab547d99e0ebf8dc960797f32a60794452c4
+truncated: false
+
+[ADP OBSERVATION current=33 original=54 source=environment]
+name: Read:toolu_014YT3sQDYNMFGGpywnHGjZd
+excerpt:
+   666→    def deferred_to_data(self, target, callback):
+   667→        """
+   668→        Convert the self.deferred_loading data structure to an alternate data
+   669→        structure, describing the field that *will* be loaded. This is used to
+   670→        compute the columns to select from the database and also by the
+   671→        QuerySet class to work out which fields are being initialized on each
+   672→        model. Models that have all their fields included aren't mentioned in
+   673→        the result, only those that have field restrictions in place.
+   674→
+   675→        The "target" parameter is the instance that is populated (in place).
+   676→        The "callback" is a function that is called whenever a (model, field)
+   677→        pair need to be added to "target". It accepts three parameters:
+   678→        "target", and the model and list of fields being added for that model.
+   679→        """
+   680→        field_names, defer = self.deferred_loading
+   681→        if not field_names:
+   682→            return
+   683→        orig_opts = self.get_meta()
+   684→        seen = {}
+   685→        must_include = {orig_opts.concrete_model: {orig_opts.pk}}
+   686→        for field_name in field_names:
+   687→            parts = field_name.split(LOOKUP_SEP)
+   688→            cur_model = self.model._meta.concrete_model
+   689→            opts = orig_opts
+   690→            for name in parts[:-1]:
+   691→                old_model = cur_model
+   692→                if name in self._filtered_relations:
+   693→                    name = self._filtered_relations[name].relation_name
+   694→                source = opts.get_field(name)
+   695→                if is_reverse_o2o(source):
+   696→                    cur_model = source.related_model
+   697→                else:
+   698→                    cur_model = source.remote_field.model
+   699→                opts = cur_model._meta
+   700→                # Even if we're "just passing through" this model, w
+sha256: 0a1f673d5f61840ced6478b6b3720a563243b63b37b7205d5ad447b525906106
+truncated: true
+
+[ADP ACTION current=34 original=57: api_action Edit]
+path: django/db/models/sql/query.py
+payload:
+{
+  "file_path": "testbed/django/db/models/sql/query.py",
+  "new_text_sha256": "555d124f0d067d5d3e32320489718a88ef943d38c6cb8c5f8c54fa3bc45f660e",
+  "old_text_sha256": "c378f107f2bd858a721ad8c807d7494c76c50d6466dbe5019735cdf78d3469ab"
+}
+sha256: 164b59e36e54436e6904545dce31976508e604d6eaad761dde3cfd12f9fda549
+truncated: false
+
+[ADP ACTION current=35 original=59: code_action bash]
+payload:
+python3 test_issue.py
+sha256: 3c839e7741a0bf985e0f8eddfddbad3af96d6b6fd36566f01a195abea34bff76
+truncated: false
+
+[ADP OBSERVATION current=36 original=60 source=environment]
+name: Bash:toolu_01H6nR9bXBVYcUChPY5Yg81L
+excerpt:
+Testing: Company.objects.only('name').defer('name')
+Query: SELECT "test_app_company"."id" FROM "test_app_company"
+Deferred loading: (set(), False)
+Deferred fields: {'country', 'trade_number', 'name'}
+Expected deferred fields: {{'name', 'trade_number', 'country'}}
+Test PASSED: True
+
+Testing: Company.objects.only('name').defer('name').defer('country')
+Query: SELECT "test_app_company"."id" FROM "test_app_company"
+Deferred loading: (set(), False)
+Deferred fields: {'country', 'trade_number', 'name'}
+Expected deferred fields: {{'name', 'trade_number', 'country'}}
+Test PASSED: True
+
+Testing: Company.objects.only('name', 'country').defer('name')
+Query: SELECT "test_app_company"."id", "test_app_company"."country" FROM "test_app_company"
+Deferred loading: ({'country'}, False)
+Deferred fields: {'trade_number', 'name'}
+Expected deferred fields: {{'name', 'trade_number'}}
+Test PASSED: True
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 312c932f37812fc4eaf7a9dcb23ec29be3c939ff0d626a50dac585c70e9b9578
+truncated: false
+
+[ADP ACTION current=37 original=63: code_action bash]
+payload:
+cd testbed && python tests/runtests.py defer --parallel=1 -v 2
+sha256: 40b85d53e301f95c8ff28d9b6aaa8bd99bb731c209c0d431cd2d2fbfe742e4b0
+truncated: false
+
+[ADP OBSERVATION current=38 original=64 source=environment]
+name: Bash:toolu_01Gy4evmqpAXt9q7Xgvopws2:error
+excerpt:
+Exit code 1
+  File "tests/runtests.py", line 20
+    ) from e
+         ^
+SyntaxError: invalid syntax
+sha256: d76df0289a6fe41ae6c4bfe5b506a361b39d4bcfe056aed7aed40cf4124f0942
+truncated: false
+
+[ADP ACTION current=39 original=65: code_action bash]
+payload:
+cd testbed && python3 tests/runtests.py defer --parallel=1 -v 2
+sha256: 138cb271db48c1594587e035041469dfc0a14f5027e64b63656c225da3a5be8b
+truncated: false
+
+[ADP OBSERVATION current=40 original=66 source=environment]
+name: Bash:toolu_01C2LMYdqnBhPENZvEcy7j9B
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django'
+Importing application defer
+Found 29 test(s).
+Skipping setup of unused database(s): other.
+Operations to perform:
+  Synchronize unmigrated apps: auth, contenttypes, defer, messages, sessions, staticfiles
+  Apply all migrations: admin, sites
+Synchronizing apps without migrations:
+  Creating tables...
+    Creating table django_content_type
+    Creating table auth_permission
+    Creating table auth_group
+    Creating table auth_user
+    Creating table django_session
+    Creating table defer_secondary
+    Creating table defer_primary
+    Creating table defer_child
+    Creating table defer_bigchild
+    Creating table defer_shadowparent
+    Creating table defer_shadowchild
+    Running deferred SQL...
+Running migrations:
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying sites.0001_initial... OK
+  Applying sites.0002_alter_domain_unique... OK
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+test_defer_baseclass_when_subclass_has_added_field (defer.tests.BigChildDeferTests) ... ok
+test_defer_subclass (defer.tests.BigChildDeferTests) ... ok
+test_defer_subclass_both (defer.tests.BigChildDeferTests) ... ok
+test_only_baseclass_when_subclass_has_added_field (defer.tests.BigChildDeferTests) ... ok
+test_only_subclass (defer.tests.BigChildDeferTests) ... ok
+test_defer (defer.tests.DeferTests) ... o
+sha256: bbfb26e93a7d40385bd94b61fb45590a36c69b2e696556d2e64f864cefe681df
+truncated: true
+
+[ADP ACTION current=41 original=67: code_action bash]
+payload:
+cd testbed && python3 tests/runtests.py defer_regress --parallel=1 -v 2
+sha256: a0c680275531580173d6d67a47e3f6ec49318add6d15a8b276d2b56d41cb14f5
+truncated: false
+
+[ADP ACTION current=42 original=71: code_action bash]
+payload:
+python3 tests/runtests.py defer_regress --parallel=1 -v 2
+sha256: e74c649d154a6fc40d1c1bf7e156b46eee89fe46a73167f142f557d3313c3619
+truncated: false
+
+[ADP OBSERVATION current=43 original=72 source=environment]
+name: Bash:toolu_01D5GWcDBFgnPUbaG6ZdRBfy
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django'
+Importing application defer_regress
+Found 13 test(s).
+Skipping setup of unused database(s): other.
+Operations to perform:
+  Synchronize unmigrated apps: auth, contenttypes, defer_regress, messages, sessions, staticfiles
+  Apply all migrations: admin, sites
+Synchronizing apps without migrations:
+  Creating tables...
+    Creating table django_content_type
+    Creating table auth_permission
+    Creating table auth_group
+    Creating table auth_user
+    Creating table django_session
+    Creating table defer_regress_item
+    Creating table defer_regress_relateditem
+    Creating table defer_regress_child
+    Creating table defer_regress_leaf
+    Creating table defer_regress_resolvethis
+    Creating table defer_regress_simpleitem
+    Creating table defer_regress_feature
+    Creating table defer_regress_specialfeature
+    Creating table defer_regress_onetooneitem
+    Creating table defer_regress_itemandsimpleitem
+    Creating table defer_regress_profile
+    Creating table defer_regress_location
+    Creating table defer_regress_request
+    Creating table defer_regress_base
+    Creating table defer_regress_derived
+    Running deferred SQL...
+Running migrations:
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying sites.0001_initial... OK
+  Applying sites.0002_alter_domain_unique... OK
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Creating test database for alias 'default' ('file:memoryd
+sha256: 55d5174fc2a5ca168d417144b18330c4044d1c41273e34bebcca112abc1127bf
+truncated: true
+
+[ADP ACTION current=44 original=73: api_action Read]
+path: tests/defer/tests.py
+payload:
+{
+  "file_path": "testbed/tests/defer/tests.py",
+  "limit": 10,
+  "offset": 48
+}
+sha256: f7801c9081ae402cb9ae5c5ee5e9c1a3b1679e139f99c69ceb491f9c65810e6c
+truncated: false
+
+[ADP ACTION current=45 original=75: api_action Read]
+path: tests/defer/tests.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/tests/defer/tests.py",
+  "limit": 10,
+  "offset": 48
+}
+sha256: fa717f0e29694ecf7792a1422272115bad48a3fa658e82df52a0451b41967098
+truncated: false
+
+[ADP OBSERVATION current=46 original=76 source=environment]
+name: Read:toolu_01LZfrnmmy2vMyNVyH2iRqyM
+excerpt:
+    48→    def test_defer_only_chaining(self):
+    49→        qs = Primary.objects.all()
+    50→        self.assert_delayed(qs.only("name", "value").defer("name")[0], 2)
+    51→        self.assert_delayed(qs.defer("name").only("value", "name")[0], 2)
+    52→        self.assert_delayed(qs.defer("name").only("value")[0], 2)
+    53→        self.assert_delayed(qs.only("name").defer("value")[0], 2)
+    54→
+    55→    def test_defer_on_an_already_deferred_field(self):
+    56→        qs = Primary.objects.all()
+    57→        self.assert_delayed(qs.defer("name")[0], 1)
+
+sha256: 0ea86c228629e47846b9d74d9fb30b2020924c4b1badee165650237ab4b63bbc
+truncated: false
+
+[ADP ACTION current=47 original=77: api_action Edit]
+path: tests/defer/tests.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/tests/defer/tests.py",
+  "new_text_sha256": "91d4ec57a05f0f2444fc5dde66f4b7767e14785c3612316e2b572af76dd38ea5",
+  "old_text_sha256": "1da92fa67315b545caeb11e92b4d5f1d4190ea49d2648905cb5b2ba2cf5919fd"
+}
+sha256: 288c75e7775c4f2ea9460d47148faef9fda01aaf89bae5d83cb68e4247250524
+truncated: false
+
+[ADP ACTION current=48 original=79: code_action bash]
+payload:
+python3 tests/runtests.py defer.tests.DeferTests.test_defer_only_chaining_clear_all_fields --parallel=1 -v 2
+sha256: 88ae67580e99802c89bb7d2cf5a2dd2c97caf22f90ea76d810af82562139d79f
+truncated: false
+
+[ADP OBSERVATION current=49 original=80 source=environment]
+name: Bash:toolu_01Ag6ivKuPTvnm5pTgqnzghK
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django'
+Importing application defer
+Found 1 test(s).
+Skipping setup of unused database(s): other.
+Operations to perform:
+  Synchronize unmigrated apps: auth, contenttypes, defer, messages, sessions, staticfiles
+  Apply all migrations: admin, sites
+Synchronizing apps without migrations:
+  Creating tables...
+    Creating table django_content_type
+    Creating table auth_permission
+    Creating table auth_group
+    Creating table auth_user
+    Creating table django_session
+    Creating table defer_secondary
+    Creating table defer_primary
+    Creating table defer_child
+    Creating table defer_bigchild
+    Creating table defer_shadowparent
+    Creating table defer_shadowchild
+    Running deferred SQL...
+Running migrations:
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying sites.0001_initial... OK
+  Applying sites.0002_alter_domain_unique... OK
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+test_defer_only_chaining_clear_all_fields (defer.tests.DeferTests)
+Test that chaining only() and defer() that removes all fields works correctly. ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+OK
+Destroying test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+sha256: 578ec4f8ccfdd2fa1b83f3f7137e88b7e7530fd6a80ee4bcdbf8266e3d5b8c34
+truncated: false
+
+[ADP ACTION current=50 original=81: code_action bash]
+payload:
+python3 tests/runtests.py defer --parallel=1
+sha256: 24cebb1deda7adf5cb91e999ec7fd007c2b8077bd7cbdff31abcd42d9bc3832c
+truncated: false
+
+[ADP OBSERVATION current=51 original=82 source=environment]
+name: Bash:toolu_01GdupPtKSKVtvMD6xcJdV2M
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django'
+Found 30 test(s).
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Creating test database for alias 'default'...
+..............................
+----------------------------------------------------------------------
+Ran 30 tests in 0.025s
+
+OK
+Destroying test database for alias 'default'...
+sha256: a35b95774382fa616f0dafb63103e0c02abb4e55b3c98b7fb71a2d1a03720824
+truncated: false

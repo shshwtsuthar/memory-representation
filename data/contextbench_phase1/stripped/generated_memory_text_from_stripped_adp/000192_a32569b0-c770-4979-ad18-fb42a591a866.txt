@@ -1,0 +1,190 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: a32569b0-c770-4979-ad18-fb42a591a866
+- repo: django/django
+- instance_id: django__django-11099
+- base_commit: d26b2424437dabeeca94d7900b37d2df4410da0c
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+UsernameValidator allows trailing newline in usernames
+Description
+
+ASCIIUsernameValidator and UnicodeUsernameValidator use the regex
+r'^[\w.@+-]+
+The intent is to only allow alphanumeric characters as well as ., @, +, and -. However, a little known quirk of Python regexes is that $ will also match a trailing newline. Therefore, the user name validators will accept usernames which end with a newline. You can avoid this behavior by instead using \A and \Z to terminate regexes. For example, the validator regex could be changed to
+r'\A[\w.@+-]+\Z'
+in order to reject usernames that end with a newline.
+I am not sure how to officially post a patch, but the required change is trivial - using the regex above in the two validators in contrib.auth.validators.
+
+FILES INSPECTED
+---------------
+- django/contrib/auth/validators.py [Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [2] Grep pattern='UsernameValidator'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction]
+- [diagnostic] find ./swebench_9_15 -path "*/contrib/auth/validators.py" 2>/dev/null
+- [diagnostic] ls -la ./swebench_9_15/*.py
+- [diagnostic] find testbed -path "*/contrib/auth/validators.py"
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [diagnostic] cd testbed && python -c "
+import re
+from django.contrib.auth.validators import ASCIIUsernameValidator, UnicodeUsernameValidator
+from django.core.exceptions import ValidationError
+
+print('Testing ASCIIUsernameValidator:')
+print('=' * 60)
+ascii_validator = ASCIIUsernameValidator()
+
+test_cases = [
+    ('validuser', True, 'Normal username'),
+    ('user.name', True, 'Username with dot'),
+    ('user@domain', True, 'Username with @'),
+    ('validuser\n', False, 'Username with trailing newline'),
+]
+
+for
+  [... truncated ...]
+- [other/reproduction] cd testbed && python3 -c "
+import re
+from django.contrib.auth.validators import ASCIIUsernameValidator, UnicodeUsernameValidator
+from django.core.exceptions import ValidationError
+
+print('Testing ASCIIUsernameValidator:')
+print('=' * 60)
+ascii_validator = ASCIIUsernameValidator()
+
+test_cases = [
+    ('validuser', True, 'Normal username'),
+    ('user.name', True, 'Username with dot'),
+    ('user@domain', True, 'Username with @'),
+    ('validuser\n', False, 'Username with trailing newline'),
+]
+
+fo
+  [... truncated ...]
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named django
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #4]
+  -rw-------@ 1 user  staff  15838 23 Nov 00:26 ./swebench_9_15/calculate_session_usage.py
+- [Diagnostic Output after action #6]
+  testbed/django/contrib/auth/validators.py
+- [Read Result after action #8]
+       1→import re
+       2→
+       3→from django.core import validators
+       4→from django.utils.deconstruct import deconstructible
+       5→from django.utils.translation import gettext_lazy as _
+       6→
+       7→
+       8→@deconstructible
+       9→class ASCIIUsernameValidator(validators.RegexValidator):
+      10→    regex = r'^[\w.@+-]+$'
+      11→    message = _(
+      12→        'Enter a valid username. This value may contain only English letters, '
+      13→        'numbers, and @/./+/-/_ characters.'
+      14→    )
+      15→    flags = re.ASCII
+      16→
+      17→
+      18→@deconstructible
+      19→class UnicodeUsernameValidator(validators.RegexValidator):
+      20→    regex = r'^[\w.@+-]+$'
+      21→    message = _(
+      22→        'Enter a valid username. This value may contain only letters, '
+      23→        'numbers, and @/./+/-/_ characters.'
+      24→    )
+      25→    flags = 0
+      26→
+
+- [Read Result after action #12]
+       1→import re
+       2→
+       3→from django.core import validators
+       4→from django.utils.deconstruct import deconstructible
+       5→from django.utils.translation import gettext_lazy as _
+       6→
+       7→
+       8→@deconstructible
+       9→class ASCIIUsernameValidator(validators.RegexValidator):
+      10→    regex = r'\A[\w.@+-]+\Z'
+      11→    message = _(
+      12→        'Enter a valid username. This value may contain only English letters, '
+      13→        'numbers, and @/./+/-/_ characters.'
+      14→    )
+      15→    flags = re.ASCII
+      16→
+      17→
+      18→@deconstructible
+      19→class UnicodeUsernameValidator(validators.RegexValidator):
+      20→    regex = r'\A[\w.@+-]+\Z'
+      21→    message = _(
+      22→        'Enter a valid username. This value may contain only letters, '
+      23→        'numbers, and @/./+/-/_ characters.'
+      24→    )
+      25→    flags = 0
+      26→
+
+- [Test Output after action #14]
+  Exit code 1
+    File "test_issue.py", line 45
+  SyntaxError: Non-ASCII character '\xe2' in file test_issue.py on line 45, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+- [Test Output after action #16]
+  Exit code 1
+    File "test_issue.py", line 47
+      print(f"{status} {description}: '{repr(username)}' -> {result}")
+                                                                    ^
+  SyntaxError: invalid syntax
+- [Test Output after action #18]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 6, in <module>
+      import django
+  ImportError: No module named django
+- [Diagnostic Output after action #20]
+  Exit code 1
+  Traceback (most recent call last):
+    File "<string>", line 3, in <module>
+    File "django/__init__.py", line 1, in <module>
+      from django.utils.version import get_version
+    File "django/utils/version.py", line 71, in <module>
+      @functools.lru_cache()
+  AttributeError: 'module' object has no attribute 'lru_cache'
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/contrib/auth/validators.py
+  Tool: Edit action #10
+  old_text_sha256: f90e7ec1591462a1c765a170abc81ef9da7f33cea1202e6dcc84024fbba85c15
+  new_text_sha256: f8554c077840bb009495f7637491eac896a6cd6c94d8d448be3fa8e130fcae12
+- django/contrib/auth/validators.py
+  Tool: Edit action #11
+  old_text_sha256: 82246778cdd004aaa7e63390da84b7625d0363cf52efede6785bcb9bbcf569df
+  new_text_sha256: 825982d08405fa298f6d9b782bf3c412e85ae676e905f7915d71d56bedc7424d
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

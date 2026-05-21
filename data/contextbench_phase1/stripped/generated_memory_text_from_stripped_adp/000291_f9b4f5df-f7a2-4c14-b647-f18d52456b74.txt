@@ -1,0 +1,424 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: f9b4f5df-f7a2-4c14-b647-f18d52456b74
+- repo: django/django
+- instance_id: django__django-11620
+- base_commit: 514efa3129792ec2abb2444f3e7aeb3f21a38386
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+When DEBUG is True, raising Http404 in a path converter's to_python method does not result in a technical response
+Description
+
+This is the response I get (plain text):
+A server error occurred. Please contact the administrator.
+I understand a ValueError should be raised which tells the URL resolver "this path does not match, try next one" but Http404 is what came to my mind intuitively and the error message was not very helpful.
+One could also make a point that raising a Http404 should be valid way to tell the resolver "this is indeed the right path but the current parameter value does not match anything so stop what you are doing and let the handler return the 404 page (including a helpful error message when DEBUG is True instead of the default 'Django tried these URL patterns')".
+This would prove useful for example to implement a path converter that uses get_object_or_404.
+
+FILES INSPECTED
+---------------
+- django/urls/converters.py [Read: 1]
+- django/urls [Grep: 1]
+- django/urls/resolvers.py [Read: 3]
+- django/urls/exceptions.py [Read: 1]
+- django/core/handlers/exception.py [Read: 1]
+- django/core/handlers/base.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [5] Glob glob='testbed/django/**/converters.py'
+- [9] Grep pattern='to_python' path='django/urls'
+- [10] Grep pattern='to_python' glob='testbed/django/urls/*.py'
+- [12] Grep pattern='to_python' glob='testbed/django/urls/resolvers.py'
+- [16] Grep pattern='from django.http import.*Http404' glob='testbed/django/urls/*.py'
+- [20] Grep pattern='except.*Http404' glob='testbed/django/core/handlers/*.py'
+- [24] Grep pattern='\\.match\\(' glob='testbed/django/urls/resolvers.py'
+- [28] Grep pattern='resolve\\(' glob='testbed/django/core/handlers/*.py'
+- [32] Grep pattern='_get_response' glob='testbed/django/core/handlers/base.py'
+- [36] Grep pattern='except.*Exception' glob='testbed/django/urls/resolvers.py'
+- [47] Grep pattern='except Resolver404' glob='testbed/django/views/debug.py'
+- [59] Glob glob='testbed/tests/**/test*converter*.py'
+- [60] Glob glob='testbed/tests/**/test*debug*.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la ./swebench_9_15/testbed
+- [diagnostic] find . -name "django" -type d -maxdepth 3 2>/dev/null | head -20
+- [diagnostic] find . -name "*.py" -maxdepth 2 -type f 2>/dev/null | head -10
+- [test] cd testbed && python test_issue.py
+- [test] python test_issue.py
+- [other/reproduction] python --version
+- [other/reproduction] python3 --version
+- [test] python3 test_issue.py
+- [test] python3 test_issue.py
+- [test] python3 test_issue_detailed.py
+- [test] python3 test_issue_debug_false.py
+- [test] python3 -m pytest tests/urlpatterns/test_converters.py -xvs
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ERROR: test_http404_in_converter_with_debug_true (__main__.Http404InConverterTest)
+- FAILED (errors=1)
+- ERROR: file or directory not found: tests/urlpatterns/test_converters.py
+- E           django.core.exceptions.ImproperlyConfigured: Requested setting DATABASES, but settings are not configured. You must either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing settings.
+- ERROR tests/view_tests/tests/test_debug.py::CallableSettingWrapperTests::test_repr
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #3]
+  ./calculate_session_usage.py
+- [Glob Result after action #5]
+  ./swebench_9_15/testbed/django/urls/converters.py
+- [Read Result after action #7]
+       1→import uuid
+       2→from functools import lru_cache
+       3→
+       4→
+       5→class IntConverter:
+       6→    regex = '[0-9]+'
+       7→
+       8→    def to_python(self, value):
+       9→        return int(value)
+      10→
+      11→    def to_url(self, value):
+      12→        return str(value)
+      13→
+      14→
+      15→class StringConverter:
+      16→    regex = '[^/]+'
+      17→
+      18→    def to_python(self, value):
+      19→        return value
+      20→
+      21→    def to_url(self, value):
+      22→        return value
+      23→
+      24→
+      25→class UUIDConverter:
+      26→    regex = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+      27→
+      28→    def to_python(self, value):
+      29→        return uuid.UUID(value)
+      30→
+      31→    def to_url(self, value):
+      32→        return str(value)
+      33→
+      34→
+      35→class SlugConverter(StringConverter):
+      36→    regex = '[-a-zA-Z0-9_]+'
+      37→
+      38→
+      39→class PathConverter(StringConverter):
+      40→    regex = '.+'
+      41→
+      42→
+      43→DEFAULT_CONVERTERS = {
+      44→    'int': IntConverter(),
+      45→    'path': PathConverter(),
+      46→    'slug': SlugConverter(),
+      47→    'str': StringConverter(),
+      48→    'uuid': UUIDConverter()
+  [... truncated ...]
+- [Grep Result after action #10]
+  Found 2 files
+  django/urls/resolvers.py
+  django/urls/converters.py
+- [Grep Result after action #12]
+  ./swebench_9_15/testbed/django/urls/resolvers.py-255-            # RoutePattern doesn't allow non-named groups so args are ignored.
+  ./swebench_9_15/testbed/django/urls/resolvers.py-256-            kwargs = match.groupdict()
+  django/urls/resolvers.py-257-            for key, value in kwargs.items():
+  ./swebench_9_15/testbed/django/urls/resolvers.py-258-                converter = self.converters[key]
+  django/urls/resolvers.py-259-                try:
+  django/urls/resolvers.py:260:                    kwargs[key] = converter.to_python(value)
+  django/urls/resolvers.py-261-                except ValueError:
+  ./swebench_9_15/testbed/django/urls/resolvers.py-262-                    return None
+  django/urls/resolvers.py-263-            return path[match.end():], (), kwargs
+  ./swebench_9_15/testbed/django/urls/resolvers.py-264-        return None
+  ./swebench_9_15/testbed/django/urls/resolvers.py-265-
+  django/urls/resolvers.py-266-    def check(self):
+  ./swebench_9_15/testbed/django/urls/resolvers.py-267-        warnings = self._check_pattern_startswith_slash()
+  ./swebench_9_15/testbed/django/urls/resolvers.py-268-        route = self._route
+  django/urls/resolvers.py-269-        if '(?P<' in route or rou
+  [... truncated ...]
+- [Read Result after action #14]
+     240→
+     241→
+     242→class RoutePattern(CheckURLMixin):
+     243→    regex = LocaleRegexDescriptor('_route')
+     244→
+     245→    def __init__(self, route, name=None, is_endpoint=False):
+     246→        self._route = route
+     247→        self._regex_dict = {}
+     248→        self._is_endpoint = is_endpoint
+     249→        self.name = name
+     250→        self.converters = _route_to_regex(str(route), is_endpoint)[1]
+     251→
+     252→    def match(self, path):
+     253→        match = self.regex.search(path)
+     254→        if match:
+     255→            # RoutePattern doesn't allow non-named groups so args are ignored.
+     256→            kwargs = match.groupdict()
+     257→            for key, value in kwargs.items():
+     258→                converter = self.converters[key]
+     259→                try:
+     260→                    kwargs[key] = converter.to_python(value)
+     261→                except ValueError:
+     262→                    return None
+     263→            return path[match.end():], (), kwargs
+     264→        return None
+     265→
+     266→    def check(self):
+     267→        warnings = self._check_pattern_startswith_slash()
+     268→        route = self._route
+     269→        if '(?P<' in route o
+  [... truncated ...]
+- [Grep Result after action #16]
+  django/urls/exceptions.py:1:from django.http import Http404
+- [Read Result after action #18]
+       1→from django.http import Http404
+       2→
+       3→
+       4→class Resolver404(Http404):
+       5→    pass
+       6→
+       7→
+       8→class NoReverseMatch(Exception):
+       9→    pass
+      10→
+
+- [Grep Result after action #20]
+  ./swebench_9_15/testbed/django/core/handlers/exception.py-19-    """
+  ./swebench_9_15/testbed/django/core/handlers/exception.py-20-    Wrap the given get_response callable in exception-to-response conversion.
+  ./swebench_9_15/testbed/django/core/handlers/exception.py-21-
+  django/core/handlers/exception.py:22:    All exceptions will be converted. All known 4xx exceptions (Http404,
+  ./swebench_9_15/testbed/django/core/handlers/exception.py-23-    PermissionDenied, MultiPartParserError, SuspiciousOperation) will be
+  ./swebench_9_15/testbed/django/core/handlers/exception.py-24-    converted to the appropriate response, and all other exceptions will be
+  ./swebench_9_15/testbed/django/core/handlers/exception.py-25-    converted to 500 responses.
+  ./swebench_9_15/testbed/django/core/handlers/exception.py-26-
+  ./swebench_9_15/testbed/django/core/handlers/exception.py-27-    This decorator is automatically applied to all middleware to ensure that
+- [Read Result after action #22]
+       1→import logging
+       2→import sys
+       3→from functools import wraps
+       4→
+       5→from django.conf import settings
+       6→from django.core import signals
+       7→from django.core.exceptions import (
+       8→    PermissionDenied, RequestDataTooBig, SuspiciousOperation,
+       9→    TooManyFieldsSent,
+      10→)
+      11→from django.http import Http404
+      12→from django.http.multipartparser import MultiPartParserError
+      13→from django.urls import get_resolver, get_urlconf
+      14→from django.utils.log import log_response
+      15→from django.views import debug
+      16→
+      17→
+      18→def convert_exception_to_response(get_response):
+      19→    """
+      20→    Wrap the given get_response callable in exception-to-response conversion.
+      21→
+      22→    All exceptions will be converted. All known 4xx exceptions (Http404,
+      23→    PermissionDenied, MultiPartParserError, SuspiciousOperation) will be
+      24→    converted to the appropriate response, and all other exceptions will be
+      25→    converted to 500 responses.
+      26→
+      27→    This decorator is automatically applied to all middleware to ensure that
+      28→    no middleware leaks an exception and that the next middleware in the s
+  [... truncated ...]
+- [Grep Result after action #24]
+  ./swebench_9_15/testbed/django/urls/resolvers.py-344-            return [warning]
+  django/urls/resolvers.py-345-        else:
+  ./swebench_9_15/testbed/django/urls/resolvers.py-346-            return []
+  ./swebench_9_15/testbed/django/urls/resolvers.py-347-
+  django/urls/resolvers.py-348-    def resolve(self, path):
+  django/urls/resolvers.py:349:        match = self.pattern.match(path)
+  django/urls/resolvers.py-350-        if match:
+  ./swebench_9_15/testbed/django/urls/resolvers.py-351-            new_path, args, kwargs = match
+  ./swebench_9_15/testbed/django/urls/resolvers.py-352-            # Pass any extra_kwargs as **kwargs.
+  ./swebench_9_15/testbed/django/urls/resolvers.py-353-            kwargs.update(self.default_args)
+  ./swebench_9_15/testbed/django/urls/resolvers.py-354-            return ResolverMatch(self.callback, args, kwargs, self.pattern.name, route=str(self.pattern))
+  ./swebench_9_15/testbed/django/urls/resolvers.py-355-
+  ./swebench_9_15/testbed/django/urls/resolvers.py-356-    @cached_property
+  django/urls/resolvers.py-357-    def lookup_str(self):
+  ./swebench_9_15/testbed/django/urls/resolvers.py-358-        """
+  ./swebench_9_15/testbed/django/urls/resolvers.py-359-        A strin
+  [... truncated ...]
+- [Read Result after action #26]
+     534→    def resolve(self, path):
+     535→        path = str(path)  # path may be a reverse_lazy object
+     536→        tried = []
+     537→        match = self.pattern.match(path)
+     538→        if match:
+     539→            new_path, args, kwargs = match
+     540→            for pattern in self.url_patterns:
+     541→                try:
+     542→                    sub_match = pattern.resolve(new_path)
+     543→                except Resolver404 as e:
+     544→                    sub_tried = e.args[0].get('tried')
+     545→                    if sub_tried is not None:
+     546→                        tried.extend([pattern] + t for t in sub_tried)
+     547→                    else:
+     548→                        tried.append([pattern])
+     549→                else:
+     550→                    if sub_match:
+     551→                        # Merge captured arguments in match with submatch
+     552→                        sub_match_dict = {**kwargs, **self.default_kwargs}
+     553→                        # Update the sub_match_dict with the kwargs from the sub_match.
+     554→                        sub_match_dict.update(sub_match.kwargs)
+     555→                        # If there are *any* named groups, ignore
+  [... truncated ...]
+- [Grep Result after action #28]
+  ./swebench_9_15/testbed/django/core/handlers/base.py-95-            set_urlconf(urlconf)
+  ./swebench_9_15/testbed/django/core/handlers/base.py-96-            resolver = get_resolver(urlconf)
+  django/core/handlers/base.py-97-        else:
+  ./swebench_9_15/testbed/django/core/handlers/base.py-98-            resolver = get_resolver()
+  ./swebench_9_15/testbed/django/core/handlers/base.py-99-
+  django/core/handlers/base.py:100:        resolver_match = resolver.resolve(request.path_info)
+  ./swebench_9_15/testbed/django/core/handlers/base.py-101-        callback, callback_args, callback_kwargs = resolver_match
+  ./swebench_9_15/testbed/django/core/handlers/base.py-102-        request.resolver_match = resolver_match
+  ./swebench_9_15/testbed/django/core/handlers/base.py-103-
+  ./swebench_9_15/testbed/django/core/handlers/base.py-104-        # Apply view middleware
+  django/core/handlers/base.py-105-        for middleware_method in self._view_middleware:
+  ./swebench_9_15/testbed/django/core/handlers/base.py-106-            response = middleware_method(request, callback, callback_args, callback_kwargs)
+  django/core/handlers/base.py-107-            if response:
+  ./swebench_9_15/testbed/django/core/handlers/bas
+  [... truncated ...]
+- [Read Result after action #30]
+      85→    def _get_response(self, request):
+      86→        """
+      87→        Resolve and call the view, then apply view, exception, and
+      88→        template_response middleware. This method is everything that happens
+      89→        inside the request/response middleware.
+      90→        """
+      91→        response = None
+      92→
+      93→        if hasattr(request, 'urlconf'):
+      94→            urlconf = request.urlconf
+      95→            set_urlconf(urlconf)
+      96→            resolver = get_resolver(urlconf)
+      97→        else:
+      98→            resolver = get_resolver()
+      99→
+     100→        resolver_match = resolver.resolve(request.path_info)
+     101→        callback, callback_args, callback_kwargs = resolver_match
+     102→        request.resolver_match = resolver_match
+     103→
+     104→        # Apply view middleware
+     105→        for middleware_method in self._view_middleware:
+     106→            response = middleware_method(request, callback, callback_args, callback_kwargs)
+     107→            if response:
+     108→                break
+     109→
+     110→        if response is None:
+     111→            wrapped_callback = self.make_view_atomic(callback)
+     112→            try:
+
+  [... truncated ...]
+- [Grep Result after action #32]
+  ./swebench_9_15/testbed/django/core/handlers/base.py-30-        self._template_response_middleware = []
+  ./swebench_9_15/testbed/django/core/handlers/base.py-31-        self._exception_middleware = []
+  ./swebench_9_15/testbed/django/core/handlers/base.py-32-
+  django/core/handlers/base.py:33:        handler = convert_exception_to_response(self._get_response)
+  django/core/handlers/base.py-34-        for middleware_path in reversed(settings.MIDDLEWARE):
+  ./swebench_9_15/testbed/django/core/handlers/base.py-35-            middleware = import_string(middleware_path)
+  django/core/handlers/base.py-36-            try:
+  ./swebench_9_15/testbed/django/core/handlers/base.py-37-                mw_instance = middleware(handler)
+  django/core/handlers/base.py-38-            except MiddlewareNotUsed as exc:
+  --
+  ./swebench_9_15/testbed/django/core/handlers/base.py-82-            )
+  ./swebench_9_15/testbed/django/core/handlers/base.py-83-        return response
+  ./swebench_9_15/testbed/django/core/handlers/base.py-84-
+  django/core/handlers/base.py:85:    def _get_response(self, request):
+  ./swebench_9_15/testbed/django/core/handlers/base.py-86-        """
+  ./swebench_9_15/testbed/django/core/handlers/base.py-87-
+  [... truncated ...]
+- [Read Result after action #34]
+     534→    def resolve(self, path):
+     535→        path = str(path)  # path may be a reverse_lazy object
+     536→        tried = []
+     537→        match = self.pattern.match(path)
+     538→        if match:
+     539→            new_path, args, kwargs = match
+     540→            for pattern in self.url_patterns:
+     541→                try:
+     542→                    sub_match = pattern.resolve(new_path)
+     543→                except Resolver404 as e:
+     544→                    sub_tried = e.args[0].get('tried')
+     545→                    if sub_tried is not None:
+     546→                        tried.extend([pattern] + t for t in sub_tried)
+     547→                    else:
+     548→                        tried.append([pattern])
+     549→                else:
+     550→                    if sub_match:
+     551→                        # Merge captured arguments in match with submatch
+     552→                        sub_match_dict = {**kwargs, **self.default_kwargs}
+     553→                        # Update the sub_match_dict with the kwargs from the sub_match.
+     554→                        sub_match_dict.update(sub_match.kwargs)
+     555→                        # If there are *any* named groups, ignore
+  [... truncated ...]
+- [Grep Result after action #36]
+  No matches found
+- [Test Output after action #39]
+  Exit code 1
+    File "test_issue.py", line 29
+      return HttpResponse(f"Value: {value}")
+                                          ^
+  SyntaxError: invalid syntax
+- [Test Output after action #45]
+  Skipping setup of unused database(s): default.
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  test_http404_in_converter_with_debug_true (__main__.Http404InConverterTest)
+  When DEBUG is True, raising Http404 in a path converter's to_python ... ERROR
+
+  ======================================================================
+  ERROR: test_http404_in_converter_with_debug_true (__main__.Http404InConverterTest)
+  When DEBUG is True, raising Http404 in a path converter's to_python
+  ----------------------------------------------------------------------
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/django/core/handlers/exception.py", line 34, in inner
+      response = get_response(request)
+    File "./swebench_9_15/testbed/django/core/handlers/base.py", line 100, in _
+  [... truncated ...]
+- [Grep Result after action #47]
+  ./swebench_9_15/testbed/django/views/debug.py-483-    caller = ''
+  django/views/debug.py-484-    try:
+  ./swebench_9_15/testbed/django/views/debug.py-485-        resolver_match = resolve(request.path)
+  django/views/debug.py:486:    except Resolver404:
+  ./swebench_9_15/testbed/django/views/debug.py-487-        pass
+  django/views/debug.py-488-    else:
+  ./swebench_9_15/testbed/django/views/debug.py-489-        obj = resolver_match.func
+
+SOURCE EDIT EVIDENCE
+--------------------
+- test_issue_detailed.py
+  Tool: Write action #51
+  new_text_sha256: a573bd4c1306e14ef96c14a62ea9f5844217695256d7ae85a034f81397b24694
+- test_issue_debug_false.py
+  Tool: Write action #54
+  new_text_sha256: 32e4a5430d12a3413a4af47fb5b04e1eb676e17504af320d540d969a6e644abb
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

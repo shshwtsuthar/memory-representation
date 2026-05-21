@@ -1,0 +1,585 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: f8cb8ba9-d99b-45c4-b190-add5c61fa55c
+- repo: sympy/sympy
+- instance_id: sympy__sympy-21379
+- base_commit: 624217179aaf8d094e6ff75b7493ad1ee47599b0
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Unexpected `PolynomialError` when using simple `subs()` for particular expressions
+I am seeing weird behavior with `subs` for particular expressions with hyperbolic sinusoids with piecewise arguments. When applying `subs`, I obtain an unexpected `PolynomialError`. For context, I was umbrella-applying a casting from int to float of all int atoms for a bunch of random expressions before using a tensorflow lambdify to avoid potential tensorflow type errors. You can pretend the expression below has a `+ 1` at the end, but below is the MWE that I could produce.
+
+See the expression below, and the conditions in which the exception arises.
+
+Sympy version: 1.8.dev
+
+```python
+from sympy import *
+from sympy.core.cache import clear_cache
+
+x, y, z = symbols('x y z')
+
+clear_cache()
+expr = exp(sinh(Piecewise((x, y > x), (y, True)) / z))
+# This works fine
+expr.subs({1: 1.0})
+
+clear_cache()
+x, y, z = symbols('x y z', real=True)
+expr = exp(sinh(Piecewise((x, y > x), (y, True)) / z))
+# This fails with "PolynomialError: Piecewise generators do not make sense"
+expr.subs({1: 1.0})  # error
+# Now run it again (isympy...) w/o clearing cache and everything works as expected without error
+expr.subs({1: 1.0})
+```
+
+I am not really sure where the issue is, but I think it has something to do with the order of assumptions in this specific type of expression. Here is what I found-
+
+- The error only (AFAIK) happens with `cosh` or `tanh` in place of `sinh`, otherwise it succeeds
+- The error goes away if removing the division by `z`
+- The error goes away if removing `exp` (but stays for most unary functions, `sin`, `log`, etc.)
+- The error only happens with real symbols for `x` and `y` (`z` does not have to be real)
+
+Not too sure how to debug this one.
+
+FILES INSPECTED
+---------------
+- sympy/polys/polytools.py [Grep: 1, Read: 2]
+- sympy/polys [Grep: 1]
+- sympy/polys/polyutils.py [Grep: 1, Read: 1]
+- sympy/functions/elementary/hyperbolic.py [Read: 7, Grep: 4]
+
+SEARCH ANCHORS
+--------------
+- [7] Grep pattern='Piecewise generators do not make sense' path='sympy/polys/polytools.py'
+- [13] Grep pattern='def _parallel_dict_from_expr' path='sympy/polys'
+- [15] Grep pattern='def _parallel_dict_from_expr' path='sympy/polys/polyutils.py'
+- [34] Grep pattern='^from.*Piecewise|^import.*Piecewise' path='sympy/functions/elementary/hyperbolic.py'
+- [39] Grep pattern='class cosh' path='sympy/functions/elementary/hyperbolic.py'
+- [41] Grep pattern='def _eval_is_real' path='sympy/functions/elementary/hyperbolic.py'
+- [66] Grep pattern='% \\(.*pi' path='sympy/functions/elementary/hyperbolic.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [test] cd ./swebench_9_15 && python test_issue.py
+- [test] cd ./swebench_9_15 && python test_issue.py
+- [test] cd ./swebench_9_15 && python3 test_issue.py
+- [test] cd ./swebench_9_15 && python3 test_traceback.py 2>&1 | head -100
+- [test] python3 test_debug.py 2>&1 | grep -v "matplotlib-nspkg"
+- [test] python3 test_debug2.py 2>&1 | grep -v "matplotlib-nspkg" | grep -v "Traceback" | grep -v "File " | grep -v "AttributeError" | grep -v "Remainder"
+- [test] python3 test_debug3.py 2>&1 | grep -v "matplotlib-nspkg" | grep -v "Traceback" | grep -v "File " | grep -v "AttributeError" | grep -v "Remainder"
+- [test] python3 test_issue.py
+- [test] python3 test_cosh_tanh.py 2>&1 | grep -E "(Test|Success|Failed)"
+- [test] python3 test_cosh_traceback.py 2>&1 | tail -40
+- [test] python3 test_cosh_tanh.py 2>&1 | grep -E "(Test|Success|Failed)"
+- [test] python3 test_cosh_traceback.py 2>&1 | tail -50
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named sympy
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Test Output after action #1]
+  Exit code 1
+    File "test_issue.py", line 10
+  SyntaxError: Non-ASCII character '\xe2' in file test_issue.py on line 10, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+- [Test Output after action #3]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 2, in <module>
+      from sympy import *
+  ImportError: No module named sympy
+- [Test Output after action #5]
+  Test 1: Without real=True (should work)
+  Success: exp(sinh(z**(-1.0)*Piecewise((x, x < y), (y, True))))
+
+  Test 2: With real=True (should fail with PolynomialError)
+  Failed: PolynomialError Piecewise generators do not make sense
+
+  Test 3: With real=True, second attempt (should work due to cache)
+  Success: exp(sinh(z**(-1.0)*Piecewise((x, x < y), (y, True))))
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Grep Result after action #7]
+  4389-        # XXX: this is a temporary solution
+  4390-        for i in _polys:
+  4391-            exprs[i] = exprs[i].as_expr()
+  4392-
+  4393-    reps, opt = _parallel_dict_from_expr(exprs, opt)
+  4394-    if not opt.gens:
+  4395-        raise PolificationFailed(opt, origs, exprs, True)
+  4396-
+  4397-    for k in opt.gens:
+  4398-        if isinstance(k, Piecewise):
+  4399:            raise PolynomialError("Piecewise generators do not make sense")
+  4400-
+  4401-    coeffs_list, lengths = [], []
+  4402-
+  4403-    all_monoms = []
+  4404-    all_coeffs = []
+- [Read Result after action #9]
+    4360→                opt.polys = True
+    4361→
+    4362→            return [f, g], opt
+    4363→
+    4364→    origs, exprs = list(exprs), []
+    4365→    _exprs, _polys = [], []
+    4366→
+    4367→    failed = False
+    4368→
+    4369→    for i, expr in enumerate(origs):
+    4370→        expr = sympify(expr)
+    4371→
+    4372→        if isinstance(expr, Basic):
+    4373→            if expr.is_Poly:
+    4374→                _polys.append(i)
+    4375→            else:
+    4376→                _exprs.append(i)
+    4377→
+    4378→                if opt.expand:
+    4379→                    expr = expr.expand()
+    4380→        else:
+    4381→            failed = True
+    4382→
+    4383→        exprs.append(expr)
+    4384→
+    4385→    if failed:
+    4386→        raise PolificationFailed(opt, origs, exprs, True)
+    4387→
+    4388→    if _polys:
+    4389→        # XXX: this is a temporary solution
+    4390→        for i in _polys:
+    4391→            exprs[i] = exprs[i].as_expr()
+    4392→
+    4393→    reps, opt = _parallel_dict_from_expr(exprs, opt)
+    4394→    if not opt.gens:
+    4395→        raise PolificationFailed(opt, origs, exprs, True)
+    4396→
+    4397→    for k in opt.gens:
+    4398→        if isinstance(k, Piecewise):
+    4399→            raise
+  [... truncated ...]
+- [Read Result after action #11]
+    4290→def poly_from_expr(expr, *gens, **args):
+    4291→    """Construct a polynomial from an expression. """
+    4292→    opt = options.build_options(gens, args)
+    4293→    return _poly_from_expr(expr, opt)
+    4294→
+    4295→
+    4296→def _poly_from_expr(expr, opt):
+    4297→    """Construct a polynomial from an expression. """
+    4298→    orig, expr = expr, sympify(expr)
+    4299→
+    4300→    if not isinstance(expr, Basic):
+    4301→        raise PolificationFailed(opt, orig, expr)
+    4302→    elif expr.is_Poly:
+    4303→        poly = expr.__class__._from_poly(expr, opt)
+    4304→
+    4305→        opt.gens = poly.gens
+    4306→        opt.domain = poly.domain
+    4307→
+    4308→        if opt.polys is None:
+    4309→            opt.polys = True
+    4310→
+    4311→        return poly, opt
+    4312→    elif opt.expand:
+    4313→        expr = expr.expand()
+    4314→
+    4315→    rep, opt = _dict_from_expr(expr, opt)
+    4316→    if not opt.gens:
+    4317→        raise PolificationFailed(opt, orig, expr)
+    4318→
+    4319→    monoms, coeffs = list(zip(*list(rep.items())))
+    4320→    domain = opt.domain
+    4321→
+    4322→    if domain is None:
+    4323→        opt.domain, coeffs = construct_domain(coeffs, opt=opt)
+    4324→    else:
+    432
+  [... truncated ...]
+- [Grep Result after action #13]
+  Found 1 file
+  sympy/polys/polyutils.py
+- [Grep Result after action #15]
+  180:def _parallel_dict_from_expr_if_gens(exprs, opt):
+  181-    """Transform expressions into a multinomial form given generators. """
+  182-    k, indices = len(opt.gens), {}
+  183-
+  184-    for i, g in enumerate(opt.gens):
+  185-        indices[g] = i
+  186-
+  187-    polys = []
+  188-
+  189-    for expr in exprs:
+  190-        poly = {}
+  191-
+  192-        if expr.is_Equality:
+  193-            expr = expr.lhs - expr.rhs
+  194-
+  195-        for term in Add.make_args(expr):
+  196-            coeff, monom = [], [0]*k
+  197-
+  198-            for factor in Mul.make_args(term):
+  199-                if not _not_a_coeff(factor) and factor.is_Number:
+  200-                    coeff.append(factor)
+  201-                else:
+  202-                    try:
+  203-                        if opt.series is False:
+  204-                            base, exp = decompose_power(factor)
+  205-
+  206-                            if exp < 0:
+  207-                                exp, base = -exp, Pow(base, -S.One)
+  208-                        else:
+  209-                            base, exp = decompose_power_rat(factor)
+  210-
+  --
+  231:def _parallel_dict_from_expr_no_gens(exprs, opt):
+  232-    """Transform expressions into a multinomial form and figure ou
+  [... truncated ...]
+- [Read Result after action #17]
+     231→def _parallel_dict_from_expr_no_gens(exprs, opt):
+     232→    """Transform expressions into a multinomial form and figure out generators. """
+     233→    if opt.domain is not None:
+     234→        def _is_coeff(factor):
+     235→            return factor in opt.domain
+     236→    elif opt.extension is True:
+     237→        def _is_coeff(factor):
+     238→            return factor.is_algebraic
+     239→    elif opt.greedy is not False:
+     240→        def _is_coeff(factor):
+     241→            return factor is S.ImaginaryUnit
+     242→    else:
+     243→        def _is_coeff(factor):
+     244→            return factor.is_number
+     245→
+     246→    gens, reprs = set(), []
+     247→
+     248→    for expr in exprs:
+     249→        terms = []
+     250→
+     251→        if expr.is_Equality:
+     252→            expr = expr.lhs - expr.rhs
+     253→
+     254→        for term in Add.make_args(expr):
+     255→            coeff, elements = [], {}
+     256→
+     257→            for factor in Mul.make_args(term):
+     258→                if not _not_a_coeff(factor) and (factor.is_Number or _is_coeff(factor)):
+     259→                    coeff.append(factor)
+     260→                else:
+     261→                    if opt.series is F
+  [... truncated ...]
+- [Test Output after action #20]
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/sympy/core/assumptions.py", line 454, in getit
+      return self._assumptions[fact]
+  KeyError: 'zero'
+
+  During handling of the above exception, another exception occurred:
+
+  Traceback (most recent call last):
+    File "test_traceback.py", line 11, in <module>
+      result = expr.subs({1: 1.0})
+    File "./swebench_9_15/testbed/sympy/core/basic.py", line 949, in subs
+      rv = rv._subs(old, new, **kwargs)
+    File "./swebench_9_15/testbed/sympy/core/cache.py", line 72, in wrapper
+      retval = cfunc(*args, **kwargs)
+    File "./swebench_9_15/testbed/sympy/core/basic.py", line 1063, in _subs
+      rv = fallback(self, old, new)
+    File "./swebench_9_15/testbed/sympy/core/basic.py", line 1040, in fallback
+      rv = self.func(*
+  [... truncated ...]
+- [Read Result after action #22]
+     240→        else:
+     241→            return self.func(arg)
+     242→
+     243→    def _eval_is_real(self):
+     244→        arg = self.args[0]
+     245→        if arg.is_real:
+     246→            return True
+     247→
+     248→        # if `im` is of the form n*pi
+     249→        # else, check if it is a number
+     250→        re, im = arg.as_real_imag()
+     251→        return (im%pi).is_zero
+     252→
+     253→    def _eval_is_extended_real(self):
+     254→        if self.args[0].is_extended_real:
+     255→            return True
+     256→
+     257→    def _eval_is_positive(self):
+     258→        if self.args[0].is_extended_real:
+     259→            return self.args[0].is_positive
+     260→
+     261→    def _eval_is_negative(self):
+     262→        if self.args[0].is_extended_real:
+     263→            return self.args[0].is_negative
+     264→
+     265→    def _eval_is_finite(self):
+     266→        arg = self.args[0]
+     267→        return arg.is_finite
+     268→
+     269→    def _eval_is_zero(self):
+
+- [Test Output after action #24]
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  arg: Piecewise((x, x < y), (y, True))/z
+  arg.is_real: None
+
+  re: Piecewise((x, x < y), (y, True))/z
+  im: 0
+  im.has(Piecewise): False
+
+  Trying to check if (im % pi).is_zero...
+  Result: True
+- [Test Output after action #27]
+        exec(line)
+
+  sinh_expr: sinh(Piecewise((x, x < y), (y, True))/z)
+  sinh_arg: Piecewise((x, x < y), (y, True))/z
+
+  re: Piecewise((x, x < y), (y, True))/z
+  im: 0
+  im.has(Piecewise): False
+
+  Trying to check if (im % pi).is_zero...
+  Result: True
+- [Test Output after action #30]
+        exec(line)
+
+  pw: Piecewise((x, x < y), (y, True))
+  pw after subs: Piecewise((x, x < y), (y, True))
+
+  arg: Piecewise((x, x < y), (y, True))/z
+  arg after subs: z**(-1.0)*Piecewise((x, x < y), (y, True))
+
+  After subs:
+  re: Piecewise((x, x < y), (y, True))*re(z**(-1.0))
+  im: Piecewise((x, x < y), (y, True))*im(z**(-1.0))
+  im.has(Piecewise): True
+
+  Trying to check if (im % pi).is_zero...
+  Error: PolynomialError Piecewise generators do not make sense
+- [Read Result after action #32]
+     243→    def _eval_is_real(self):
+     244→        arg = self.args[0]
+     245→        if arg.is_real:
+     246→            return True
+     247→
+     248→        # if `im` is of the form n*pi
+     249→        # else, check if it is a number
+     250→        re, im = arg.as_real_imag()
+     251→        return (im%pi).is_zero
+     252→
+     253→    def _eval_is_extended_real(self):
+     254→        if self.args[0].is_extended_real:
+     255→            return True
+     256→
+     257→    def _eval_is_positive(self):
+
+- [Grep Result after action #34]
+  No matches found
+- [Read Result after action #36]
+       1→from sympy.core.logic import FuzzyBool
+       2→
+       3→from sympy.core import S, sympify, cacheit, pi, I, Rational
+       4→from sympy.core.add import Add
+       5→from sympy.core.function import Function, ArgumentIndexError, _coeff_isneg
+       6→from sympy.functions.combinatorial.factorials import factorial, RisingFactorial
+       7→from sympy.functions.elementary.exponential import exp, log, match_real_imag
+       8→from sympy.functions.elementary.miscellaneous import sqrt
+       9→from sympy.functions.elementary.integers import floor
+      10→
+      11→from sympy.core.logic import fuzzy_or, fuzzy_and
+      12→
+      13→
+      14→
+      15→def _rewrite_hyperbolics_as_exp(expr):
+      16→    expr = sympify(expr)
+      17→    return expr.xreplace({h: h.rewrite(exp)
+      18→        for h in expr.atoms(HyperbolicFunction)})
+      19→
+      20→
+
+- [Grep Result after action #39]
+  279:class cosh(HyperbolicFunction):
+  280-    r"""
+  281-    cosh(x) is the hyperbolic cosine of x.
+  282-
+  283-    The hyperbolic cosine function is $\frac{e^x + e^{-x}}{2}$.
+  284-
+  285-    Examples
+  286-    ========
+  287-
+  288-    >>> from sympy import cosh
+  289-    >>> from sympy.abc import x
+  290-    >>> cosh(x)
+  291-    cosh(x)
+  292-
+  293-    See Also
+  294-    ========
+  295-
+  296-    sinh, tanh, acosh
+  297-    """
+  298-
+  299-    def fdiff(self, argindex=1):
+  300-        if argindex == 1:
+  301-            return sinh(self.args[0])
+  302-        else:
+  303-            raise ArgumentIndexError(self, argindex)
+  304-
+  305-    @classmethod
+  306-    def eval(cls, arg):
+  307-        from sympy import cos
+  308-        arg = sympify(arg)
+  309-
+  310-        if arg.is_Number:
+  311-            if arg is S.NaN:
+  312-                return S.NaN
+  313-            elif arg is S.Infinity:
+  314-                return S.Infinity
+  315-            elif arg is S.NegativeInfinity:
+  316-                return S.Infinity
+  317-            elif arg.is_zero:
+  318-                return S.One
+  319-            elif arg.is_negative:
+  320-                return cls(-arg)
+  321-        else:
+  322-            if arg is S.ComplexInfinity:
+  323-
+  [... truncated ...]
+- [Grep Result after action #41]
+  243:    def _eval_is_real(self):
+  244-        arg = self.args[0]
+  245-        if arg.is_real:
+  246-            return True
+  247-
+  248-        # if `im` is of the form n*pi
+  249-        # else, check if it is a number
+  250-        re, im = arg.as_real_imag()
+  251-        # Avoid PolynomialError when Piecewise is in the imaginary part
+  252-        from sympy.functions.elementary.piecewise import Piecewise
+  253-        if im.has(Piecewise):
+  --
+  433:    def _eval_is_real(self):
+  434-        arg = self.args[0]
+  435-
+  436-        # `cosh(x)` is real for real OR purely imaginary `x`
+  437-        if arg.is_real or arg.is_imaginary:
+  438-            return True
+  439-
+  440-        # cosh(a+ib) = cos(b)*cosh(a) + i*sin(b)*sinh(a)
+  441-        # the imaginary part can be an expression like n*pi
+  442-        # if not, check if the imaginary part is a number
+  443-        re, im = arg.as_real_imag()
+  --
+  657:    def _eval_is_real(self):
+  658-        arg = self.args[0]
+  659-        if arg.is_real:
+  660-            return True
+  661-
+  662-        re, im = arg.as_real_imag()
+  663-
+  664-        # if denom = 0, tanh(arg) = zoo
+  665-        if re == 0 and im % pi == pi/2:
+  666-            return None
+  667-
+- [Read Result after action #43]
+     433→    def _eval_is_real(self):
+     434→        arg = self.args[0]
+     435→
+     436→        # `cosh(x)` is real for real OR purely imaginary `x`
+     437→        if arg.is_real or arg.is_imaginary:
+     438→            return True
+     439→
+     440→        # cosh(a+ib) = cos(b)*cosh(a) + i*sin(b)*sinh(a)
+     441→        # the imaginary part can be an expression like n*pi
+     442→        # if not, check if the imaginary part is a number
+     443→        re, im = arg.as_real_imag()
+     444→        return (im%pi).is_zero
+     445→
+     446→    def _eval_is_positive(self):
+     447→        # cosh(x+I*y) = cos(y)*cosh(x) + I*sin(y)*sinh(x)
+
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/functions/elementary/hyperbolic.py
+  Tool: Edit action #38
+  old_text_sha256: 8454252516dda50c2bab7dfb803c7d12a3a9d6468c129c7278cca4ae1857cfaa
+  new_text_sha256: 5e56fe673ad3de68d6aeaabcc1c51d0f610b8bcfb4bd67ebf20d7cb03dc70813
+- sympy/functions/elementary/hyperbolic.py
+  Tool: Edit action #47
+  old_text_sha256: 16392c06cda36ddee63de845f0e20e5cd37db1a38a8e530cbc6418f45188ba40
+  new_text_sha256: 44bb168da333bc1de32a178d45adb3470df147008362d401ea2bf84a2f6ae031
+- sympy/functions/elementary/hyperbolic.py
+  Tool: Edit action #48
+  old_text_sha256: 03e46a11fec18718387dd613dad5cdc4029e62034bdfd4c23a245ec7d8856d36
+  new_text_sha256: 5baac413cff7b50128608f142008e7194a9dab60bee74853faabdba4cbce96ea
+- sympy/functions/elementary/hyperbolic.py
+  Tool: Edit action #59
+  old_text_sha256: ec1568a64b39af93095379755a71bcbc8f8e141786232f212347f37526f97b41
+  new_text_sha256: 5bf5605ff3785b37e07a14b693a887624f98c89c059ea18a65979c7b8417b89b
+- sympy/functions/elementary/hyperbolic.py
+  Tool: Edit action #68
+  old_text_sha256: c1f58d182d3f085f439ac4d3510618082614a6072b97db0f75ca199a4b8d50b4
+  new_text_sha256: be8decde0d3fc7d8aa9cc96271f2528d525e66c6c5e1775212507164ec32ff3c
+- swebench_9_15/test_traceback.py
+  Tool: Write action #19
+  new_text_sha256: 25a1e0ef673e5f8d7a90dc454960e4ae7b43902e72e695ff8809c88ca0d4cef5
+- swebench_9_15/test_debug2.py
+  Tool: Write action #26
+  new_text_sha256: d12bbd34c1bc305511fc1ac9589d593bb950f4e073229154a4f649ae8e04cbb2
+- swebench_9_15/test_debug3.py
+  Tool: Write action #29
+  new_text_sha256: 24ced1fc493b3d14274a9b7be105665852214ed2bd81965a02981d6b367df36c
+- swebench_9_15/test_cosh_tanh.py
+  Tool: Write action #51
+  new_text_sha256: dfcf0f8e4ddca169bac7113174c921539e414c711b3091b6e4abd517b0fa40fb
+- swebench_9_15/test_cosh_traceback.py
+  Tool: Write action #54
+  new_text_sha256: d3348f20638c2a7e79914f215d1e32a2dc253d65ac9a827cd4cbe42d7c375b81
+- swebench_9_15/test_comprehensive.py
+  Tool: Write action #71
+  new_text_sha256: 93ee74dd0e9d2044fbf06dd4d017bac65813ae2279035f94e3d13c88e6f3bf74
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

@@ -1,0 +1,408 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: be6c21cb-422f-4783-9d96-8513cb478577
+- repo: sphinx-doc/sphinx
+- instance_id: sphinx-doc__sphinx-8282
+- base_commit: 2c2335bbb8af99fa132e1573bbf45dc91584d5a2
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+autodoc_typehints does not effect to overloaded callables
+**Describe the bug**
+autodoc_typehints does not effect to overloaded callables.
+
+**To Reproduce**
+
+```
+# in conf.py
+autodoc_typehints = 'none'
+```
+```
+# in index.rst
+.. automodule:: example
+   :members:
+   :undoc-members:
+```
+```
+# in example.py
+from typing import overload
+
+
+@overload
+def foo(x: int) -> int:
+    ...
+
+
+@overload
+def foo(x: float) -> float:
+    ...
+
+
+def foo(x):
+    return x
+```
+
+**Expected behavior**
+All typehints for overloaded callables are obeyed `autodoc_typehints` setting.
+
+**Your project**
+No
+
+**Screenshots**
+No
+
+**Environment info**
+- OS: Mac
+- Python version: 3.8.2
+- Sphinx version: 3.1.0dev
+- Sphinx extensions: sphinx.ext.autodoc
+- Extra tools: No
+
+**Additional context**
+No
+
+FILES INSPECTED
+---------------
+- sphinx/ext/autodoc/typehints.py [Read: 1]
+- tests/roots/test-ext-autodoc/target/overload.py [Read: 1]
+- sphinx/ext/autodoc [Grep: 2]
+- sphinx/ext/autodoc/__init__.py [Read: 4]
+- test_fix/_build/index.txt [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Grep pattern='autodoc_typehints'
+- [2] Grep pattern='overload'
+- [3] Grep pattern='autodoc_typehints' path='testbed'
+- [5] Grep pattern='@overload' path='testbed'
+- [11] Grep pattern='format_signature|format_args' path='sphinx/ext/autodoc'
+- [13] Grep pattern='get_overloaded_signatures' path='testbed'
+- [17] Grep pattern='autodoc_typehints.*none|stringify_signature' path='sphinx/ext/autodoc'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction] cd testbed/test_fix && python -m sphinx -b text . _build
+- [other/reproduction] cd ./swebench_9_15/testbed/test_fix && python -m sphinx -b text . _build
+- [other/reproduction] cd ./swebench_9_15/testbed/test_fix && python3 -m sphinx -b text . _build
+- [diagnostic] cat _build/index.txt
+- [test] cd ./swebench_9_15/testbed && python3 -m pytest tests/test_ext_autodoc_configs.py -xvs -k "typehints or overload"
+- [other/reproduction] python3 -m pytest tests/ -xvs -k "overload" 2>&1 | head -100
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+(none)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #3]
+  Found 5 files
+  testbed/tests/test_ext_autodoc_configs.py
+  testbed/sphinx/ext/autodoc/typehints.py
+  testbed/sphinx/ext/autodoc/__init__.py
+  testbed/doc/usage/extensions/autodoc.rst
+  testbed/CHANGES
+- [Grep Result after action #5]
+  Found 3 files
+  testbed/tests/test_pycode_parser.py
+  testbed/tests/roots/test-ext-autodoc/target/overload.py
+  testbed/tests/roots/test-ext-autodoc/target/annotations.py
+- [Read Result after action #7]
+       1→"""
+       2→    sphinx.ext.autodoc.typehints
+       3→    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       4→
+       5→    Generating content for autodoc using typehints
+       6→
+       7→    :copyright: Copyright 2007-2020 by the Sphinx team, see AUTHORS.
+       8→    :license: BSD, see LICENSE for details.
+       9→"""
+      10→
+      11→import re
+      12→from collections import OrderedDict
+      13→from typing import Any, Dict, Iterable
+      14→from typing import cast
+      15→
+      16→from docutils import nodes
+      17→from docutils.nodes import Element
+      18→
+      19→from sphinx import addnodes
+      20→from sphinx.application import Sphinx
+      21→from sphinx.util import inspect, typing
+      22→
+      23→
+      24→def record_typehints(app: Sphinx, objtype: str, name: str, obj: Any,
+      25→                     options: Dict, args: str, retann: str) -> None:
+      26→    """Record type hints to env object."""
+      27→    try:
+      28→        if callable(obj):
+      29→            annotations = app.env.temp_data.setdefault('annotations', {})
+      30→            annotation = annotations.setdefault(name, OrderedDict())
+      31→            sig = inspect.signature(obj)
+      32→            for param in sig.parameters.values():
+
+  [... truncated ...]
+- [Read Result after action #9]
+       1→from typing import Any, overload
+       2→
+       3→
+       4→@overload
+       5→def sum(x: int, y: int) -> int:
+       6→    ...
+       7→
+       8→
+       9→@overload
+      10→def sum(x: "float", y: "float") -> "float":
+      11→    ...
+      12→
+      13→
+      14→@overload
+      15→def sum(x: str, y: str) -> str:
+      16→    ...
+      17→
+      18→
+      19→def sum(x, y):
+      20→    """docstring"""
+      21→    return x + y
+      22→
+      23→
+      24→class Math:
+      25→    """docstring"""
+      26→
+      27→    @overload
+      28→    def sum(self, x: int, y: int) -> int:
+      29→        ...
+      30→
+      31→    @overload
+      32→    def sum(self, x: "float", y: "float") -> "float":
+      33→        ...
+      34→
+      35→    @overload
+      36→    def sum(self, x: str, y: str) -> str:
+      37→        ...
+      38→
+      39→    def sum(self, x, y):
+      40→        """docstring"""
+      41→        return x + y
+      42→
+      43→
+      44→class Foo:
+      45→    """docstring"""
+      46→
+      47→    @overload
+      48→    def __new__(cls, x: int, y: int) -> "Foo":
+      49→        ...
+      50→
+      51→    @overload
+      52→    def __new__(cls, x: "str", y: "str") -> "Foo":
+      53→        ...
+      54→
+      55→    def __new__(cls, x, y):
+      56→        pass
+
+  [... truncated ...]
+- [Grep Result after action #11]
+  Found 1 file
+  testbed/sphinx/ext/autodoc/__init__.py
+- [Grep Result after action #13]
+  testbed/sphinx/ext/autodoc/__init__.py:1476:        overloads = self.get_overloaded_signatures()
+  testbed/sphinx/ext/autodoc/__init__.py:1495:    def get_overloaded_signatures(self) -> List[Signature]:
+- [Read Result after action #15]
+    1470→        if self.doc_as_attr:
+    1471→            return ''
+    1472→
+    1473→        sig = super().format_signature()
+    1474→        sigs = []
+    1475→
+    1476→        overloads = self.get_overloaded_signatures()
+    1477→        if overloads:
+    1478→            # Use signatures for overloaded methods instead of the implementation method.
+    1479→            method = safe_getattr(self._signature_class, self._signature_method_name, None)
+    1480→            __globals__ = safe_getattr(method, '__globals__', {})
+    1481→            for overload in overloads:
+    1482→                overload = evaluate_signature(overload, __globals__,
+    1483→                                              self.env.config.autodoc_type_aliases)
+    1484→
+    1485→                parameters = list(overload.parameters.values())
+    1486→                overload = overload.replace(parameters=parameters[1:],
+    1487→                                            return_annotation=Parameter.empty)
+    1488→                sig = stringify_signature(overload, **kwargs)
+    1489→                sigs.append(sig)
+    1490→        else:
+    1491→            sigs.append(sig)
+    1492→
+    1493→        return "\n".join(sigs)
+    1494→
+    1495→    d
+  [... truncated ...]
+- [Grep Result after action #17]
+  ./swebench_9_15/testbed/sphinx/ext/autodoc/__init__.py-35-from sphinx.util import logging
+  ./swebench_9_15/testbed/sphinx/ext/autodoc/__init__.py-36-from sphinx.util.docstrings import extract_metadata, prepare_docstring
+  ./swebench_9_15/testbed/sphinx/ext/autodoc/__init__.py-37-from sphinx.util.inspect import (
+  testbed/sphinx/ext/autodoc/__init__.py:38:    evaluate_signature, getdoc, object_description, safe_getattr, stringify_signature
+  ./swebench_9_15/testbed/sphinx/ext/autodoc/__init__.py-39-)
+  ./swebench_9_15/testbed/sphinx/ext/autodoc/__init__.py-40-from sphinx.util.typing import stringify as stringify_typehint
+  ./swebench_9_15/testbed/sphinx/ext/autodoc/__init__.py-41-
+  --
+  ./swebench_9_15/testbed/sphinx/ext/autodoc/__init__.py-1208-                (inspect.isroutine(member) and isinstance(parent, ModuleDocumenter)))
+  ./swebench_9_15/testbed/sphinx/ext/autodoc/__init__.py-1209-
+  testbed/sphinx/ext/autodoc/__init__.py-1210-    def format_args(self, **kwargs: Any) -> str:
+  testbed/sphinx/ext/autodoc/__init__.py:1211:        if self.env.config.autodoc_typehints in ('none', 'description'):
+  ./swebench_9_15/testbed/sphinx/ext/autodoc/__init__.py-1212-            kwargs.setdefault('show_annot
+  [... truncated ...]
+- [Read Result after action #19]
+    1240→
+    1241→    def format_signature(self, **kwargs: Any) -> str:
+    1242→        sigs = []
+    1243→        if self.analyzer and '.'.join(self.objpath) in self.analyzer.overloads:
+    1244→            # Use signatures for overloaded functions instead of the implementation function.
+    1245→            overloaded = True
+    1246→        else:
+    1247→            overloaded = False
+    1248→            sig = super().format_signature(**kwargs)
+    1249→            sigs.append(sig)
+    1250→
+    1251→        if inspect.is_singledispatch_function(self.object):
+    1252→            # append signature of singledispatch'ed functions
+    1253→            for typ, func in self.object.registry.items():
+    1254→                if typ is object:
+    1255→                    pass  # default implementation. skipped.
+    1256→                else:
+    1257→                    self.annotate_to_first_argument(func, typ)
+    1258→
+    1259→                    documenter = FunctionDocumenter(self.directive, '')
+    1260→                    documenter.object = func
+    1261→                    documenter.objpath = [None]
+    1262→                    sigs.append(documenter.format_signature())
+    1263→        if overloaded:
+    1264→
+  [... truncated ...]
+- [Read Result after action #21]
+    1890→            sig = super().format_signature(**kwargs)
+    1891→            sigs.append(sig)
+    1892→
+    1893→        meth = self.parent.__dict__.get(self.objpath[-1])
+    1894→        if inspect.is_singledispatch_method(meth):
+    1895→            # append signature of singledispatch'ed functions
+    1896→            for typ, func in meth.dispatcher.registry.items():
+    1897→                if typ is object:
+    1898→                    pass  # default implementation. skipped.
+    1899→                else:
+    1900→                    self.annotate_to_first_argument(func, typ)
+    1901→
+    1902→                    documenter = MethodDocumenter(self.directive, '')
+    1903→                    documenter.parent = self.parent
+    1904→                    documenter.object = func
+    1905→                    documenter.objpath = [None]
+    1906→                    sigs.append(documenter.format_signature())
+    1907→        if overloaded:
+    1908→            __globals__ = safe_getattr(self.object, '__globals__', {})
+    1909→            for overload in self.analyzer.overloads.get('.'.join(self.objpath)):
+    1910→                overload = evaluate_signature(overload, __globals__,
+    1911→
+  [... truncated ...]
+- [Read Result after action #23]
+    1468→
+    1469→    def format_signature(self, **kwargs: Any) -> str:
+    1470→        if self.doc_as_attr:
+    1471→            return ''
+    1472→
+    1473→        sig = super().format_signature()
+    1474→        sigs = []
+    1475→
+    1476→        overloads = self.get_overloaded_signatures()
+    1477→        if overloads:
+    1478→            # Use signatures for overloaded methods instead of the implementation method.
+    1479→            method = safe_getattr(self._signature_class, self._signature_method_name, None)
+    1480→            __globals__ = safe_getattr(method, '__globals__', {})
+    1481→            for overload in overloads:
+    1482→                overload = evaluate_signature(overload, __globals__,
+    1483→                                              self.env.config.autodoc_type_aliases)
+    1484→
+    1485→                parameters = list(overload.parameters.values())
+    1486→                overload = overload.replace(parameters=parameters[1:],
+    1487→                                            return_annotation=Parameter.empty)
+    1488→                sig = stringify_signature(overload, **kwargs)
+    1489→                sigs.append(sig)
+    1490→        else:
+    1491→            sigs.append(si
+  [... truncated ...]
+- [Read Result after action #35]
+       1→Test
+       2→****
+       3→
+       4→example.foo(x)
+       5→example.foo(x)
+       6→
+
+- [Diagnostic Output after action #38]
+  Test
+  ****
+
+  example.foo(x: int) -> int
+  example.foo(x: float) -> float
+- [Test Output after action #40]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-6.2.3, py-1.10.0, pluggy-0.13.1 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  libraries: Sphinx-3.3.0+/2c2335bbb, docutils-0.17.1
+  base tempdir: /private/var/folders/hg/_103_7xx52701ztpt4713nww0000gn/T/pytest-of-user/pytest-21
+  rootdir: ./swebench_9_15/testbed, configfile: setup.cfg
+  plugins: anyio-3.6.2
+  collecting ... collected 16 items / 12 deselected / 4 selected
+
+  tests/test_ext_autodoc_configs.py::test_autodoc_typehints_signature PASSED# testroot: root
+  # builder: html
+  # srcdir: /private/var/folders/hg/_103_7xx52701ztpt4713nww0000gn/T/pytest-of-user/pytest-21/ext-autodoc
+  # outdir: /private/var/folders/hg/_103_7xx52701ztpt4713nww0000gn/T/pytest-of-user/pytest-21/ext-autodoc/_build/html
+  # status:
+  [01mRunning Sphinx v3.3.0+/2c2335bbb[39;49;00m
+
+  # warning:
+
+
+  tests/test_ext_autodoc_configs.py::test_autodoc_typehints_none PASSED# testroot: root
+  # builder: html
+  # srcdir: /private/var/folders/hg/_103_7xx52701ztpt4713nww0000gn/T/pytest-of-user/pytest-21/ext-autodoc
+  # outdir: /private/var/folders/hg/_103_7xx52701ztpt4713nww0000gn/T/pytest-of-user/pytest-21/ext-au
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sphinx/ext/autodoc/__init__.py
+  Tool: Edit action #25
+  old_text_sha256: 951e45ded8319584f4295644fb2ee28972429b95b479479fd1e4171f4ef08a50
+  new_text_sha256: 0eee1b5f26caa962c3189441c4afb4afc54ccb6d7a92bba25cb2d65929194916
+- sphinx/ext/autodoc/__init__.py
+  Tool: Edit action #26
+  old_text_sha256: 6d264c80ef7b22fa6a8f634b46fc5dd91df5d012059c70fbb0f5828a84e415d2
+  new_text_sha256: 290dd39afcaaf9beab312a270e3769f6a05ecfc59d6709ad22f5c082c8d4c8b6
+- sphinx/ext/autodoc/__init__.py
+  Tool: Edit action #27
+  old_text_sha256: 5614e4f6d97dcc3415d6ccfaf779be829d404d822bcb05532b3b7a55e5ddcf09
+  new_text_sha256: 707f07b5e96d6cae3b238d9bd50e5755289649fff2216438807fc6de375e2a1b
+- test_fix/example.py
+  Tool: Write action #28
+  new_text_sha256: f6ee704729418e980c44f689b8885760c5044e1a394e6de1f6a6a0dcd8cf768c
+- test_fix/conf.py
+  Tool: Write action #29
+  new_text_sha256: 738cc3d25f46a67bed2d440a3786c5660c52256c2742c200a3b727f04f9b6d9a
+- test_fix/index.rst
+  Tool: Write action #30
+  new_text_sha256: cfac41da575e5c8f0ece194b333a65283a3e27c66f100116c8ff9191a5b5de02
+- test_fix/conf.py
+  Tool: Edit action #37
+  old_text_sha256: 6044a6eb9f3759d48f0d0850172c1aa73ca27f028e5d377e55011e8f46ab2db4
+  new_text_sha256: b3f34df4eb4504032b4ae7c4c40031930e939980f34d7b0cb4d8bc170fb37ee1
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

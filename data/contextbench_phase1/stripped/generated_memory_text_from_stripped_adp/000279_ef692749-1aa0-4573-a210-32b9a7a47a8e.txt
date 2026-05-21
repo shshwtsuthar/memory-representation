@@ -1,0 +1,424 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: ef692749-1aa0-4573-a210-32b9a7a47a8e
+- repo:
+- instance_id:
+- base_commit:
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+(not found)
+
+FILES INSPECTED
+---------------
+- django/db/migrations/recorder.py [Read: 2]
+- django/db [Grep: 1]
+- django/db/utils.py [Grep: 1]
+- django/db/migrations/executor.py [Read: 1]
+- tests/migrations/routers.py [Read: 1]
+- tests/migrations/test_multidb.py [Read: 1]
+- django/db/migrations [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [8] Grep pattern='allow_migrate' path='django/db'
+- [10] Grep pattern='allow_migrate' path='django/db/utils.py'
+- [14] Glob path='swebench_9_15/testbed' glob='**/test*recorder*.py'
+- [25] Grep pattern='from django.db import.*router' path='django/db/migrations'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find testbed/tests -name "*migration*" -type d 2>&1 | head -20
+- [diagnostic] find testbed/tests -name "*router*.py" -type f 2>&1 | head -20
+- [diagnostic] ls -la testbed/tests/migrations/*.py | head -20
+- [test] cd testbed && python test_router_fix.py
+- [test] cd testbed && python test_router_fix.py
+- [test] cd testbed && python -m pytest tests/migrations/test_multidb.py -xvs
+- [test] cd testbed && python tests/runtests.py migrations.test_multidb --verbosity=2
+- [test] python ./swebench_9_15/test_issue.py
+- [other/reproduction] python --version
+- [other/reproduction] python3 --version
+- [test] python3 ./swebench_9_15/test_issue.py
+- [test] python3 ./swebench_9_15/test_issue.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- TypeError: Error when calling the metaclass bases
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #6]
+       1→from django.apps.registry import Apps
+       2→from django.db import DatabaseError, models
+       3→from django.utils.functional import classproperty
+       4→from django.utils.timezone import now
+       5→
+       6→from .exceptions import MigrationSchemaMissing
+       7→
+       8→
+       9→class MigrationRecorder:
+      10→    """
+      11→    Deal with storing migration records in the database.
+      12→
+      13→    Because this table is actually itself used for dealing with model
+      14→    creation, it's the one thing we can't do normally via migrations.
+      15→    We manually handle table creation/schema updating (using schema backend)
+      16→    and then have a floating model to do queries with.
+      17→
+      18→    If a migration is unapplied its row is removed from the table. Having
+      19→    a row in the table always means a migration is applied.
+      20→    """
+      21→    _migration_class = None
+      22→
+      23→    @classproperty
+      24→    def Migration(cls):
+      25→        """
+      26→        Lazy load to avoid AppRegistryNotReady if installed apps import
+      27→        MigrationRecorder.
+      28→        """
+      29→        if cls._migration_class is None:
+      30→            class Migration(
+  [... truncated ...]
+- [Grep Result after action #8]
+  Found 10 files
+  testbed/django/db/utils.py
+  testbed/django/db/models/fields/json.py
+  testbed/django/db/models/fields/__init__.py
+  testbed/django/db/models/base.py
+  testbed/django/db/migrations/operations/special.py
+  testbed/django/db/migrations/operations/models.py
+  testbed/django/db/migrations/operations/fields.py
+  testbed/django/db/migrations/operations/base.py
+  testbed/django/db/migrations/executor.py
+  testbed/django/db/backends/base/creation.py
+- [Grep Result after action #10]
+  267-                allow = method(obj1, obj2, **hints)
+  268-                if allow is not None:
+  269-                    return allow
+  270-        return obj1._state.db == obj2._state.db
+  271-
+  272:    def allow_migrate(self, db, app_label, **hints):
+  273-        for router in self.routers:
+  274-            try:
+  275:                method = router.allow_migrate
+  276-            except AttributeError:
+  277-                # If the router doesn't have a method, skip to the next one.
+  278-                continue
+  279-
+  280-            allow = method(db, app_label, **hints)
+  281-
+  282-            if allow is not None:
+  283-                return allow
+  284-        return True
+  285-
+  286:    def allow_migrate_model(self, db, model):
+  287:        return self.allow_migrate(
+  288-            db,
+  289-            model._meta.app_label,
+  290-            model_name=model._meta.model_name,
+  291-            model=model,
+  292-        )
+  293-
+  294-    def get_migratable_models(self, app_config, db, include_auto_created=False):
+  295-        """Return app models allowed to be migrated on provided db."""
+  296-        models = app_config.get_models(include_auto_created=include_auto_created)
+  297:        return [model for mod
+  [... truncated ...]
+- [Read Result after action #12]
+       1→from django.apps.registry import apps as global_apps
+       2→from django.db import migrations, router
+       3→
+       4→from .exceptions import InvalidMigrationPlan
+       5→from .loader import MigrationLoader
+       6→from .recorder import MigrationRecorder
+       7→from .state import ProjectState
+       8→
+       9→
+      10→class MigrationExecutor:
+      11→    """
+      12→    End-to-end migration execution - load migrations and run them up or down
+      13→    to a specified set of targets.
+      14→    """
+      15→
+      16→    def __init__(self, connection, progress_callback=None):
+      17→        self.connection = connection
+      18→        self.loader = MigrationLoader(self.connection)
+      19→        self.recorder = MigrationRecorder(self.connection)
+      20→        self.progress_callback = progress_callback
+      21→
+      22→    def migration_plan(self, targets, clean_start=False):
+      23→        """
+      24→        Given a set of targets, return a list of (Migration instance, backwards?).
+      25→        """
+      26→        plan = []
+      27→        if clean_start:
+      28→            applied = {}
+      29→        else:
+      30→            applied = dict(self.loader.applied_migrations)
+      31→        for
+  [... truncated ...]
+- [Diagnostic Output after action #15]
+  testbed/tests/migrations
+  testbed/tests/migrations/migrations_test_apps
+  testbed/tests/migrations/migrations_test_apps/unspecified_app_with_conflict/migrations
+  testbed/tests/migrations/migrations_test_apps/lookuperror_a/migrations
+  testbed/tests/migrations/migrations_test_apps/conflicting_app_with_dependencies/migrations
+  testbed/tests/migrations/migrations_test_apps/migrated_unapplied_app/migrations
+  testbed/tests/migrations/migrations_test_apps/without_init_file/migrations
+  testbed/tests/migrations/migrations_test_apps/alter_fk/author_app/migrations
+  testbed/tests/migrations/migrations_test_apps/alter_fk/book_app/migrations
+  testbed/tests/migrations/migrations_test_apps/mutate_state_b/migrations
+  testbed/tests/migrations/migrations_test_apps/lookuperror_c/migrations
+  testbed/tests/migrations/migrations_test_apps/lookuperror_b/migrations
+  testbed/tests/migrations/migrations_test_apps/migrated_app/migrations
+  testbed/tests/migrations/migrations_test_apps/mutate_state_a/migrations
+  testbed/tests/migrations/test_migrations_unmigdep
+  testbed/tests/migrations/test_migrations_fake_split_initial
+  testbed/tests/migrations/test_migrations_atomic_operation
+  testbed/tests/migrations/test_migrations
+  testbed/
+  [... truncated ...]
+- [Diagnostic Output after action #17]
+  testbed/tests/migrations/routers.py
+  testbed/tests/multiple_database/routers.py
+- [Read Result after action #19]
+       1→class DefaultOtherRouter:
+       2→    def allow_migrate(self, db, app_label, model_name=None, **hints):
+       3→        return db in {'default', 'other'}
+       4→
+       5→
+       6→class TestRouter:
+       7→    def allow_migrate(self, db, app_label, model_name=None, **hints):
+       8→        """
+       9→        The Tribble model should be the only one to appear in the 'other' db.
+      10→        """
+      11→        if model_name == 'tribble':
+      12→            return db == 'other'
+      13→        elif db != 'default':
+      14→            return False
+      15→
+
+- [Diagnostic Output after action #21]
+  -rw-r--r--@ 1 user  staff       0 10 Dec 23:31 testbed/tests/migrations/__init__.py
+  -rw-r--r--@ 1 user  staff    1556 10 Dec 23:31 testbed/tests/migrations/models.py
+  -rw-r--r--@ 1 user  staff     454 10 Dec 23:31 testbed/tests/migrations/routers.py
+  -rw-r--r--@ 1 user  staff  148874 10 Dec 23:31 testbed/tests/migrations/test_autodetector.py
+  -rw-r--r--@ 1 user  staff   12623 10 Dec 23:31 testbed/tests/migrations/test_base.py
+  -rw-r--r--@ 1 user  staff  103882 10 Dec 23:31 testbed/tests/migrations/test_commands.py
+  -rw-r--r--@ 1 user  staff     856 10 Dec 23:31 testbed/tests/migrations/test_deprecated_fields.py
+  -rw-r--r--@ 1 user  staff     448 10 Dec 23:31 testbed/tests/migrations/test_exceptions.py
+  -rw-r--r--@ 1 user  staff   37778 10 Dec 23:31 testbed/tests/migrations/test_executor.py
+  -rw-r--r--@ 1 user  staff   18184 10 Dec 23:31 testbed/tests/migrations/test_graph.py
+  -rw-r--r--@ 1 user  staff   25302 10 Dec 23:31 testbed/tests/migrations/test_loader.py
+  -rw-r--r--@ 1 user  staff    6926 10 Dec 23:31 testbed/tests/migrations/test_multidb.py
+  -rw-r--r--@ 1 user  staff  189423 10 Dec 23:31 testbed/tests/migrations/test_operations.py
+  -rw-r--r--@ 1 user  staff   33393 10 Dec 23:31 testbed
+  [... truncated ...]
+- [Read Result after action #23]
+       1→from django.db import connection, migrations, models
+       2→from django.db.migrations.state import ProjectState
+       3→from django.test import override_settings
+       4→
+       5→from .test_base import OperationTestBase
+       6→
+       7→
+       8→class AgnosticRouter:
+       9→    """
+      10→    A router that doesn't have an opinion regarding migrating.
+      11→    """
+      12→    def allow_migrate(self, db, app_label, **hints):
+      13→        return None
+      14→
+      15→
+      16→class MigrateNothingRouter:
+      17→    """
+      18→    A router that doesn't allow migrating.
+      19→    """
+      20→    def allow_migrate(self, db, app_label, **hints):
+      21→        return False
+      22→
+      23→
+      24→class MigrateEverythingRouter:
+      25→    """
+      26→    A router that always allows migrating.
+      27→    """
+      28→    def allow_migrate(self, db, app_label, **hints):
+      29→        return True
+      30→
+      31→
+      32→class MigrateWhenFooRouter:
+      33→    """
+      34→    A router that allows migrating depending on a hint.
+      35→    """
+      36→    def allow_migrate(self, db, app_label, **hints):
+      37→        return hints.get('foo', False)
+      38→
+      39→
+      40→class MultiDBOperationTests(Ope
+  [... truncated ...]
+- [Grep Result after action #25]
+  testbed/django/db/migrations/executor.py:2:from django.db import migrations, router
+  testbed/django/db/migrations/operations/base.py:1:from django.db import router
+  testbed/django/db/migrations/operations/special.py:1:from django.db import router
+- [Read Result after action #29]
+       1→from django.apps.registry import Apps
+       2→from django.db import DatabaseError, models, router
+       3→from django.utils.functional import classproperty
+       4→from django.utils.timezone import now
+       5→
+       6→from .exceptions import MigrationSchemaMissing
+       7→
+       8→
+       9→class MigrationRecorder:
+      10→    """
+      11→    Deal with storing migration records in the database.
+      12→
+      13→    Because this table is actually itself used for dealing with model
+      14→    creation, it's the one thing we can't do normally via migrations.
+      15→    We manually handle table creation/schema updating (using schema backend)
+      16→    and then have a floating model to do queries with.
+      17→
+      18→    If a migration is unapplied its row is removed from the table. Having
+      19→    a row in the table always means a migration is applied.
+      20→    """
+      21→    _migration_class = None
+      22→
+      23→    @classproperty
+      24→    def Migration(cls):
+      25→        """
+      26→        Lazy load to avoid AppRegistryNotReady if installed apps import
+      27→        MigrationRecorder.
+      28→        """
+      29→        if cls._migration_class is None:
+      30→            class Mi
+  [... truncated ...]
+- [Test Output after action #32]
+  Exit code 1
+    File "test_router_fix.py", line 61
+  SyntaxError: Non-ASCII character '\xe2' in file test_router_fix.py on line 61, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+- [Test Output after action #35]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_router_fix.py", line 7, in <module>
+      import django
+    File "./swebench_9_15/testbed/django/__init__.py", line 1, in <module>
+      from django.utils.version import get_version
+    File "./swebench_9_15/testbed/django/utils/version.py", line 7, in <module>
+      from django.utils.regex_helper import _lazy_re_compile
+    File "./swebench_9_15/testbed/django/utils/regex_helper.py", line 10, in <module>
+      from django.utils.functional import SimpleLazyObject
+    File "./swebench_9_15/testbed/django/utils/functional.py", line 372, in <module>
+      class SimpleLazyObject(LazyObject):
+  TypeError: Error when calling the metaclass bases
+      'property' object is not callable
+- [Test Output after action #37]
+  Exit code 1
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #39]
+  Exit code 1
+    File "tests/runtests.py", line 20
+      ) from e
+           ^
+  SyntaxError: invalid syntax
+- [Test Output after action #41]
+  Exit code 1
+  Traceback (most recent call last):
+    File "./swebench_9_15/test_issue.py", line 61, in <module>
+      import django
+    File "./swebench_9_15/testbed/django/__init__.py", line 1, in <module>
+      from django.utils.version import get_version
+    File "./swebench_9_15/testbed/django/utils/version.py", line 7, in <module>
+      from django.utils.regex_helper import _lazy_re_compile
+    File "./swebench_9_15/testbed/django/utils/regex_helper.py", line 10, in <module>
+      from django.utils.functional import SimpleLazyObject
+    File "./swebench_9_15/testbed/django/utils/functional.py", line 372, in <module>
+      class SimpleLazyObject(LazyObject):
+  TypeError: Error when calling the metaclass bases
+      'property' object is not callable
+- [Test Output after action #47]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/django/db/backends/utils.py", line 83, in _execute
+      return self.cursor.execute(sql)
+    File "./swebench_9_15/testbed/django/db/backends/sqlite3/base.py", line 332, in execute
+      return Database.Cursor.execute(self, query)
+  sqlite3.OperationalError: disk I/O error
+
+  The above exception was the direct cause of the following exception:
+
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/django/db/migrations/recorder.py", line 69, in ensure_schema
+      editor.create_model(self.Migration)
+    File "./swebench_9_15/testbed/django/db/backends/base/schema.py", line 355, in create_model
+      self.execute(sql, params or None)
+    File "./swebench_9_15/testbed/django/db/backends/base/schema
+  [... truncated ...]
+- [Test Output after action #49]
+  ======================================================================
+  Testing MigrationRecorder with router rules...
+  ======================================================================
+
+  [TEST 1] Testing on 'default' database (should create table):
+  ----------------------------------------------------------------------
+  Before ensure_schema - has_table(): False
+  Router.allow_migrate called: db=default, app_label=migrations, model_name=migration
+  After ensure_schema - has_table(): True
+  PASS: Migration table created on 'default' database
+
+  [TEST 2] Testing on 'other' database (should NOT create table):
+  ----------------------------------------------------------------------
+  Before ensure_schema - has_table(): False
+  Router.allow_migrate called: db=other, app_label=migrations, model_name=migration
+  After ensure_schema - has_table(): False
+  PASS: Migration table NOT created on 'other' database
+
+  ======================================================================
+  RESULT: All tests PASSED!
+  ======================================================================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      F
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/migrations/recorder.py
+  Tool: Edit action #27
+  old_text_sha256: 4e535a4a115869fd265d3e372b54b3534e1282d3f15d427abfd4f463ee7add65
+  new_text_sha256: 70ea626a578d50f91ed93e3fe760c8d278084ef80a0b3fd1d0440ca395283e93
+- django/db/migrations/recorder.py
+  Tool: Edit action #28
+  old_text_sha256: 9c7eb850d0ffbbac445774792a1b606765436b9c8e748484e1e3d66c2a088530
+  new_text_sha256: c3155af2f2988ca22dc0191c3a6c8f3c490b9c3d62194fdf106f035c2599c722
+- test_router_fix.py
+  Tool: Write action #31
+  new_text_sha256: 25a609c5e062cbdaf3d485bf9b28006593e2fe53a33ef1191a4c5f979cc3463e
+- test_router_fix.py
+  Tool: Edit action #34
+  old_text_sha256: 2f2b82275888522f1e21f603c438b9993c80c78f213220adbac6ffcf42f9147a
+  new_text_sha256: d8551817f2ba499ab584252d9b4bc8f8a90d89af3a8dfeee92192f513eef5eae
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

@@ -1,0 +1,334 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: a085d240-4695-4c51-b6b6-87264baa99f0
+- repo: sympy/sympy
+- instance_id: sympy__sympy-21055
+- base_commit: 748ce73479ee2cd5c861431091001cc18943c735
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+`refine()` does not understand how to simplify complex arguments
+Just learned about the refine-function, which would come in handy frequently for me.  But
+`refine()` does not recognize that argument functions simplify for real numbers.
+
+```
+>>> from sympy import *
+>>> var('a,x')
+>>> J = Integral(sin(x)*exp(-a*x),(x,0,oo))
+>>> J.doit()
+    Piecewise((1/(a**2 + 1), 2*Abs(arg(a)) < pi), (Integral(exp(-a*x)*sin(x), (x, 0, oo)), True))
+>>> refine(J.doit(),Q.positive(a))
+        Piecewise((1/(a**2 + 1), 2*Abs(arg(a)) < pi), (Integral(exp(-a*x)*sin(x), (x, 0, oo)), True))
+>>> refine(abs(a),Q.positive(a))
+    a
+>>> refine(arg(a),Q.positive(a))
+    arg(a)
+```
+I cann't find any open issues identifying this.  Easy to fix, though.
+
+FILES INSPECTED
+---------------
+- sympy/assumptions/refine.py [Read: 1]
+- sympy/functions/elementary/complexes.py [Read: 1]
+- sympy/assumptions/tests/test_refine.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [4] Glob glob='**/refine.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction] cd testbed && python3 -c "
+from sympy import *
+var('a')
+print('Testing refine() with arg():')
+print('refine(arg(a), Q.positive(a)) =', refine(arg(a), Q.positive(a)))
+print('Expected: 0')
+print()
+print('Testing refine() with abs():')
+print('refine(abs(a), Q.positive(a)) =', refine(abs(a), Q.positive(a)))
+print('Expected: a')
+"
+- [diagnostic] find testbed -name "*.py" -type f | xargs grep -l "def refine" | head -20
+- [diagnostic] find . -name "*.py" -type f | xargs grep -l "class arg" | head -10
+- [diagnostic] grep -n "class arg" sympy/functions/elementary/complexes.py | head -5
+- [other/reproduction] python3 -c "
+from sympy import *
+var('a,x')
+
+print('Testing refine() with arg():')
+print('refine(arg(a), Q.positive(a)) =', refine(arg(a), Q.positive(a)))
+print('Expected: 0')
+print()
+
+print('refine(arg(a), Q.negative(a)) =', refine(arg(a), Q.negative(a)))
+print('Expected: pi')
+print()
+
+print('Testing refine() with abs() (should still work):')
+print('refine(abs(a), Q.positive(a)) =', refine(abs(a), Q.positive(a)))
+print('Expected: a')
+print()
+
+# Test the full example from the issue
+J = Integral(
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+from sympy import *
+var('a,b,c')
+
+print('Additional tests:')
+print('refine(arg(a), Q.real(a)) =', refine(arg(a), Q.real(a)))
+print('Expected: arg(a) (no simplification without positive/negative)')
+print()
+
+print('refine(arg(a*b), Q.positive(a) & Q.positive(b)) =', refine(arg(a*b), Q.positive(a) & Q.positive(b)))
+print('Expected: 0')
+print()
+
+print('refine(arg(-a), Q.positive(a)) =', refine(arg(-a), Q.positive(a)))
+print('Expected: pi')
+print()
+
+print('refine(arg(a**2), Q.positive(a)
+  [... truncated ...]
+- [diagnostic] find . -path "./sympy/assumptions/tests" -name "*refine*"
+- [diagnostic] find . -type f -name "*test*refine*" -o -name "*refine*test*" | grep -v ".pyc"
+- [test] python3 -m pytest sympy/assumptions/tests/test_refine.py -v
+- [test] python3 -m pytest sympy/assumptions/tests/test_refine.py::test_arg -v
+- [test] python3 -m pytest sympy/assumptions/tests/test_refine.py -v
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #4]
+  ./swebench_9_15/testbed/sympy/assumptions/refine.py
+- [Read Result after action #6]
+       1→from typing import Dict, Callable
+       2→
+       3→from sympy.core import S, Add, Expr, Basic, Mul
+       4→from sympy.logic.boolalg import Boolean
+       5→
+       6→from sympy.assumptions import ask, Q  # type: ignore
+       7→
+       8→
+       9→def refine(expr, assumptions=True):
+      10→    """
+      11→    Simplify an expression using assumptions.
+      12→
+      13→    Explanation
+      14→    ===========
+      15→
+      16→    Unlike :func:`~.simplify()` which performs structural simplification
+      17→    without any assumption, this function transforms the expression into
+      18→    the form which is only valid under certain assumptions. Note that
+      19→    ``simplify()`` is generally not done in refining process.
+      20→
+      21→    Refining boolean expression involves reducing it to ``True`` or
+      22→    ``False``. Unlike :func:~.`ask()`, the expression will not be reduced
+      23→    if the truth value cannot be determined.
+      24→
+      25→    Examples
+      26→    ========
+      27→
+      28→    >>> from sympy import refine, sqrt, Q
+      29→    >>> from sympy.abc import x
+      30→    >>> refine(sqrt(x**2), Q.real(x))
+      31→    Abs(x)
+      32→    >>> refine(sqrt(x**2), Q.positive(x))
+      33→    x
+
+  [... truncated ...]
+- [Diagnostic Output after action #8]
+  ./sympy/functions/elementary/complexes.py
+- [Diagnostic Output after action #10]
+  700:class arg(Function):
+- [Read Result after action #12]
+     690→        elif arg.is_imaginary:
+     691→            return Piecewise((I*arg, I*arg >= 0), (-I*arg, True))
+     692→
+     693→    def _eval_rewrite_as_sign(self, arg, **kwargs):
+     694→        return arg/sign(arg)
+     695→
+     696→    def _eval_rewrite_as_conjugate(self, arg, **kwargs):
+     697→        return (arg*conjugate(arg))**S.Half
+     698→
+     699→
+     700→class arg(Function):
+     701→    """
+     702→    Returns the argument (in radians) of a complex number. For a positive
+     703→    number, the argument is always 0.
+     704→
+     705→    Examples
+     706→    ========
+     707→
+     708→    >>> from sympy.functions import arg
+     709→    >>> from sympy import I, sqrt
+     710→    >>> arg(2.0)
+     711→    0
+     712→    >>> arg(I)
+     713→    pi/2
+     714→    >>> arg(sqrt(2) + I*sqrt(2))
+     715→    pi/4
+     716→    >>> arg(sqrt(3)/2 + I/2)
+     717→    pi/6
+     718→    >>> arg(4 + 3*I)
+     719→    atan(3/4)
+     720→    >>> arg(0.8 + 0.6*I)
+     721→    0.643501108793284
+     722→
+     723→    Parameters
+     724→    ==========
+     725→
+     726→    arg : Expr
+     727→        Real or complex expression.
+     728→
+     729→    Returns
+     730→    =======
+     731→
+     732→    value : Expr
+     733→        Returns arc tangent of
+  [... truncated ...]
+- [Diagnostic Output after action #21]
+  ./sympy/assumptions/tests/test_refine.py
+- [Test Output after action #23]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 14 items
+
+  sympy/assumptions/tests/test_refine.py::test_Abs PASSED                  [  7%]
+  sympy/assumptions/tests/test_refine.py::test_pow1 PASSED                 [ 14%]
+  sympy/assumptions/tests/test_refine.py::test_pow2 PASSED                 [ 21%]
+  sympy/assumptions/tests/test_refine.py::test_exp PASSED                  [ 28%]
+  sympy/assumptions/tests/test_refine.py::test_Piecewise PASSED            [ 35%]
+  sympy/assumptions/tests/test_refine.py::test_atan2 PASSED                [ 42%]
+  sympy/assumptions/tests/test_refine.py::test_re PASSED                   [ 50%]
+  sympy/assumptions/tests/test_refine.py::test_im PASSED                   [ 57%]
+  sympy/assumptions/tests/t
+  [... truncated ...]
+- [Read Result after action #25]
+       1→from sympy import (Abs, exp, Expr, I, pi, Q, Rational, refine, S, sqrt,
+       2→                   atan, atan2, nan, Symbol, re, im, sign)
+       3→from sympy.abc import w, x, y, z
+       4→from sympy.core.relational import Eq, Ne
+       5→from sympy.functions.elementary.piecewise import Piecewise
+       6→from sympy.matrices.expressions.matexpr import MatrixSymbol
+       7→
+       8→
+       9→def test_Abs():
+      10→    assert refine(Abs(x), Q.positive(x)) == x
+      11→    assert refine(1 + Abs(x), Q.positive(x)) == 1 + x
+      12→    assert refine(Abs(x), Q.negative(x)) == -x
+      13→    assert refine(1 + Abs(x), Q.negative(x)) == 1 - x
+      14→
+      15→    assert refine(Abs(x**2)) != x**2
+      16→    assert refine(Abs(x**2), Q.real(x)) == x**2
+      17→
+      18→
+      19→def test_pow1():
+      20→    assert refine((-1)**x, Q.even(x)) == 1
+      21→    assert refine((-1)**x, Q.odd(x)) == -1
+      22→    assert refine((-2)**x, Q.even(x)) == 2**x
+      23→
+      24→    # nested powers
+      25→    assert refine(sqrt(x**2)) != Abs(x)
+      26→    assert refine(sqrt(x**2), Q.complex(x)) != Abs(x)
+      27→    assert refine(sqrt(x**2), Q.real(x)) == Abs(x)
+      28→    assert refine(sqrt(x**2), Q.positive(x)) == x
+      29→
+  [... truncated ...]
+- [Test Output after action #29]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 1 item
+
+  sympy/assumptions/tests/test_refine.py::test_arg PASSED                  [100%]
+
+  =============================== warnings summary ===============================
+  ../../../../../opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441
+    /opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441: PytestConfigWarning: Unknown config option: doctestplus
+
+      self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+  -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+  ========================= 1 passed, 1 warning in 0.43s =========================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/sit
+  [... truncated ...]
+- [Test Output after action #31]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 15 items
+
+  sympy/assumptions/tests/test_refine.py::test_Abs PASSED                  [  6%]
+  sympy/assumptions/tests/test_refine.py::test_pow1 PASSED                 [ 13%]
+  sympy/assumptions/tests/test_refine.py::test_pow2 PASSED                 [ 20%]
+  sympy/assumptions/tests/test_refine.py::test_exp PASSED                  [ 26%]
+  sympy/assumptions/tests/test_refine.py::test_Piecewise PASSED            [ 33%]
+  sympy/assumptions/tests/test_refine.py::test_atan2 PASSED                [ 40%]
+  sympy/assumptions/tests/test_refine.py::test_re PASSED                   [ 46%]
+  sympy/assumptions/tests/test_refine.py::test_im PASSED                   [ 53%]
+  sympy/assumptions/tests/t
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/assumptions/refine.py
+  Tool: Edit action #14
+  old_text_sha256: a2e3ff12c2b75f348ae4ac1337bdf5ff452fb4aeab90b140f303886b81fcdb24
+  new_text_sha256: 5c7ee50f7395187b84e7c1eb83561f7765d0524fbe9a13335d76a5469f4bd61e
+- sympy/assumptions/refine.py
+  Tool: Edit action #15
+  old_text_sha256: 80b04547f139840f6c8615479e69c86592f78c70afaf56bfd7f594a928d58321
+  new_text_sha256: cd2b88fcb48d71896ab459ec55cdc0f81e9320e01b24368e4664ea7e553a12bd
+- sympy/assumptions/tests/test_refine.py
+  Tool: Edit action #27
+  old_text_sha256: 58c342cb4e42b52ed61606d1e9634ae8878b33f9c60864654fc5537b9944def2
+  new_text_sha256: 1c95e66271675d6c5ffea27b1fd7b33a02e0909ef064850b8a25576d4ac236fb
+- sympy/assumptions/tests/test_refine.py
+  Tool: Edit action #28
+  old_text_sha256: 6e58a68cb657f1592e611c39fa13fbb5cb0b1d00eda29365e6ef688cd938c37c
+  new_text_sha256: a1fabb0f3ea6abd74184351b437fec9a2d373da692df55f8ff5c3378db181087
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

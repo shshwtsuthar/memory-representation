@@ -1,0 +1,533 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: e80cf367-9019-475c-a07a-833b01a3de62
+- repo: sympy/sympy
+- instance_id: sympy__sympy-17655
+- base_commit: f5e965947af2410ded92cfad987aaf45262ea434
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Unexpected exception when multiplying geometry.Point and number
+```python
+from sympy import geometry as ge
+import sympy
+
+point1 = ge.Point(0,0)
+point2 = ge.Point(1,1)
+```
+
+This line works fine
+```python
+point1 + point2 * sympy.sympify(2.0)
+```
+
+But when I write the same this way it raises an exception
+```python
+point1 + sympy.sympify(2.0) * point2
+```
+
+```
+---------------------------------------------------------------------------
+TypeError                                 Traceback (most recent call last)
+~/.virtualenvs/test/lib/python3.6/site-packages/sympy/geometry/point.py in __add__(self, other)
+    219         try:
+--> 220             s, o = Point._normalize_dimension(self, Point(other, evaluate=False))
+    221         except TypeError:
+
+~/.virtualenvs/test/lib/python3.6/site-packages/sympy/geometry/point.py in __new__(cls, *args, **kwargs)
+    128                 Expecting sequence of coordinates, not `{}`'''
+--> 129                                        .format(func_name(coords))))
+    130         # A point where only `dim` is specified is initialized
+
+TypeError:
+Expecting sequence of coordinates, not `Mul`
+
+During handling of the above exception, another exception occurred:
+
+GeometryError                             Traceback (most recent call last)
+<ipython-input-20-6dcbddac1ee2> in <module>
+----> 1 point1 + sympy.sympify(2.0)* point2
+
+~/.virtualenvs/test/lib/python3.6/site-packages/sympy/geometry/point.py in __add__(self, other)
+    220             s, o = Point._normalize_dimension(self, Point(other, evaluate=False))
+    221         except TypeError:
+--> 222             raise GeometryError("Don't know how to add {} and a Point object".format(other))
+    223
+    224         coords = [simplify(a + b) for a, b in zip(s, o)]
+
+GeometryError: Don't know how to add 2.0*Point2D(1, 1) and a Point object
+```
+
+The expected behaviour is, that both lines give the same result
+
+FILES INSPECTED
+---------------
+- sympy/geometry/point.py [Read: 6, Grep: 3]
+- sympy/__init__.py [Read: 1]
+- sympy [Grep: 1]
+- sympy/core/expr.py [Grep: 1]
+- sympy/core/tests/test_priority.py [Read: 1]
+- sympy/core/decorators.py [Grep: 1]
+- sympy/geometry [Grep: 1]
+- sympy/matrices [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='**/sympy/geometry/point.py'
+- [7] Grep pattern='def __mul__|def __rmul__|def __add__' path='sympy/geometry/point.py'
+- [8] Grep pattern='def __mul__|def __rmul__|def __add__' path='sympy/geometry/point.py'
+- [12] Grep pattern='def __sub__|def __rsub__|def __truediv__|def __rtruediv__' path='sympy/geometry/point.py'
+- [44] Grep pattern='_op_priority' path='sympy'
+- [46] Grep pattern='_op_priority|class.*Expr' path='sympy/core/expr.py'
+- [50] Grep pattern='def call_highest_priority' path='sympy/core/decorators.py'
+- [52] Grep pattern='_op_priority' path='sympy/geometry'
+- [54] Grep pattern='_op_priority\\s*=' path='sympy/matrices'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction]
+- [diagnostic] ls -la testbed 2>/dev/null || echo "No testbed directory found"
+- [test] cd testbed && python test_issue.py
+- [test] python test_issue.py
+- [test] python ./swebench_9_15/testbed/test_issue.py
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [test] cd ./swebench_9_15 && python testbed/test_issue.py
+- [diagnostic] python -c "import mpmath; print(mpmath.__version__)"
+- [other/reproduction] python3 -c "import mpmath; print(mpmath.__version__)"
+- [test] python3 testbed/test_issue.py
+- [test] python3 testbed/test_issue.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: SymPy now depends on mpmath as an external library. See https://docs.sympy.org/latest/install.html#mpmath for more information.
+- FAILED: Don't know how to add 2.0*Point2D(1, 1) and a Point object
+- FAILED: unsupported operand type(s) for *: 'float' and 'Point2D'
+- Traceback (most recent call last):
+- ImportError: No module named mpmath
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #3]
+  No testbed directory found
+- [Read Result after action #5]
+       1→"""Geometrical Points.
+       2→
+       3→Contains
+       4→========
+       5→Point
+       6→Point2D
+       7→Point3D
+       8→
+       9→When methods of Point require 1 or more points as arguments, they
+      10→can be passed as a sequence of coordinates or Points:
+      11→
+      12→>>> from sympy.geometry.point import Point
+      13→>>> Point(1, 1).is_collinear((2, 2), (3, 4))
+      14→False
+      15→>>> Point(1, 1).is_collinear(Point(2, 2), Point(3, 4))
+      16→False
+      17→
+      18→"""
+      19→
+      20→from __future__ import division, print_function
+      21→
+      22→import warnings
+      23→
+      24→from sympy.core import S, sympify, Expr
+      25→from sympy.core.compatibility import is_sequence
+      26→from sympy.core.containers import Tuple
+      27→from sympy.simplify import nsimplify, simplify
+      28→from sympy.geometry.exceptions import GeometryError
+      29→from sympy.functions.elementary.miscellaneous import sqrt
+      30→from sympy.functions.elementary.complexes import im
+      31→from sympy.matrices import Matrix
+      32→from sympy.core.numbers import Float
+      33→from sympy.core.evaluate import global_evaluate
+      34→from sympy.core.add import Add
+      35→from sympy.utilities.iterables import uniq
+      36→from
+  [... truncated ...]
+- [Grep Result after action #8]
+  185:    def __add__(self, other):
+  250:    def __mul__(self, factor):
+- [Read Result after action #10]
+     185→    def __add__(self, other):
+     186→        """Add other to self by incrementing self's coordinates by
+     187→        those of other.
+     188→
+     189→        Notes
+     190→        =====
+     191→
+     192→        >>> from sympy.geometry.point import Point
+     193→
+     194→        When sequences of coordinates are passed to Point methods, they
+     195→        are converted to a Point internally. This __add__ method does
+     196→        not do that so if floating point values are used, a floating
+     197→        point result (in terms of SymPy Floats) will be returned.
+     198→
+     199→        >>> Point(1, 2) + (.1, .2)
+     200→        Point2D(1.1, 2.2)
+     201→
+     202→        If this is not desired, the `translate` method can be used or
+     203→        another Point can be added:
+     204→
+     205→        >>> Point(1, 2).translate(.1, .2)
+     206→        Point2D(11/10, 11/5)
+     207→        >>> Point(1, 2) + Point(.1, .2)
+     208→        Point2D(11/10, 11/5)
+     209→
+     210→        See Also
+     211→        ========
+     212→
+     213→        sympy.geometry.point.Point.translate
+     214→
+     215→        """
+     216→        try:
+     217→            s, o = Point._normalize_dimension(self, Point(other, evaluat
+  [... truncated ...]
+- [Grep Result after action #12]
+  286:    def __sub__(self, other):
+- [Read Result after action #14]
+     286→    def __sub__(self, other):
+     287→        """Subtract two points, or subtract a factor from this point's
+     288→        coordinates."""
+     289→        return self + [-x for x in other]
+     290→
+     291→    @classmethod
+     292→    def _normalize_dimension(cls, *points, **kwargs):
+     293→        """Ensure that points have the same dimension.
+     294→        By default `on_morph='warn'` is passed to the
+     295→        `Point` constructor."""
+     296→        # if we have a built-in ambient dimension, use it
+     297→        dim = getattr(cls, '_ambient_dimension', None)
+     298→        # override if we specified it
+     299→        dim = kwargs.get('dim', dim)
+     300→        # if no dim was given, use the highest dimensional point
+     301→        if dim is None:
+     302→            dim = max(i.ambient_dimension for i in points)
+     303→        if all(i.ambient_dimension == dim for i in points):
+     304→            return list(points)
+     305→        kwargs['dim'] = dim
+     306→        kwargs['on_morph'] = kwargs.get('on_morph', 'warn')
+     307→        return [Point(i, **kwargs) for i in points]
+     308→
+     309→    @staticmethod
+     310→    def affine_rank(*args):
+     311→        """The affine r
+  [... truncated ...]
+- [Test Output after action #17]
+  Exit code 1
+    File "test_issue.py", line 13
+      print(f"  Result: {result1}")
+                                 ^
+  SyntaxError: invalid syntax
+- [Test Output after action #19]
+  Exit code 1
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_issue.py", line 3, in <module>
+      from sympy import geometry as ge
+    File "./swebench_9_15/testbed/sympy/__init__.py", line 21, in <module>
+      raise ImportError("SymPy now depends on mpmath as an external library. "
+  ImportError: SymPy now depends on mpmath as an external library. See https://docs.sympy.org/latest/install.html#mpmath for more information.
+- [Test Output after action #21]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 3, in <module>
+      from sympy import geometry as ge
+    File "./swebench_9_15/testbed/sympy/__init__.py", line 21, in <module>
+      raise ImportError("SymPy now depends on mpmath as an external library. "
+  ImportError: SymPy now depends on mpmath as an external library. See https://docs.sympy.org/latest/install.html#mpmath for more information.
+- [Test Output after action #23]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 3, in <module>
+      from sympy import geometry as ge
+    File "./swebench_9_15/testbed/sympy/__init__.py", line 21, in <module>
+      raise ImportError("SymPy now depends on mpmath as an external library. "
+  ImportError: SymPy now depends on mpmath as an external library. See https://docs.sympy.org/latest/install.html#mpmath for more information.
+- [Read Result after action #25]
+       1→"""
+       2→SymPy is a Python library for symbolic mathematics. It aims to become a
+       3→full-featured computer algebra system (CAS) while keeping the code as simple
+       4→as possible in order to be comprehensible and easily extensible.  SymPy is
+       5→written entirely in Python. It depends on mpmath, and other external libraries
+       6→may be optionally for things like plotting support.
+       7→
+       8→See the webpage for more information and documentation:
+       9→
+      10→    https://sympy.org
+      11→
+      12→"""
+      13→
+      14→
+      15→from __future__ import absolute_import, print_function
+      16→del absolute_import, print_function
+      17→
+      18→try:
+      19→    import mpmath
+      20→except ImportError:
+      21→    raise ImportError("SymPy now depends on mpmath as an external library. "
+      22→    "See https://docs.sympy.org/latest/install.html#mpmath for more information.")
+      23→
+      24→del mpmath
+      25→
+      26→from sympy.release import __version__
+      27→
+      28→if 'dev' in __version__:
+      29→    def enable_warnings():
+      30→        import warnings
+
+- [Test Output after action #27]
+  Exit code 1
+  Traceback (most recent call last):
+    File "testbed/test_issue.py", line 3, in <module>
+      from sympy import geometry as ge
+    File "./swebench_9_15/testbed/sympy/__init__.py", line 21, in <module>
+      raise ImportError("SymPy now depends on mpmath as an external library. "
+  ImportError: SymPy now depends on mpmath as an external library. See https://docs.sympy.org/latest/install.html#mpmath for more information.
+- [Diagnostic Output after action #29]
+  Exit code 1
+  Traceback (most recent call last):
+    File "<string>", line 1, in <module>
+  ImportError: No module named mpmath
+- [Test Output after action #33]
+  Test 1: point1 + point2 * sympy.sympify(2.0)
+    Result: Point2D(2.0, 2.0)
+    SUCCESS
+
+  Test 2: point1 + sympy.sympify(2.0) * point2
+    FAILED: Don't know how to add 2.0*Point2D(1, 1) and a Point object
+
+  Test 3: Verify both results are equal
+    FAILED: Don't know how to add 2.0*Point2D(1, 1) and a Point object
+
+  Test 4: Direct multiplication - point2 * 2.0
+    Result: Point2D(2.0, 2.0)
+    SUCCESS
+
+  Test 5: Direct multiplication - 2.0 * point2
+    FAILED: unsupported operand type(s) for *: 'float' and 'Point2D'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Read Result after action #35]
+     250→    def __mul__(self, factor):
+     251→        """Multiply point's coordinates by a factor.
+     252→
+     253→        Notes
+     254→        =====
+     255→
+     256→        >>> from sympy.geometry.point import Point
+     257→
+     258→        When multiplying a Point by a floating point number,
+     259→        the coordinates of the Point will be changed to Floats:
+     260→
+     261→        >>> Point(1, 2)*0.1
+     262→        Point2D(0.1, 0.2)
+     263→
+     264→        If this is not desired, the `scale` method can be used or
+     265→        else only multiply or divide by integers:
+     266→
+     267→        >>> Point(1, 2).scale(1.1, 1.1)
+     268→        Point2D(11/10, 11/5)
+     269→        >>> Point(1, 2)*11/10
+     270→        Point2D(11/10, 11/5)
+     271→
+     272→        See Also
+     273→        ========
+     274→
+     275→        sympy.geometry.point.Point.scale
+     276→        """
+     277→        factor = sympify(factor)
+     278→        coords = [simplify(x*factor) for x in self.args]
+     279→        return Point(coords, evaluate=False)
+     280→
+     281→    def __neg__(self):
+     282→        """Negate the point."""
+     283→        coords = [-x for x in self.args]
+     284→        return Point(coords, evaluate=Fals
+  [... truncated ...]
+- [Test Output after action #38]
+  Test 1: point1 + point2 * sympy.sympify(2.0)
+    Result: Point2D(2.0, 2.0)
+    SUCCESS
+
+  Test 2: point1 + sympy.sympify(2.0) * point2
+    FAILED: Don't know how to add 2.0*Point2D(1, 1) and a Point object
+
+  Test 3: Verify both results are equal
+    FAILED: Don't know how to add 2.0*Point2D(1, 1) and a Point object
+
+  Test 4: Direct multiplication - point2 * 2.0
+    Result: Point2D(2.0, 2.0)
+    SUCCESS
+
+  Test 5: Direct multiplication - 2.0 * point2
+    Result: Point2D(2.0, 2.0)
+    SUCCESS
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #40]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "testbed/test_debug.py", line 38, in <module>
+      print("\nTest 6: isinstance(sympify(2.0), sympy.core.numbers.Float) =", isinstance(sympified, sympy.core.numbers.Float))
+  AttributeError: module 'sympy.core.core' has no attribute 'numbers'
+
+  Test 1: type of 2.0 = <class 'float'>
+  Test 2: type of sympy.sympify(2.0) = <class 'sympy.core.numbers.Float'>
+
+  Test 3: 2.0 * point2
+    Result: Point2D(2.0, 2.0)
+    Type: <class 'sympy.geometry.point.Point2D'>
+
+  Test 4: sympy.sympify(2.0) * point2
+    Result: 2.0*Point2D(1, 1)
+    Type: <class 'sympy.core.mul.Mul'>
+
+  Test 5: point2 * sympy.sympify(2.0)
+    Result: Point2D(2.0, 2.0)
+    Type: <class 'sympy.geometry.point.Point2D'>
+- [Grep Result after action #44]
+  Found 22 files
+  testbed/sympy/vector/vector.py
+  testbed/sympy/vector/dyadic.py
+  testbed/sympy/tensor/tensor.py
+  testbed/sympy/tensor/array/tests/test_immutable_ndim_array.py
+  testbed/sympy/tensor/array/ndim_array.py
+  testbed/sympy/sets/setexpr.py
+  testbed/sympy/series/sequences.py
+  testbed/sympy/polys/polytools.py
+  testbed/sympy/physics/units/prefixes.py
+  testbed/sympy/physics/units/dimensions.py
+  testbed/sympy/matrices/immutable.py
+  testbed/sympy/matrices/expressions/matexpr.py
+  testbed/sympy/matrices/dense.py
+  testbed/sympy/matrices/common.py
+  testbed/sympy/logic/boolalg.py
+  testbed/sympy/holonomic/recurrence.py
+  testbed/sympy/holonomic/holonomic.py
+  testbed/sympy/core/tests/test_priority.py
+  testbed/sympy/core/expr.py
+  testbed/sympy/core/decorators.py
+  testbed/sympy/calculus/util.py
+  testbed/sympy/algebras/quaternion.py
+- [Grep Result after action #46]
+  15:class Expr(Basic, EvalfMixin):
+  60:        >>> class MyScalar(Expr):
+  65:        >>> class MySymbol(Expr):
+  147:    # Expr and its sublcasses use _op_priority to determine which object
+  150:    # the object with the highest _op_priority to handle the call.
+  152:    # should set an _op_priority value that is higher than the default.
+  157:    _op_priority = 10.0
+  3833:class AtomicExpr(Atom, Expr):
+  3835:    A parent class for object which are both atoms and Exprs.
+  3909:class UnevaluatedExpr(Expr):
+  3978:class ExprBuilder(object):
+
+  [Showing results with pagination = limit: 30, offset: 0]
+- [Read Result after action #48]
+       1→from sympy.core.decorators import call_highest_priority
+       2→from sympy.core.expr import Expr
+       3→from sympy.core.mod import Mod
+       4→from sympy.core.numbers import Integer
+       5→from sympy.core.symbol import Symbol
+       6→from sympy.functions.elementary.integers import floor
+       7→
+       8→
+       9→class Higher(Integer):
+      10→    '''
+      11→    Integer of value 1 and _op_priority 20
+      12→
+      13→    Operations handled by this class return 1 and reverse operations return 2
+      14→    '''
+      15→
+      16→    _op_priority = 20.0
+      17→    result = 1
+      18→
+      19→    def __new__(cls):
+      20→        obj = Expr.__new__(cls)
+      21→        obj.p = 1
+      22→        return obj
+      23→
+      24→    @call_highest_priority('__rmul__')
+      25→    def __mul__(self, other):
+      26→        return self.result
+      27→
+      28→    @call_highest_priority('__mul__')
+      29→    def __rmul__(self, other):
+      30→        return 2*self.result
+      31→
+      32→    @call_highest_priority('__radd__')
+      33→    def __add__(self, other):
+      34→        return self.result
+      35→
+      36→    @call_highest_priority('__add__')
+      37→    def __radd__(self, other):
+      38→        return 2*self.resu
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/geometry/point.py
+  Tool: Edit action #37
+  old_text_sha256: ce7147c64c6061f68df1f86edbc82397493d77e866eff61c7cadf0337fdfa047
+  new_text_sha256: 694f364fc461b0c51b80c0583dcb4b79ddc53c9d01e2a6d55d59f15410037e51
+- sympy/geometry/point.py
+  Tool: Edit action #58
+  old_text_sha256: 98b9c42bfa514f16946817a9df668f881fef4ce49c81b4987f0ffb4adb612ac9
+  new_text_sha256: 61f3bbc74ab577942c230b8392f400dd3d2609d199723b0da1caef6e18924d67
+- sympy/geometry/point.py
+  Tool: Edit action #61
+  old_text_sha256: 4ac93f0d770cf450144cb99d450f2b85764a3421d03358228d4805a018982866
+  new_text_sha256: d692f7d9da8be25d9059c644d5d57cf28b647bbdc687db5b749bf398d5902e53
+- sympy/geometry/point.py
+  Tool: Edit action #62
+  old_text_sha256: 57fa1f9e4b64fcb3fb3a35e4817e0f80a8e37560565675a8784af8ea02dbdf7d
+  new_text_sha256: 558ebafc2acf10fd6b8f86e6cae52d50fa3bd2181e6a2296ca1199af2bdd15bf
+- test_multiplication_order.py
+  Tool: Write action #67
+  new_text_sha256: 81391c0bad5df6d18bca1fe60d65a242982d547cf5d5ec58e70a70e448f0ca00
+- final_test.py
+  Tool: Write action #70
+  new_text_sha256: 10a585d38d529706a51381700445ef61c36d42b1fe59607dc7a6b1e080964e4e
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

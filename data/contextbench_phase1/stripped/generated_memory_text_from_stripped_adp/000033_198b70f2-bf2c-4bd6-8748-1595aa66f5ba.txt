@@ -1,0 +1,321 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 198b70f2-bf2c-4bd6-8748-1595aa66f5ba
+- repo: django/django
+- instance_id: django__django-15320
+- base_commit: b55ebe32417e0884b6b8b3e1bc0379033aa221af
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Subquery.as_sql() generates invalid SQL.
+Description
+
+        (last modified by M1ha Shvn)
+
+Since ​this commit Subquery.as_sql(...) method returns incorrect SQL removing first and last symbols instead of absent breakets. Adding Subquery().query.subquery = True attribute fixes the problem. From my point of view, it should be set in Subquery constructor.
+from django.db import connection
+from apps.models import App
+q = Subquery(App.objects.all())
+print(str(q.query))
+# Output SQL is valid:
+# 'SELECT "apps_app"."id", "apps_app"."name" FROM "apps_app"'
+print(q.as_sql(q.query.get_compiler('default'), connection))
+# Outptut SQL is invalid (no S letter at the beggining and " symbol at the end):
+# ('(ELECT "apps_app"."id", "apps_app"."name" FROM "apps_app)', ())
+q.query.subquery = True
+print(q.as_sql(q.query.get_compiler('default'), connection))
+# Outputs correct result
+('(SELECT "apps_app"."id", "apps_app"."name" FROM "apps_app")', ())
+
+FILES INSPECTED
+---------------
+- django/db/models/expressions.py [Grep: 2, Read: 1]
+- django/db/models/sql/query.py [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [2] Grep pattern='class Subquery'
+- [4] Grep pattern='class Subquery' path='testbed'
+- [6] Grep pattern='class Subquery' path='django/db/models/expressions.py'
+- [8] Grep pattern='def as_sql' path='django/db/models/expressions.py'
+- [12] Grep pattern='def as_sql' path='django/db/models/sql/query.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] cd testbed && find . -type f -name "*.py" -path "*/django/db/models/*" | grep -E "(subquery|expressions)" | head -20
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [test] cd testbed && python test_subquery_fix.py
+- [other/reproduction] cd testbed && python --version
+- [other/reproduction] cd testbed && python3 --version
+- [other/reproduction] python3 --version
+- [test] python3 test_subquery_fix.py
+- [test] python3 testbed/tests/runtests.py queries.tests --verbosity=2 2>&1 | head -100
+- [diagnostic] find testbed -name "runtests.py" -type f
+- [diagnostic] find . -name "runtests.py" -type f
+- [test] python3 tests/runtests.py queries.tests -v 2 2>&1 | head -200
+- [test] python3 tests/runtests.py queries.tests -v 1 2>&1 | tail -50
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #4]
+  Found 4 files
+  testbed/tests/queries/tests.py
+  testbed/tests/custom_lookups/tests.py
+  testbed/django/db/models/sql/where.py
+  testbed/django/db/models/expressions.py
+- [Grep Result after action #6]
+  1141:class Subquery(BaseExpression, Combinable):
+  1142-    """
+  1143-    An explicit subquery. It may contain OuterRef() references to the outer
+  1144-    query which will be resolved when it is applied to that query.
+  1145-    """
+  1146-    template = '(%(subquery)s)'
+  1147-    contains_aggregate = False
+  1148-    empty_result_set_value = None
+  1149-
+  1150-    def __init__(self, queryset, output_field=None, **extra):
+  1151-        # Allow the usage of both QuerySet and sql.Query objects.
+  1152-        self.query = getattr(queryset, 'query', queryset)
+  1153-        self.extra = extra
+  1154-        super().__init__(output_field)
+  1155-
+  1156-    def get_source_expressions(self):
+  1157-        return [self.query]
+  1158-
+  1159-    def set_source_expressions(self, exprs):
+  1160-        self.query = exprs[0]
+  1161-
+- [Grep Result after action #8]
+  23:    def as_sqlite(self, compiler, connection, **extra_context):
+  24-        sql, params = self.as_sql(compiler, connection, **extra_context)
+  25-        try:
+  26-            if self.output_field.get_internal_type() == 'DecimalField':
+  27-                sql = 'CAST(%s AS NUMERIC)' % sql
+  28-        except FieldError:
+  29-            pass
+  30-        return sql, params
+  31-
+  32-
+  33-class Combinable:
+  --
+  191:    def as_sql(self, compiler, connection):
+  192-        """
+  193-        Responsible for returning a (sql, [params]) tuple to be included
+  194-        in the current query.
+  195-
+  196-        Different backends can provide their own implementation, by
+  197-        providing an `as_{vendor}` method and patching the Expression:
+  198-
+  199-        ```
+  200-        def override_as_sql(self, compiler, connection):
+  201-            # custom logic
+  --
+  478:    def as_sql(self, compiler, connection):
+  479-        expressions = []
+  480-        expression_params = []
+  481-        sql, params = compiler.compile(self.lhs)
+  482-        expressions.append(sql)
+  483-        expression_params.extend(params)
+  484-        sql, params = compiler.compile(self.rhs)
+  485-        expressions.append(sql)
+  486-        expression_
+  [... truncated ...]
+- [Read Result after action #10]
+    1140→
+    1141→class Subquery(BaseExpression, Combinable):
+    1142→    """
+    1143→    An explicit subquery. It may contain OuterRef() references to the outer
+    1144→    query which will be resolved when it is applied to that query.
+    1145→    """
+    1146→    template = '(%(subquery)s)'
+    1147→    contains_aggregate = False
+    1148→    empty_result_set_value = None
+    1149→
+    1150→    def __init__(self, queryset, output_field=None, **extra):
+    1151→        # Allow the usage of both QuerySet and sql.Query objects.
+    1152→        self.query = getattr(queryset, 'query', queryset)
+    1153→        self.extra = extra
+    1154→        super().__init__(output_field)
+    1155→
+    1156→    def get_source_expressions(self):
+    1157→        return [self.query]
+    1158→
+    1159→    def set_source_expressions(self, exprs):
+    1160→        self.query = exprs[0]
+    1161→
+    1162→    def _resolve_output_field(self):
+    1163→        return self.query.output_field
+    1164→
+    1165→    def copy(self):
+    1166→        clone = super().copy()
+    1167→        clone.query = clone.query.clone()
+    1168→        return clone
+    1169→
+    1170→    @property
+    1171→    def external_aliases(self):
+    1172→        return self.query.externa
+  [... truncated ...]
+- [Grep Result after action #12]
+  1079:    def as_sql(self, compiler, connection):
+  1080-        # Some backends (e.g. Oracle) raise an error when a subquery contains
+  1081-        # unnecessary ORDER BY clause.
+  1082-        if (
+  1083-            self.subquery and
+  1084-            not connection.features.ignores_unnecessary_order_by_in_subqueries
+  1085-        ):
+  1086-            self.clear_ordering(force=False)
+  1087-        sql, params = self.get_compiler(connection=connection).as_sql()
+  1088-        if self.subquery:
+  1089-            sql = '(%s)' % sql
+  1090-        return sql, params
+  1091-
+  1092-    def resolve_lookup_value(self, value, can_reuse, allow_joins):
+  1093-        if hasattr(value, 'resolve_expression'):
+  1094-            value = value.resolve_expression(
+- [Test Output after action #16]
+  Exit code 1
+    File "test_subquery_fix.py", line 49
+      print(f"\n1. Query SQL (str(q.query)):")
+                                            ^
+  SyntaxError: invalid syntax
+- [Test Output after action #23]
+  Testing Subquery.as_sql() fix...
+
+  1. Query SQL (str(q.query)):
+     SELECT "test_model"."id", "test_model"."name" FROM "test_model"
+
+  2. Subquery as_sql() output:
+     SQL: (SELECT "test_model"."id", "test_model"."name" FROM "test_model")
+     Params: ()
+
+  ✓ SUCCESS: SQL starts with '(SELECT'
+  ✓ SUCCESS: SQL ends with ')'
+  ✓ SUCCESS: query.subquery is True
+
+  ============================================================
+  All tests passed! The fix is working correctly.
+  ============================================================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #25]
+  python3: can't open file 'testbed/tests/runtests.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Diagnostic Output after action #28]
+  ./tests/runtests.py
+- [Test Output after action #30]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Importing application queries
+  Found 295 test(s).
+  Skipping setup of unused database(s): other.
+  Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+  Operations to perform:
+    Synchronize unmigrated apps: auth, contenttypes, messages, queries, sessions, staticfiles
+    Apply all migrations: admin, sites
+  Synchronizing apps without migrations:
+    Creating tables...
+      Creating table django_content_type
+      Creating table auth_permission
+      Creating table auth_group
+      Creating table auth_user
+      Creating table django_session
+      Creating table queries_dumbcategory
+      Creating table queries_namedcategory
+      Creating table queries_tag
+      Creating table queries_
+  [... truncated ...]
+- [Test Output after action #32]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Found 295 test(s).
+  Creating test database for alias 'default'...
+  System check identified no issues (1 silenced).
+  ......s...........................x...........s.............x...........................................................................................................................................................................s..............................................................
+  ----------------------------------------------------------------------
+  Ran 295 tests in 0.456s
+
+  OK (skipped=3, expected failures=2)
+  Destroying test database for alias 'default'...
+- [Test Output after action #34]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Found 26 test(s).
+  Creating test database for alias 'default'...
+  System check identified no issues (0 silenced).
+  .......s.s........ss......
+  ----------------------------------------------------------------------
+  Ran 26 tests in 0.020s
+
+  OK (skipped=4)
+  Destroying test database for alias 'default'...
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/models/expressions.py
+  Tool: Edit action #14
+  old_text_sha256: f222e8aeb6baff5ca88e1be01d53d2a52b6ecce98f457ed76b454fa826cd42ea
+  new_text_sha256: 33934f3be0b5d86a5406cdd3b3b5f646f4c36c14ca5c3aa1c47c7fdef4472ef4
+- test_subquery_fix.py
+  Tool: Write action #15
+  new_text_sha256: 891e1cbf5b6448d136ef45979ef8caa9f071f6d7fda82cea6a0d71323e787ecd
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

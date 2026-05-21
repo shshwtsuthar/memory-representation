@@ -1,0 +1,352 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 367a86bb-70fe-4f9b-b806-b7ded8912f97
+- repo: django/django
+- instance_id: django__django-12700
+- base_commit: d51c50d836c5cf8db5566da17963f871be554615
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-12700
+base_commit: d51c50d836c5cf8db5566da17963f871be554615
+problem_statement:
+Settings are cleaned insufficiently.
+Description
+
+Posting publicly after checking with the rest of the security team.
+I just ran into a case where django.views.debug.SafeExceptionReporterFilter.get_safe_settings() would return several un-cleansed values. Looking at cleanse_setting() I realized that we ​only take care of `dict`s but don't take other types of iterables into account but ​return them as-is.
+Example:
+In my settings.py I have this:
+MY_SETTING = {
+    "foo": "value",
+    "secret": "value",
+    "token": "value",
+    "something": [
+        {"foo": "value"},
+        {"secret": "value"},
+        {"token": "value"},
+    ],
+    "else": [
+        [
+            {"foo": "value"},
+            {"secret": "value"},
+            {"token": "value"},
+        ],
+        [
+            {"foo": "value"},
+            {"secret": "value"},
+            {"token": "value"},
+        ],
+    ]
+}
+On Django 3.0 and below:
+>>> import pprint
+>>> from django.views.debug import get_safe_settings
+>>> pprint.pprint(get_safe_settings()["MY_SETTING"])
+{'else': [[{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}],
+         [{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}]],
+ 'foo': 'value',
+ 'secret': '********************',
+ 'something': [{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}],
+ 'token': '********************'}
+On Django 3.1 and up:
+>>> from django.views.debug import SafeExceptionReporterFilter
+>>> import pprint
+>>> pprint.pprint(SafeExceptionReporterFilter().get_safe_settings()["MY_SETTING"])
+{'else': [[{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}],
+         [{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}]],
+ 'foo': 'value',
+ 'secret': '********************',
+ 'something': [{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}],
+ 'token': '********************'}
+sha256: fd950db23d6be5fa9ab8464ab26458818099c33fff9f10b1140964c3095a43e4
+truncated: false
+
+[ADP ACTION current=1 original=3: code_action bash]
+payload:
+find . -name "*.py" -path "*/django/views/debug.py" | head -5
+sha256: 334572b81fc5aca3cfafd9ceb795f089a860edbbc67a6a0a00098497a567bad6
+truncated: false
+
+[ADP ACTION current=2 original=5: api_action Glob]
+payload:
+{
+  "pattern": "**/django/views/debug.py"
+}
+sha256: d1e08e25154d944b7043b88f16721e5f02d6a377026274afd80bb8f2d77e4b9d
+truncated: false
+
+[ADP ACTION current=3 original=23: code_action bash]
+payload:
+cd testbed && python test_issue.py
+sha256: 755bccdcc0ddd6dc650fc87b0d7d935d39ad3f67ffa489caf349cd2d343d854d
+truncated: false
+
+[ADP OBSERVATION current=4 original=24 source=environment]
+name: Bash:toolu_011psEU6J8Drzft1FVVmSzQH:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 62
+    current_path = f"{path}.{key}" if path else key
+                                 ^
+SyntaxError: invalid syntax
+sha256: 70f5edff2230994b7f84889046d16559f95e683aedc3cf61a72195ff81e105aa
+truncated: false
+
+[ADP ACTION current=5 original=25: code_action bash]
+payload:
+cd testbed && python --version
+sha256: 19e0b161ace94ed8a1cdd6ca50b2f0bacb8d5ccf88aee0ca59c5c35e14d9e171
+truncated: false
+
+[ADP OBSERVATION current=6 original=26 source=environment]
+name: Bash:toolu_01GaQapHKbVn1DYEJAoszkNV
+excerpt:
+Python 2.7.3
+sha256: c6d9bd2d561b074688a302920b8e73838fd3f7b4043465431748a1e3b85691fe
+truncated: false
+
+[ADP ACTION current=7 original=27: code_action bash]
+payload:
+cd testbed && python3 test_issue.py
+sha256: baf04b75792b270d8a87ad4b6be7f44ad04f084733d8e135766928c015d4824c
+truncated: false
+
+[ADP ACTION current=8 original=29: code_action bash]
+payload:
+python3 test_issue.py
+sha256: caa1b886ca27e8f9a0695e826942c66f50a20939e859caaa189c8657e939d9a3
+truncated: false
+
+[ADP OBSERVATION current=9 original=30 source=environment]
+name: Bash:toolu_01PC3N3oN7usprfEeGsW7Uj5:error
+excerpt:
+Exit code 1
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+
+Testing SafeExceptionReporterFilter.get_safe_settings()...
+
+Current output:
+{'else': [[{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}],
+          [{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}]],
+ 'foo': 'value',
+ 'secret': '********************',
+ 'something': [{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}],
+ 'token': '********************'}
+
+ISSUES FOUND:
+  - Key 'something[1].secret' has value 'value' but should be cleansed
+  - Key 'something[2].token' has value 'value' but should be cleansed
+  - Key 'else[0][1].secret' has value 'value' but should be cleansed
+  - Key 'else[0][2].token' has value 'value' but should be cleansed
+  - Key 'else[1][1].secret' has value 'value' but should be cleansed
+  - Key 'else[1][2].token' has value 'value' but should be cleansed
+
+The bug is confirmed - nested secrets are not being cleansed!
+sha256: d400e3084e8e2caa9cd1fa1e107a4ccef9f853992dbdddf06050952309a56906
+truncated: false
+
+[ADP ACTION current=10 original=39: code_action bash]
+payload:
+python3 test_issue.py
+sha256: f9cace63b7c5082ac61867515f23701e2c1b1965e0be90e1083a337b05b6ab18
+truncated: false
+
+[ADP OBSERVATION current=11 original=40 source=environment]
+name: Bash:toolu_01GNP42wuypueUN7DjvCzzjJ
+excerpt:
+Testing SafeExceptionReporterFilter.get_safe_settings()...
+
+Current output:
+{'else': [[{'foo': 'value'},
+           {'secret': '********************'},
+           {'token': '********************'}],
+          [{'foo': 'value'},
+           {'secret': '********************'},
+           {'token': '********************'}]],
+ 'foo': 'value',
+ 'secret': '********************',
+ 'something': [{'foo': 'value'},
+               {'secret': '********************'},
+               {'token': '********************'}],
+ 'token': '********************'}
+
+SUCCESS: All secrets are properly cleansed!
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: c9d28a3503f12ce9afc81fd5d71f75176dff0cce647577fc905843c89a5f94ed
+truncated: false
+
+[ADP ACTION current=12 original=41: code_action bash]
+payload:
+find testbed -path "*/tests/*" -name "*debug*" -o -path "*/tests/*" -name "*exception*" | grep -E "\.py$" | head -10
+sha256: b865a15de69d4a26b6a59f0177b9a50f91d50f6491b26e6089e6fe79452a4d08
+truncated: false
+
+[ADP ACTION current=13 original=43: api_action Glob]
+payload:
+{
+  "pattern": "testbed/tests/**/*debug*.py"
+}
+sha256: 07a9d0caeec3649daf6d7197ad7cf0dd49293a78d553155e29538d7640cc8a76
+truncated: false
+
+[ADP OBSERVATION current=14 original=44 source=environment]
+name: Glob:toolu_01TGmFG94CvPtzeeaEpMfAKR
+excerpt:
+./swebench_9_15/testbed/tests/test_runner/test_debug_sql.py
+./swebench_9_15/testbed/tests/view_tests/templatetags/debugtags.py
+./swebench_9_15/testbed/tests/view_tests/tests/test_debug.py
+sha256: e7edf4e80541f6b3ce8a9c8f25e92183cbe571915f79b4d3a22c56c146708319
+truncated: false
+
+[ADP ACTION current=15 original=47: code_action bash]
+payload:
+cd testbed && python3 -m pytest tests/view_tests/tests/test_debug.py::ExceptionReporterFilterTests::test_cleanse_setting_basic -xvs
+sha256: 2f2ff769d176c4738123461a7c104dbd40dc47a7dafd75b2ad7fd71d473ea31f
+truncated: false
+
+[ADP ACTION current=16 original=49: code_action bash]
+payload:
+python3 -m pytest tests/view_tests/tests/test_debug.py::ExceptionReporterFilterTests::test_cleanse_setting_basic -xvs
+sha256: 118051b9378a56a61e5afbff46327b93b86bf6a220495f126adfcedffe57315a
+truncated: false
+
+[ADP OBSERVATION current=17 original=50 source=environment]
+name: Bash:toolu_017qgBsmrLLNEYgR7qiVs4fm:error
+excerpt:
+Exit code 1
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+rootdir: ./swebench_9_15/testbed
+plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+collecting ... collected 1 item
+
+tests/view_tests/tests/test_debug.py::ExceptionReporterFilterTests::test_cleanse_setting_basic ERROR
+
+==================================== ERRORS ====================================
+__ ERROR at setup of ExceptionReporterFilterTests.test_cleanse_setting_basic ___
+
+cls = <class 'view_tests.tests.test_debug.ExceptionReporterFilterTests'>
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        if cls._overridden_settings:
+            cls._cls_overridden_context = override_settings(**cls._overridden_settings)
+            cls._cls_overridden_context.enable()
+        if cls._modified_settings:
+            cls._cls_modified_context = modify_settings(cls._modified_settings)
+            cls._cls_modified_context.enable()
+>       cls._add_databases_failures()
+
+django/test/testcases.py:181:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+django/test/testcases.py:203: in _add_databases_failures
+    for alias in connections:
+django/db/utils.py:226: in __iter__
+    return iter(self.databases)
+django/utils/functional.py:48: in __get__
+    res = instance.__dict__[
+sha256: a39ea7ff88c46e20529d175906345fd9f527509889b2de266441bb459c866ee5
+truncated: true
+
+[ADP ACTION current=18 original=51: code_action bash]
+payload:
+cd testbed && python3 tests/runtests.py view_tests.tests.test_debug.ExceptionReporterFilterTests.test_cleanse_setting_basic
+sha256: e9f9be0bf35ef9fef90efb0cff9f24083288b98d41edf1dffaa9a402a4dedf8b
+truncated: false
+
+[ADP ACTION current=19 original=55: code_action bash]
+payload:
+python3 tests/runtests.py view_tests.tests.test_debug.ExceptionReporterFilterTests.test_cleanse_setting_basic view_tests.tests.test_debug.ExceptionReporterFilterTests.test_cleanse_setting_recurses_in_dictionary --parallel 1
+sha256: d2de9bda4b34a406db5bb6223d006fc056a781cdab4ceaedc531d704c6a928d9
+truncated: false
+
+[ADP OBSERVATION current=20 original=56 source=environment]
+name: Bash:toolu_01RRGCENy78kzfc5PLEfWGFX
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django'
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.000s
+
+OK
+sha256: 821cd28057fe9a2259aa5de2b253b383cc392a02bd00a66f1f94a8dc2f5227b7
+truncated: false
+
+[ADP ACTION current=21 original=59: code_action bash]
+payload:
+cd ./swebench_9_15 && python3 test_issue.py
+sha256: f84dfc47433498cf3fdf37aa4740986cbacdba6deb0240e39ce2d6d0879a3c97
+truncated: false
+
+[ADP OBSERVATION current=22 original=60 source=environment]
+name: Bash:toolu_017ReBR9Fe9ssKpo643efYmc:error
+excerpt:
+Exit code 2
+python3: can't open file 'test_issue.py': [Errno 2] No such file or directory
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 9aff250e59b4e4a4b50e5aa18159ff00ee48549cb57affea568d20920447a448
+truncated: false
+
+[ADP ACTION current=23 original=61: code_action bash]
+payload:
+python3 test_issue.py 2>&1 | grep -A 20 "Current output:"
+sha256: bf8f94eaa83d5e1918d2215bac055fa6eceb7062a48bfe127f1c17b88fb29c13
+truncated: false

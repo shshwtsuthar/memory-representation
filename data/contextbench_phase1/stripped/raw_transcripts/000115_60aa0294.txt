@@ -1,0 +1,334 @@
+STRIPPED RAW CLAUDE CODE TRAJECTORY
+This transcript was rendered from original raw JSONL using the canonical ADP strip manifest.
+
+[RAW line 3 USER]
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-13933
+base_commit: 42e8cf47c7ee2db238bf91197ea398126c546741
+problem_statement:
+ModelChoiceField does not provide value of invalid choice when raising ValidationError
+Description
+
+        (last modified by Aaron Wiegel)
+
+Compared with ChoiceField and others, ModelChoiceField does not show the value of the invalid choice when raising a validation error. Passing in parameters with the invalid value and modifying the default error message for the code invalid_choice should fix this.
+From source code:
+class ModelMultipleChoiceField(ModelChoiceField):
+    """A MultipleChoiceField whose choices are a model QuerySet."""
+    widget = SelectMultiple
+    hidden_widget = MultipleHiddenInput
+    default_error_messages = {
+        'invalid_list': _('Enter a list of values.'),
+        'invalid_choice': _('Select a valid choice. %(value)s is not one of the'
+                            ' available choices.'),
+        'invalid_pk_value': _('“%(pk)s” is not a valid value.')
+    }
+    ...
+class ModelChoiceField(ChoiceField):
+    """A ChoiceField whose choices are a model QuerySet."""
+    # This class is a subclass of ChoiceField for purity, but it doesn't
+    # actually use any of ChoiceField's implementation.
+    default_error_messages = {
+        'invalid_choice': _('Select a valid choice. That choice is not one of'
+                            ' the available choices.'),
+    }
+    ...
+[RAW line 6 TOOL Bash]
+
+[RAW line 7 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "pattern": "class ModelChoiceField"
+}
+[RAW line 12 TOOL Bash]
+find ./swebench_9_15 -type d -name "django" | grep -E "testbed|repo" | head -3
+[RAW line 16 TOOL Bash]
+ls -la ./swebench_9_15/testbed 2>&1 | head -20
+[RAW line 31 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed",
+  "pattern": "class ModelChoiceField"
+}
+[RAW line 34 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "./swebench_9_15/testbed",
+  "pattern": "class ModelChoiceField"
+}
+[RAW line 35 TOOL RESULT toolu_016DTG28BuUyjAgbnQCX2eZZ]
+Found 3 files
+tests/model_forms/test_modelchoicefield.py
+tests/forms_tests/tests/test_error_messages.py
+django/forms/models.py
+[RAW line 37 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/django/forms/models.py"
+}
+[RAW line 38 TOOL RESULT toolu_013sV6s2HqP95YbiA49Jij2U]
+     1→"""
+     2→Helper functions for creating Form classes from Django models
+     3→and database field objects.
+     4→"""
+     5→from itertools import chain
+     6→
+     7→from django.core.exceptions import (
+     8→    NON_FIELD_ERRORS, FieldError, ImproperlyConfigured, ValidationError,
+     9→)
+    10→from django.forms.fields import ChoiceField, Field
+    11→from django.forms.forms import BaseForm, DeclarativeFieldsMetaclass
+    12→from django.forms.formsets import BaseFormSet, formset_factory
+    13→from django.forms.utils import ErrorList
+    14→from django.forms.widgets import (
+    15→    HiddenInput, MultipleHiddenInput, RadioSelect, SelectMultiple,
+    16→)
+    17→from django.utils.text import capfirst, get_text_list
+    18→from django.utils.translation import gettext, gettext_lazy as _
+    19→
+    20→__all__ = (
+    21→    'ModelForm', 'BaseModelForm', 'model_to_dict', 'fields_for_model',
+    22→    'ModelChoiceField', 'ModelMultipleChoiceField', 'ALL_FIELDS',
+    23→    'BaseModelFormSet', 'modelformset_factory', 'BaseInlineFormSet',
+    24→    'inlineformset_factory', 'modelform_factory',
+    25→)
+    26→
+    27→ALL_FIELDS = '__all__'
+    28→
+    29→
+    30→def construct_instance(form, instance, fields=None, exclude=None):
+    31→    """
+    32→    Construct and return a model instance from the bound ``form``'s
+    33→    ``cleaned_data``, but do not save the returned instance to the database.
+    34→    """
+    35→    from django.db import models
+    36→    opts = instance._meta
+    37→
+    38→    cleaned_data = form.cleaned_data
+    39→    file_field_list = []
+    40→    for f in opts.fields:
+    41→        if not f.editable or isinstance(f, models.AutoField) \
+    42→                or f.name not in cleaned_data:
+    43→            continue
+    44→        if fields is not None and f.name not in fields:
+    45→            continue
+    46→        if exclude and f.name in exclude:
+    47→            continue
+    48→        # Leave defaults for fields
+[... truncated ...]
+[RAW line 43 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/tests/model_forms/test_modelchoicefield.py",
+  "limit": 100
+}
+[RAW line 44 TOOL RESULT toolu_01F4TDofjoZKzVfqRao5WUeW]
+     1→import datetime
+     2→
+     3→from django import forms
+     4→from django.core.exceptions import ValidationError
+     5→from django.forms.models import ModelChoiceIterator
+     6→from django.forms.widgets import CheckboxSelectMultiple
+     7→from django.template import Context, Template
+     8→from django.test import TestCase
+     9→
+    10→from .models import Article, Author, Book, Category, Writer
+    11→
+    12→
+    13→class ModelChoiceFieldTests(TestCase):
+    14→    @classmethod
+    15→    def setUpTestData(cls):
+    16→        cls.c1 = Category.objects.create(name='Entertainment', slug='entertainment', url='entertainment')
+    17→        cls.c2 = Category.objects.create(name='A test', slug='test', url='test')
+    18→        cls.c3 = Category.objects.create(name='Third', slug='third-test', url='third')
+    19→
+    20→    def test_basics(self):
+    21→        f = forms.ModelChoiceField(Category.objects.all())
+    22→        self.assertEqual(list(f.choices), [
+    23→            ('', '---------'),
+    24→            (self.c1.pk, 'Entertainment'),
+    25→            (self.c2.pk, 'A test'),
+    26→            (self.c3.pk, 'Third'),
+    27→        ])
+    28→        with self.assertRaises(ValidationError):
+    29→            f.clean('')
+    30→        with self.assertRaises(ValidationError):
+    31→            f.clean(None)
+    32→        with self.assertRaises(ValidationError):
+    33→            f.clean(0)
+    34→
+    35→        # Invalid types that require TypeError to be caught.
+    36→        with self.assertRaises(ValidationError):
+    37→            f.clean([['fail']])
+    38→        with self.assertRaises(ValidationError):
+    39→            f.clean([{'foo': 'bar'}])
+    40→
+    41→        self.assertEqual(f.clean(self.c2.id).name, 'A test')
+    42→        self.assertEqual(f.clean(self.c3.id).name, 'Third')
+    43→
+    44→        # Add a Category object *after* the ModelChoiceField has already been
+    45→        # instantiated. This proves clean() ch
+[... truncated ...]
+[RAW line 46 TOOL Grep]
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/tests/forms_tests/tests",
+  "pattern": "ModelChoiceField.*invalid_choice"
+}
+[RAW line 47 TOOL RESULT toolu_01XR16H9fN6jt1obRA2EMhJH]
+No matches found
+[RAW line 49 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "./swebench_9_15/testbed",
+  "pattern": "class ChoiceField"
+}
+[RAW line 50 TOOL RESULT toolu_019hWiAMnKTgyrSxRAVshSqW]
+Found 4 files
+tests/forms_tests/tests/tests.py
+tests/forms_tests/models.py
+tests/forms_tests/field_tests/test_choicefield.py
+django/forms/fields.py
+[RAW line 52 TOOL Grep]
+{
+  "-A": 50,
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/django/forms/fields.py",
+  "pattern": "class ChoiceField"
+}
+[RAW line 53 TOOL RESULT toolu_01755exEiZCo6z59LPXCeQVi]
+764:class ChoiceField(Field):
+765-    widget = Select
+766-    default_error_messages = {
+767-        'invalid_choice': _('Select a valid choice. %(value)s is not one of the available choices.'),
+768-    }
+769-
+770-    def __init__(self, *, choices=(), **kwargs):
+771-        super().__init__(**kwargs)
+772-        self.choices = choices
+773-
+774-    def __deepcopy__(self, memo):
+775-        result = super().__deepcopy__(memo)
+776-        result._choices = copy.deepcopy(self._choices, memo)
+777-        return result
+778-
+779-    def _get_choices(self):
+780-        return self._choices
+781-
+782-    def _set_choices(self, value):
+783-        # Setting choices also sets the choices on the widget.
+784-        # choices can be any iterable, but we call list() on it because
+785-        # it will be consumed more than once.
+786-        if callable(value):
+787-            value = CallableChoiceIterator(value)
+788-        else:
+789-            value = list(value)
+790-
+791-        self._choices = self.widget.choices = value
+792-
+793-    choices = property(_get_choices, _set_choices)
+794-
+795-    def to_python(self, value):
+796-        """Return a string."""
+797-        if value in self.empty_values:
+798-            return ''
+799-        return str(value)
+800-
+801-    def validate(self, value):
+802-        """Validate that the input is in self.choices."""
+803-        super().validate(value)
+804-        if value and not self.valid_value(value):
+805-            raise ValidationError(
+806-                self.error_messages['invalid_choice'],
+807-                code='invalid_choice',
+808-                params={'value': value},
+809-            )
+810-
+811-    def valid_value(self, value):
+812-        """Check to see if the provided value is a valid choice."""
+813-        text_value = str(value)
+814-        for k, v in self.choices:
+[RAW line 58 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/django/forms/models.py",
+  "new_text_sha256": "2e2909fd119731200fd859e0f3c630ea779257e48335536e6d53a5756672ce65",
+  "old_text_sha256": "90da00cee84d2be3571b1f095c3e3bf86dd28d1af1bf11094b9555ab02e9ccbc"
+}
+[RAW line 62 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/django/forms/models.py",
+  "new_text_sha256": "5e57c74c1b0f0bdb5131c266facd3ef6111018e7b085fb58db4916aafdec6acc",
+  "old_text_sha256": "ded3597aeffa817f5189b025314bb483f98589fe6a054eee11f632cec1fe837f"
+}
+[RAW line 72 TOOL Bash]
+python test_issue.py
+[RAW line 73 TOOL RESULT toolu_01CFvGwePJfVr1eaVn64UYau]
+Exit code 1
+  File "test_issue.py", line 53
+    print(f"  - {obj1} (id={obj1.id})")
+                                     ^
+SyntaxError: invalid syntax
+[RAW line 78 TOOL Bash]
+python test_issue.py
+[RAW line 79 TOOL RESULT toolu_014isa6uBURxLPEKiBVh7w3C]
+Exit code 1
+  File "test_issue.py", line 64
+SyntaxError: Non-ASCII character '\xe2' in file test_issue.py on line 64, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+[RAW line 84 TOOL Bash]
+cd testbed && python test_issue.py
+[RAW line 87 TOOL Bash]
+python test_issue.py
+[RAW line 88 TOOL RESULT toolu_01MeLygRZrqc9H4qNmUMBZt6]
+Exit code 1
+Traceback (most recent call last):
+  File "test_issue.py", line 9, in <module>
+    import django
+  File "./swebench_9_15/testbed/django/__init__.py", line 1, in <module>
+    from django.utils.version import get_version
+  File "./swebench_9_15/testbed/django/utils/version.py", line 71, in <module>
+    @functools.lru_cache()
+AttributeError: 'module' object has no attribute 'lru_cache'
+[RAW line 90 TOOL Bash]
+python --version && python3 --version
+[RAW line 91 TOOL RESULT toolu_01NNpsYaQ6yKGuv3F6LLZPtU]
+Python 3.8.8
+Python 2.7.3
+[RAW line 93 TOOL Bash]
+python3 test_issue.py
+[RAW line 94 TOOL RESULT toolu_01GRBAophHCs74fKsks5ufjr]
+Created test objects:
+  - Object 1 (id=1)
+  - Object 2 (id=2)
+
+Test 1: Valid choice
+  ✓ Valid choice cleaned successfully: Object 1
+
+Test 2: Invalid choice should include value in error message
+  Error message: ['Select a valid choice. 999 is not one of the available choices.']
+  ✓ Error message includes the invalid value '999'
+
+Test 3: Invalid string choice should include value in error message
+  Error message: ['Select a valid choice. invalid_string is not one of the available choices.']
+  ✓ Error message includes the invalid value 'invalid_string'
+
+Test 4: Compare with ModelMultipleChoiceField (for consistency)
+  ModelMultipleChoiceField error: ['Select a valid choice. 999 is not one of the available choices.']
+  ✓ ModelMultipleChoiceField includes the value in error message
+
+============================================================
+Summary:
+ModelChoiceField should now include the invalid value in
+the error message, consistent with ChoiceField and
+ModelMultipleChoiceField.
+============================================================
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored

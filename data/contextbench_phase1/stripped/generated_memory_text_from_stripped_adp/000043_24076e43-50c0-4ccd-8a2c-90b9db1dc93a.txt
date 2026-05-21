@@ -1,0 +1,513 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 24076e43-50c0-4ccd-8a2c-90b9db1dc93a
+- repo: scikit-learn/scikit-learn
+- instance_id: scikit-learn__scikit-learn-14092
+- base_commit: df7dd8391148a873d157328a4f0328528a0c4ed9
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+NCA fails in GridSearch due to too strict parameter checks
+NCA checks its parameters to have a specific type, which can easily fail in a GridSearch due to how param grid is made.
+
+Here is an example:
+```python
+import numpy as np
+
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV
+from sklearn.neighbors import NeighborhoodComponentsAnalysis
+from sklearn.neighbors import KNeighborsClassifier
+
+X = np.random.random_sample((100, 10))
+y = np.random.randint(2, size=100)
+
+nca = NeighborhoodComponentsAnalysis()
+knn = KNeighborsClassifier()
+
+pipe = Pipeline([('nca', nca),
+                 ('knn', knn)])
+
+params = {'nca__tol': [0.1, 0.5, 1],
+          'nca__n_components': np.arange(1, 10)}
+
+gs = GridSearchCV(estimator=pipe, param_grid=params, error_score='raise')
+gs.fit(X,y)
+```
+
+The issue is that for `tol`: 1 is not a float, and for  `n_components`: np.int64 is not int
+
+Before proposing a fix for this specific situation, I'd like to have your general opinion about parameter checking.
+I like this idea of common parameter checking tool introduced with the NCA PR. What do you think about extending it across the code-base (or at least for new or recent estimators) ?
+
+Currently parameter checking is not always done or often partially done, and is quite redundant. For instance, here is the input validation of lda:
+```python
+def _check_params(self):
+        """Check model parameters."""
+        if self.n_components <= 0:
+            raise ValueError("Invalid 'n_components' parameter: %r"
+                             % self.n_components)
+
+        if self.total_samples <= 0:
+            raise ValueError("Invalid 'total_samples' parameter: %r"
+                             % self.total_samples)
+
+        if self.learning_offset < 0:
+            raise ValueError("Invalid 'learning_offset' parameter: %r"
+                             % self.learning_offset)
+
+        if self.learning_method not in ("batch", "online"):
+            raise ValueError("Invalid 'learning_method' parameter: %r"
+                             % self.learning_method)
+```
+most params aren't checked and for those who are there's a lot of duplicated code.
+
+A propose to be upgrade the new tool to be able to check open/closed intervals (currently only closed) and list membership.
+
+The api would be something like that:
+```
+check_param(param, name, valid_options)
+```
+where valid_options would be a dict of `type: constraint`. e.g for the `beta_loss` param of `NMF`, it can be either a float or a string in a list, which would give
+```
+valid_options = {numbers.Real: None,  # None for no constraint
+                 str: ['frobenius', 'kullback-leibler', 'itakura-saito']}
+```
+Sometimes a parameter can only be positive or within a given interval, e.g. `l1_ratio` of `LogisticRegression` must be between 0 and 1, which would give
+```
+valid_options = {numbers.Real: Interval(0, 1, closed='both')}
+```
+positivity of e.g. `max_iter` would be `numbers.Integral: Interval(left=1)`.
+
+FILES INSPECTED
+---------------
+- sklearn/neighbors/nca.py [Read: 3, Grep: 3]
+- sklearn/utils/validation.py [Grep: 1, Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='**/*.py'
+- [11] Grep pattern='def check_scalar' path='sklearn/utils/validation.py'
+- [39] Grep pattern='^import|^from' path='sklearn/neighbors/nca.py'
+- [40] Grep pattern='^import|^from' path='sklearn/neighbors/nca.py'
+- [45] Grep pattern='check_scalar.*warm_start' path='sklearn/neighbors/nca.py'
+- [61] Glob glob='output/*.json'
+- [64] Glob path='swebench_9_15' glob='*'
+- [66] Glob path='swebench_9_15/output' glob='**/*.json'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] cd ./swebench_9_15/testbed && find . -name "*neighborhood*" -type f | grep -v __pycache__ | head -20
+- [diagnostic] find testbed -name "*neighborhood*" -type f | grep -v __pycache__ | grep -v ".git"
+- [diagnostic] find testbed/sklearn -name "*.py" -type f | xargs grep -l "NeighborhoodComponentsAnalysis" | head -5
+- [diagnostic] find testbed/sklearn -name "*.py" -type f | xargs grep -l "def check_scalar" | head -3
+- [test] cd testbed && python test_bug.py
+- [test] cd testbed && python test_bug.py 2>&1 | head -50
+- [test] cd testbed && python test_bug.py 2>&1 | head -50
+- [test] python ./swebench_9_15/testbed/test_bug.py 2>&1 | head -50
+- [test] python ./swebench_9_15/test_bug.py 2>&1 | head -100
+- [diagnostic] python -c "import sklearn; print(sklearn.__version__); print(sklearn.__file__)"
+- [diagnostic] cd /tmp && python -c "import sklearn; print(sklearn.__version__); print(sklearn.__file__)"
+- [test] python ./swebench_9_15/test_fix.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named _check_build
+- Traceback (most recent call last):
+- ImportError: No module named _check_build
+- ImportError: No module named sklearn
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #2]
+  ./swebench_9_15/calculate_session_usage.py
+- [Diagnostic Output after action #5]
+  testbed/sklearn/neighbors/tests/test_nca.py
+  testbed/sklearn/neighbors/__init__.py
+  testbed/sklearn/neighbors/nca.py
+- [Read Result after action #7]
+       1→# coding: utf-8
+       2→"""
+       3→Neighborhood Component Analysis
+       4→"""
+       5→
+       6→# Authors: William de Vazelhes <wdevazelhes@gmail.com>
+       7→#          John Chiotellis <ioannis.chiotellis@in.tum.de>
+       8→# License: BSD 3 clause
+       9→
+      10→from __future__ import print_function
+      11→
+      12→from warnings import warn
+      13→import numpy as np
+      14→import sys
+      15→import time
+      16→from scipy.optimize import minimize
+      17→from ..utils.extmath import softmax
+      18→from ..metrics import pairwise_distances
+      19→from ..base import BaseEstimator, TransformerMixin
+      20→from ..preprocessing import LabelEncoder
+      21→from ..decomposition import PCA
+      22→from ..utils.multiclass import check_classification_targets
+      23→from ..utils.random import check_random_state
+      24→from ..utils.validation import (check_is_fitted, check_array, check_X_y,
+      25→                                check_scalar)
+      26→from ..exceptions import ConvergenceWarning
+      27→
+      28→
+      29→class NeighborhoodComponentsAnalysis(BaseEstimator, TransformerMixin):
+      30→    """Neighborhood Components Analysis
+      31→
+      32→    Neighborhood Component Analysis (NCA) is a machine
+  [... truncated ...]
+- [Diagnostic Output after action #9]
+  testbed/sklearn/utils/validation.py
+- [Grep Result after action #11]
+  944:def check_scalar(x, name, target_type, min_val=None, max_val=None):
+  945-    """Validate scalar parameters type and value.
+  946-
+  947-    Parameters
+  948-    ----------
+  949-    x : object
+  950-        The scalar parameter to validate.
+  951-
+  952-    name : str
+  953-        The name of the parameter to be printed in error messages.
+  954-
+  955-    target_type : type or tuple
+  956-        Acceptable data types for the parameter.
+  957-
+  958-    min_val : float or int, optional (default=None)
+  959-        The minimum valid value the parameter can take. If None (default) it
+  960-        is implied that the parameter does not have a lower bound.
+  961-
+  962-    max_val : float or int, optional (default=None)
+  963-        The maximum valid value the parameter can take. If None (default) it
+  964-        is implied that the parameter does not have an upper bound.
+  965-
+  966-    Raises
+  967-    -------
+  968-    TypeError
+  969-        If the parameter's type does not match the desired type.
+  970-
+  971-    ValueError
+  972-        If the parameter's value violates the given bounds.
+  973-    """
+  974-
+  975-    if not isinstance(x, target_type):
+  976-        raise TypeError('`{}` must be an instance of {}, not {}.'
+  977-
+  [... truncated ...]
+- [Test Output after action #14]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_bug.py", line 3, in <module>
+      from sklearn.pipeline import Pipeline
+    File "./swebench_9_15/testbed/sklearn/__init__.py", line 75, in <module>
+      from . import __check_build
+    File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 46, in <module>
+      raise_build_error(e)
+    File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 41, in raise_build_error
+      %s""" % (e, local_dir, ''.join(dir_content).strip(), msg))
+  ImportError: No module named _check_build
+  ___________________________________________________________________________
+  Contents of ./swebench_9_15/testbed/sklearn/__check_build:
+  __init__.py               setup.py                  __init__.pyc
+  _check_build.pyx
+  ___________________________________________________________________________
+  It seems that scikit-learn has not been built correctly.
+
+  If you have installed scikit-learn from source, please do not forget
+  to build the package before using it: run `python setup.py install` or
+  `make` in the source directory.
+
+  If you have used an installer, please check that it is suited for your
+  Python version, your operating system and your pla
+  [... truncated ...]
+- [Test Output after action #24]
+  python: can't open file 'test_bug.py': [Errno 2] No such file or directory
+- [Test Output after action #26]
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_bug.py", line 3, in <module>
+      from sklearn.pipeline import Pipeline
+    File "./swebench_9_15/testbed/sklearn/__init__.py", line 75, in <module>
+      from . import __check_build
+    File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 46, in <module>
+      raise_build_error(e)
+    File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 41, in raise_build_error
+      %s""" % (e, local_dir, ''.join(dir_content).strip(), msg))
+  ImportError: No module named _check_build
+  ___________________________________________________________________________
+  Contents of ./swebench_9_15/testbed/sklearn/__check_build:
+  __init__.py               __pycache__               _check_build.c
+  setup.py                  __init__.pyc              _check_build.pyx
+  _check_build.cpython-38-darwin.so
+  ___________________________________________________________________________
+  It seems that scikit-learn has not been built correctly.
+
+  If you have installed scikit-learn from source, please do not forget
+  to build the package before using it: run `python setup.py install` or
+  `make` in the source directory.
+
+  If you have used an i
+  [... truncated ...]
+- [Test Output after action #29]
+  Traceback (most recent call last):
+    File "./swebench_9_15/test_bug.py", line 7, in <module>
+      from sklearn.pipeline import Pipeline
+    File "./swebench_9_15/testbed/sklearn/__init__.py", line 75, in <module>
+      from . import __check_build
+    File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 46, in <module>
+      raise_build_error(e)
+    File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 41, in raise_build_error
+      %s""" % (e, local_dir, ''.join(dir_content).strip(), msg))
+  ImportError: No module named _check_build
+  ___________________________________________________________________________
+  Contents of ./swebench_9_15/testbed/sklearn/__check_build:
+  __init__.py               __pycache__               _check_build.c
+  setup.py                  __init__.pyc              _check_build.pyx
+  _check_build.cpython-38-darwin.so
+  ___________________________________________________________________________
+  It seems that scikit-learn has not been built correctly.
+
+  If you have installed scikit-learn from source, please do not forget
+  to build the package before using it: run `python setup.py install` or
+  `make` in the source directory.
+
+  If you have used an installer
+  [... truncated ...]
+- [Diagnostic Output after action #31]
+  Exit code 1
+  Traceback (most recent call last):
+    File "<string>", line 1, in <module>
+    File "sklearn/__init__.py", line 75, in <module>
+      from . import __check_build
+    File "sklearn/__check_build/__init__.py", line 46, in <module>
+      raise_build_error(e)
+    File "sklearn/__check_build/__init__.py", line 41, in raise_build_error
+      %s""" % (e, local_dir, ''.join(dir_content).strip(), msg))
+  ImportError: No module named _check_build
+  ___________________________________________________________________________
+  Contents of sklearn/__check_build:
+  __init__.py               __pycache__               _check_build.c
+  setup.py                  __init__.pyc              _check_build.pyx
+  _check_build.cpython-38-darwin.so
+  ___________________________________________________________________________
+  It seems that scikit-learn has not been built correctly.
+
+  If you have installed scikit-learn from source, please do not forget
+  to build the package before using it: run `python setup.py install` or
+  `make` in the source directory.
+
+  It appears that you are importing a local scikit-learn source tree. For
+  this, you need to have an inplace install. Maybe you are in the source
+  directory and you need to try f
+  [... truncated ...]
+- [Diagnostic Output after action #33]
+  Exit code 1
+  Traceback (most recent call last):
+    File "<string>", line 1, in <module>
+  ImportError: No module named sklearn
+- [Read Result after action #35]
+     940→    if X_min < 0:
+     941→        raise ValueError("Negative values in data passed to %s" % whom)
+     942→
+     943→
+     944→def check_scalar(x, name, target_type, min_val=None, max_val=None):
+     945→    """Validate scalar parameters type and value.
+     946→
+     947→    Parameters
+     948→    ----------
+     949→    x : object
+     950→        The scalar parameter to validate.
+     951→
+     952→    name : str
+     953→        The name of the parameter to be printed in error messages.
+     954→
+     955→    target_type : type or tuple
+     956→        Acceptable data types for the parameter.
+     957→
+     958→    min_val : float or int, optional (default=None)
+     959→        The minimum valid value the parameter can take. If None (default) it
+     960→        is implied that the parameter does not have a lower bound.
+     961→
+     962→    max_val : float or int, optional (default=None)
+     963→        The maximum valid value the parameter can take. If None (default) it
+     964→        is implied that the parameter does not have an upper bound.
+     965→
+     966→    Raises
+     967→    -------
+     968→    TypeError
+     969→        If the parameter's type does not match the desired type.
+     970→
+     971→    ValueError
+  [... truncated ...]
+- [Read Result after action #37]
+       0→"""Utilities for input validation"""
+       1→
+       2→# Authors: Olivier Grisel
+       3→#          Gael Varoquaux
+       4→#          Andreas Mueller
+       5→#          Lars Buitinck
+       6→#          Alexandre Gramfort
+       7→#          Nicolas Tresegnie
+       8→# License: BSD 3 clause
+       9→
+      10→import warnings
+      11→import numbers
+      12→
+      13→import numpy as np
+      14→import scipy.sparse as sp
+      15→from distutils.version import LooseVersion
+      16→from inspect import signature
+      17→
+      18→from numpy.core.numeric import ComplexWarning
+      19→
+      20→from .fixes import _object_dtype_isnan
+      21→from .. import get_config as _get_config
+      22→from ..exceptions import NonBLASDotWarning
+      23→from ..exceptions import NotFittedError
+      24→from ..exceptions import DataConversionWarning
+      25→from ._joblib import Memory
+      26→from ._joblib import __version__ as joblib_version
+      27→
+      28→FLOAT_DTYPES = (np.float64, np.float32, np.float16)
+      29→
+
+- [Grep Result after action #40]
+  10:from __future__ import print_function
+  12:from warnings import warn
+  13:import numpy as np
+  14:import sys
+  15:import time
+  16:from scipy.optimize import minimize
+  17:from ..utils.extmath import softmax
+  18:from ..metrics import pairwise_distances
+  19:from ..base import BaseEstimator, TransformerMixin
+  20:from ..preprocessing import LabelEncoder
+  21:from ..decomposition import PCA
+  22:from ..utils.multiclass import check_classification_targets
+  23:from ..utils.random import check_random_state
+  24:from ..utils.validation import (check_is_fitted, check_array, check_X_y,
+  26:from ..exceptions import ConvergenceWarning
+- [Grep Result after action #45]
+  313:        check_scalar(self.warm_start, 'warm_start', bool)
+- [Test Output after action #48]
+  Exit code 1
+    File "./swebench_9_15/test_fix.py", line 9
+      print(f"isinstance(1, numbers.Real): {isinstance(1, numbers.Real)}")
+                                                                        ^
+  SyntaxError: invalid syntax
+- [Test Output after action #51]
+  Exit code 1
+    File "./swebench_9_15/test_fix.py", line 26
+  SyntaxError: Non-ASCII character '\xe2' in file ./swebench_9_15/test_fix.py on line 26, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+- [Test Output after action #54]
+  Testing numeric type hierarchy...
+  isinstance(1, numbers.Real): True
+  isinstance(1.0, numbers.Real): True
+  isinstance(np.int64(1), numbers.Integral): True
+  isinstance(np.int32(1), numbers.Integral): True
+  isinstance(1, numbers.Integral): True
+  ()
+  Testing check_scalar with numbers.Integral:
+  [PASS] check_scalar passed for test_int=1 (type=int)
+  [PASS] check_scalar passed for test_np_int64=5 (type=int64)
+  [PASS] check_scalar passed for test_np_int32=3 (type=int32)
+
+  Testing check_scalar with numbers.Real:
+  [PASS] check_scalar passed for test_float=0.1 (type=float)
+  [PASS] check_scalar passed for test_float2=0.5 (type=float)
+  [PASS] check_scalar passed for test_int_as_real=1 (type=int)
+
+  All type checks passed!
+- [Read Result after action #56]
+      10→from __future__ import print_function
+      11→
+      12→from warnings import warn
+      13→import numbers
+      14→import numpy as np
+      15→import sys
+      16→import time
+      17→from scipy.optimize import minimize
+      18→from ..utils.extmath import softmax
+      19→from ..metrics import pairwise_distances
+      20→from ..base import BaseEstimator, TransformerMixin
+      21→from ..preprocessing import LabelEncoder
+      22→from ..decomposition import PCA
+      23→from ..utils.multiclass import check_classification_targets
+      24→from ..utils.random import check_random_state
+      25→from ..utils.validation import (check_is_fitted, check_array, check_X_y,
+      26→                                check_scalar)
+      27→from ..exceptions import ConvergenceWarning
+      28→
+      29→
+
+- [Read Result after action #58]
+     300→
+     301→        # Check the preferred dimensionality of the projected space
+     302→        if self.n_components is not None:
+     303→            check_scalar(self.n_components, 'n_components', numbers.Integral, 1)
+     304→
+     305→            if self.n_components > X.shape[1]:
+     306→                raise ValueError('The preferred dimensionality of the '
+     307→                                 'projected space `n_components` ({}) cannot '
+     308→                                 'be greater than the given data '
+     309→                                 'dimensionality ({})!'
+     310→                                 .format(self.n_components, X.shape[1]))
+     311→
+     312→        # If warm_start is enabled, check that the inputs are consistent
+     313→        check_scalar(self.warm_start, 'warm_start', bool)
+     314→        if self.warm_start and hasattr(self, 'components_'):
+     315→            if self.components_.shape[1] != X.shape[1]:
+     316→                raise ValueError('The new inputs dimensionality ({}) does not '
+     317→                                 'match the input dimensionality of the '
+     318→                                 'previously learned transformation ({}).'
+
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sklearn/neighbors/nca.py
+  Tool: Edit action #42
+  old_text_sha256: ab177ee5964eb09ab31a69fadb93ef17386d2b2291eb6e966855c34c11cf6d05
+  new_text_sha256: 33dc9b59fa36a3b4112666e9bb757a3925da07377f864a4cc39cc4711aa00f39
+- sklearn/neighbors/nca.py
+  Tool: Edit action #43
+  old_text_sha256: 7868594e605e11df5f18420fd554f461db2ce7ae521ff54a904d5a878e8828f8
+  new_text_sha256: bcc6f6dc65791c58fbe0c7ac055b93b1ca1f428758be2eb2a150c7e6e1dfe957
+- sklearn/neighbors/nca.py
+  Tool: Edit action #44
+  old_text_sha256: 259ff0c4d35b1875ad89b15614dab06d87ed3b3b5d86fbeeb0d00befa671b0bd
+  new_text_sha256: 60f5d2a985c286425adce827ef9396416fc96ae3dfcf672d2551e349e9aa55f8
+- test_bug.py
+  Tool: Write action #13
+  new_text_sha256: c0731e45ba248ca3ad6470bca6e0eb58907f55123f0445d4269e508265a29205
+- test_bug.py
+  Tool: Write action #23
+  new_text_sha256: c0731e45ba248ca3ad6470bca6e0eb58907f55123f0445d4269e508265a29205
+- swebench_9_15/test_bug.py
+  Tool: Write action #28
+  new_text_sha256: e8fce4100874c39123485660b6d4483b44eea35a90b5a4b3a3348babb5aa7434
+- swebench_9_15/test_fix.py
+  Tool: Write action #47
+  new_text_sha256: 255a03ea4d23f7ede16b6a1ba51474d8341087b99f6b0ba50de97928fd6d0e4a
+- swebench_9_15/test_fix.py
+  Tool: Write action #50
+  new_text_sha256: 80a8c9bf1cc7c2ec4d49daba80bcb58923a891b2e7a64572d5aa210182722e73
+- swebench_9_15/test_fix.py
+  Tool: Write action #53
+  new_text_sha256: f56fb16a9d6de99523aa22ec777a238226d7edab761fd66897e2f694e79af5e0
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

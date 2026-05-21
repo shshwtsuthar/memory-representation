@@ -1,0 +1,588 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 9cb8c2d0-1c62-4d71-8763-b81e6c555739
+- repo: sympy/sympy
+- instance_id: sympy__sympy-21612
+- base_commit: b4777fdcef467b7132c055f8ac2c9a5059e6a145
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Latex parsing of fractions yields wrong expression due to missing brackets
+Problematic latex expression: `"\\frac{\\frac{a^3+b}{c}}{\\frac{1}{c^2}}"`
+
+is parsed to: `((a**3 + b)/c)/1/(c**2)`.
+
+Expected is: `((a**3 + b)/c)/(1/(c**2))`.
+
+The missing brackets in the denominator result in a wrong expression.
+
+## Tested on
+
+- 1.8
+- 1.6.2
+
+## Reproduce:
+
+```
+root@d31ef1c26093:/# python3
+Python 3.6.9 (default, Jan 26 2021, 15:33:00)
+[GCC 8.4.0] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+>>> from sympy.parsing.latex import parse_latex
+>>> parse_latex("\\frac{\\frac{a^3+b}{c}}{\\frac{1}{c^2}}")
+((a**3 + b)/c)/1/(c**2)
+
+FILES INSPECTED
+---------------
+- sympy/parsing/latex/_parse_latex_antlr.py [Read: 6, Grep: 1]
+- sympy/parsing/latex/README.md [Read: 1]
+- sympy/parsing/tests/test_latex.py [Grep: 2, Read: 2]
+- sympy/parsing/latex/ [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [14] Glob glob='testbed/sympy/parsing/latex/**/*.g4'
+- [29] Grep pattern='^def convert_expr' path='sympy/parsing/latex/_parse_latex_antlr.py'
+- [42] Grep pattern='frac.*frac' path='sympy/parsing/tests/test_latex.py'
+- [56] Grep pattern='if expr_top == 1' path='sympy/parsing/latex/'
+- [64] Grep pattern='def test_' path='sympy/parsing/tests/test_latex.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15 -name "_parse_latex_antlr.py" 2>/dev/null | head -5
+- [other/reproduction] cd testbed && python3 -c "from sympy.parsing.latex import parse_latex; result = parse_latex(r'\frac{\frac{a^3+b}{c}}{\frac{1}{c^2}}'); print(result)"
+- [other/reproduction] cd testbed && python3 -c "from sympy.parsing.latex import parse_latex; result = parse_latex(r'\frac{\frac{a^3+b}{c}}{\frac{1}{c^2}}'); print(result)"
+- [other/reproduction] python3 -c "import sys; sys.path.insert(0, 'testbed'); from sympy.parsing.latex import parse_latex; result = parse_latex(r'\frac{\frac{a^3+b}{c}}{\frac{1}{c^2}}'); print(result)"
+- [diagnostic] ls testbed/sympy/parsing/latex/_antlr/ 2>/dev/null || echo "Directory does not exist"
+- [diagnostic] find testbed/sympy/parsing/latex -name "*.sh" -o -name "*.py" | grep -E "(build|gen)" | head -5
+- [other/reproduction] python3 -c "from sympy.parsing.latex import parse_latex; result = parse_latex(r'\frac{\frac{a^3+b}{c}}{\frac{1}{c^2}}'); print(result)"
+- [diagnostic] ls sympy/parsing/latex/
+- [other/reproduction] python3 sympy/parsing/latex/_build_latex_antlr.py
+- [test] python test_issue.py
+- [test] python3 test_issue.py
+- [diagnostic] find sympy/parsing/latex -name "*.py" | grep -i lark
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError while loading conftest './swebench_9_15/testbed/conftest.py'.
+- E   TypeError: Tried to dispatch on non-type: [<class 'object'>]
+- E   In signature: <[<class 'object'>]>
+- E   In function: etuple
+- Traceback (most recent call last):
+- TypeError: 'NoneType' object is not callable
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #10]
+       1→# Ported from latex2sympy by @augustt198
+       2→# https://github.com/augustt198/latex2sympy
+       3→# See license in LICENSE.txt
+       4→
+       5→import sympy
+       6→from sympy.external import import_module
+       7→from sympy.printing.str import StrPrinter
+       8→from sympy.physics.quantum.state import Bra, Ket
+       9→
+      10→from .errors import LaTeXParsingError
+      11→
+      12→
+      13→LaTeXParser = LaTeXLexer = MathErrorListener = None
+      14→
+      15→try:
+      16→    LaTeXParser = import_module('sympy.parsing.latex._antlr.latexparser',
+      17→                                import_kwargs={'fromlist': ['LaTeXParser']}).LaTeXParser
+      18→    LaTeXLexer = import_module('sympy.parsing.latex._antlr.latexlexer',
+      19→                               import_kwargs={'fromlist': ['LaTeXLexer']}).LaTeXLexer
+      20→except Exception:
+      21→    pass
+      22→
+      23→ErrorListener = import_module('antlr4.error.ErrorListener',
+      24→                              warn_not_installed=True,
+      25→                              import_kwargs={'fromlist': ['ErrorListener']}
+      26→                              )
+      27→
+      28→
+      29→
+      30→if ErrorListener:
+      31→    class MathErrorListener(Err
+  [... truncated ...]
+- [Diagnostic Output after action #12]
+  Directory does not exist
+- [Glob Result after action #14]
+  ./swebench_9_15/testbed/sympy/parsing/latex/LaTeX.g4
+- [Diagnostic Output after action #20]
+  LICENSE.txt
+  LaTeX.g4
+  __init__.py
+  __pycache__
+  _antlr
+  _build_latex_antlr.py
+  _parse_latex_antlr.py
+  errors.py
+- [Test Output after action #25]
+  Current output (buggy):
+    Expression: (a**3 + b)/c**3
+    Simplified: (a**3 + b)/c**3
+
+  Expected output (correct):
+    Expression: c*(a**3 + b)
+    Simplified: c*(a**3 + b)
+
+  Are they equal? False
+
+  Current structure (as Mul/Pow):
+    Numerator fraction: (a**3 + b)/c
+    Denominator fraction: 1/c**2
+    Result with Pow(denominator, -1): ((a**3 + b)/c)/((1/c**2))
+    Simplified: c*(a**3 + b)
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Read Result after action #27]
+     340→    stopIdx = ctx.stop.stop
+     341→
+     342→    return stream.getText(startIdx, stopIdx)
+     343→
+     344→
+     345→def convert_frac(frac):
+     346→    diff_op = False
+     347→    partial_op = False
+     348→    lower_itv = frac.lower.getSourceInterval()
+     349→    lower_itv_len = lower_itv[1] - lower_itv[0] + 1
+     350→    if (frac.lower.start == frac.lower.stop
+     351→            and frac.lower.start.type == LaTeXLexer.DIFFERENTIAL):
+     352→        wrt = get_differential_var_str(frac.lower.start.text)
+     353→        diff_op = True
+     354→    elif (lower_itv_len == 2 and frac.lower.start.type == LaTeXLexer.SYMBOL
+     355→          and frac.lower.start.text == '\\partial'
+     356→          and (frac.lower.stop.type == LaTeXLexer.LETTER
+     357→               or frac.lower.stop.type == LaTeXLexer.SYMBOL)):
+     358→        partial_op = True
+     359→        wrt = frac.lower.stop.text
+     360→        if frac.lower.stop.type == LaTeXLexer.SYMBOL:
+     361→            wrt = wrt[1:]
+     362→
+     363→    if diff_op or partial_op:
+     364→        wrt = sympy.Symbol(wrt)
+     365→        if (diff_op and frac.upper.start == frac.upper.stop
+     366→                and frac.upper.start.type == LaTeXLexer.LETTER
+  [... truncated ...]
+- [Grep Result after action #29]
+  110:def convert_expr(expr):
+- [Read Result after action #31]
+     110→def convert_expr(expr):
+     111→    return convert_add(expr.additive())
+     112→
+     113→
+     114→def convert_add(add):
+     115→    if add.ADD():
+     116→        lh = convert_add(add.additive(0))
+     117→        rh = convert_add(add.additive(1))
+     118→        return sympy.Add(lh, rh, evaluate=False)
+     119→    elif add.SUB():
+     120→        lh = convert_add(add.additive(0))
+     121→        rh = convert_add(add.additive(1))
+     122→        return sympy.Add(lh, sympy.Mul(-1, rh, evaluate=False),
+     123→                         evaluate=False)
+     124→    else:
+     125→        return convert_mp(add.mp())
+     126→
+     127→
+     128→def convert_mp(mp):
+     129→    if hasattr(mp, 'mp'):
+     130→        mp_left = mp.mp(0)
+     131→        mp_right = mp.mp(1)
+     132→    else:
+     133→        mp_left = mp.mp_nofunc(0)
+     134→        mp_right = mp.mp_nofunc(1)
+     135→
+     136→    if mp.MUL() or mp.CMD_TIMES() or mp.CMD_CDOT():
+     137→        lh = convert_mp(mp_left)
+     138→        rh = convert_mp(mp_right)
+     139→        return sympy.Mul(lh, rh, evaluate=False)
+     140→    elif mp.DIV() or mp.CMD_DIV() or mp.COLON():
+     141→        lh = convert_mp(mp_left)
+     142→        rh = convert_mp(mp_right)
+     143→
+  [... truncated ...]
+- [Diagnostic Output after action #34]
+  LICENSE.txt
+  LaTeX.g4
+  __init__.py
+  __pycache__
+  _antlr
+  _build_latex_antlr.py
+  _parse_latex_antlr.py
+  errors.py
+
+  sympy/parsing/latex//__pycache__:
+  __init__.cpython-38.pyc
+  _parse_latex_antlr.cpython-38.pyc
+  errors.cpython-38.pyc
+
+  sympy/parsing/latex//_antlr:
+  __init__.py
+  __pycache__
+  latexlexer.py
+  latexparser.py
+
+  sympy/parsing/latex//_antlr/__pycache__:
+  __init__.cpython-38.pyc
+  latexparser.cpython-38.pyc
+- [Read Result after action #38]
+      13→LaTeXParser = LaTeXLexer = MathErrorListener = None
+      14→
+      15→try:
+      16→    LaTeXParser = import_module('sympy.parsing.latex._antlr.latexparser',
+      17→                                import_kwargs={'fromlist': ['LaTeXParser']}).LaTeXParser
+      18→    LaTeXLexer = import_module('sympy.parsing.latex._antlr.latexlexer',
+      19→                               import_kwargs={'fromlist': ['LaTeXLexer']}).LaTeXLexer
+      20→except Exception:
+      21→    pass
+      22→
+      23→ErrorListener = import_module('antlr4.error.ErrorListener',
+      24→                              warn_not_installed=True,
+      25→                              import_kwargs={'fromlist': ['ErrorListener']}
+      26→                              )
+      27→
+      28→
+      29→
+      30→if ErrorListener:
+      31→    class MathErrorListener(ErrorListener.ErrorListener):  # type: ignore
+      32→        def __init__(self, src):
+      33→            super(ErrorListener.ErrorListener, self).__init__()
+      34→            self.src = src
+      35→
+      36→        def syntaxError(self, recog, symbol, line, col, msg, e):
+      37→            fmt = "%s\n%s\n%s"
+
+- [Grep Result after action #42]
+  162-    (r"\int \frac{3 dz}{z}", Integral(3*Pow(z, -1), z)),
+  163-    (r"\int \frac{1}{x} dx", Integral(Pow(x, -1), x)),
+  164:    (r"\int \frac{1}{a} + \frac{1}{b} dx",
+  165-     Integral(_Add(_Pow(a, -1), Pow(b, -1)), x)),
+  166-    (r"\int \frac{3 \cdot d\theta}{\theta}",
+  --
+  278-    r"((((((((((((((((()))))))))))))))))",
+  279-    r"-",
+  280:    r"\frac{d}{dx} + \frac{d}{dt}",
+  281-    r"f(x,,y)",
+  282-    r"f(x,y,",
+- [Test Output after action #45]
+  ============================================================
+  Testing nested fraction parsing logic
+  ============================================================
+
+  Step 1: Parse inner numerator fraction \frac{a^3+b}{c}
+    Result: (a**3 + b)/c
+
+  Step 2: Parse inner denominator fraction \frac{1}{c^2}
+    Result: 1/(c**2)
+
+  Step 3: Parse outer fraction with results from steps 1 and 2
+    Numerator (expr_top): (a**3 + b)/c
+    Denominator (expr_bot): 1/(c**2)
+    Pow(expr_bot, -1): 1/(1/(c**2))
+    Final result: ((a**3 + b)/c)/1/(c**2)
+    Simplified: c*(a**3 + b)
+
+  ============================================================
+  Expected result:
+    c*(a**3 + b)
+    Simplified: c*(a**3 + b)
+
+  Are they equal? True
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #50]
+  Inner numerator: (a**3 + b)/c
+  Inner numerator type: <class 'sympy.core.mul.Mul'>
+  Inner numerator args: (a**3 + b, 1/c)
+
+  Inner denominator: 1/(c**2)
+  Inner denominator type: <class 'sympy.core.power.Pow'>
+  Inner denominator args: (c**2, -1)
+
+  Outer inverse_denom: 1/(1/(c**2))
+  Outer inverse_denom type: <class 'sympy.core.power.Pow'>
+  Outer inverse_denom args: (1/(c**2), -1)
+
+  Final result: ((a**3 + b)/c)/1/(c**2)
+  Final result type: <class 'sympy.core.mul.Mul'>
+  Final result args: ((a**3 + b)/c, 1/(1/(c**2)))
+
+  Result tree:
+  Mul(Mul(Pow(Symbol('c'), Integer(-1)), Add(Pow(Symbol('a'), Integer(3)), Symbol('b'))), Pow(Pow(Pow(Symbol('c'), Integer(2)), Integer(-1)), Integer(-1)))
+
+  Simplified: c*(a**3 + b)
+
+  Expected (with Mul(1, ...)): ((a**3 + b)/c)/((1/c**2))
+  Expected simplified: c*(a**3 + b)
+  Expected tree:
+  Mul(Pow(Mul(Integer(1), Pow(Pow(Symbol('c'), Integer(2)), Integer(-1))), Integer(-1)), Mul(Pow(Symbol('c'), Integer(-1)), Add(Pow(Symbol('a'), Integer(3)), Symbol('b'))))
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+
+  [... truncated ...]
+- [Test Output after action #53]
+  ============================================================
+  CURRENT BEHAVIOR (with optimization)
+  ============================================================
+  Inner denominator: 1/(c**2)
+  Inner denominator type: <class 'sympy.core.power.Pow'>
+  Current result: ((a**3 + b)/c)/1/(c**2)
+  Current simplified: c*(a**3 + b)
+
+  ============================================================
+  FIXED BEHAVIOR (without optimization)
+  ============================================================
+  Inner denominator (fixed): 1/c**2
+  Inner denominator (fixed) type: <class 'sympy.core.mul.Mul'>
+  Fixed result: ((a**3 + b)/c)/((1/c**2))
+  Fixed simplified: c*(a**3 + b)
+
+  ============================================================
+  COMPARISON
+  ============================================================
+  Current: ((a**3 + b)/c)/1/(c**2)
+  Fixed:   ((a**3 + b)/c)/((1/c**2))
+
+  Both simplify to same value? True
+
+  Checking string representation ambiguity:
+  Current string can be evaluated incorrectly:
+    String: ((a**3 + b)/c)/1/(c**2)
+    Evaluates to: (a**3 + b)/c**3
+    Different from intended? True
+
+  Fixed string has proper grouping:
+    String: ((a**3 + b)/c)/((1/c**2))
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-pac
+  [... truncated ...]
+- [Read Result after action #57]
+     128→def convert_mp(mp):
+     129→    if hasattr(mp, 'mp'):
+     130→        mp_left = mp.mp(0)
+     131→        mp_right = mp.mp(1)
+     132→    else:
+     133→        mp_left = mp.mp_nofunc(0)
+     134→        mp_right = mp.mp_nofunc(1)
+     135→
+     136→    if mp.MUL() or mp.CMD_TIMES() or mp.CMD_CDOT():
+     137→        lh = convert_mp(mp_left)
+     138→        rh = convert_mp(mp_right)
+     139→        return sympy.Mul(lh, rh, evaluate=False)
+     140→    elif mp.DIV() or mp.CMD_DIV() or mp.COLON():
+     141→        lh = convert_mp(mp_left)
+     142→        rh = convert_mp(mp_right)
+     143→        return sympy.Mul(lh, sympy.Pow(rh, -1, evaluate=False), evaluate=False)
+     144→    else:
+     145→        if hasattr(mp, 'unary'):
+     146→            return convert_unary(mp.unary())
+     147→        else:
+     148→            return convert_unary(mp.unary_nofunc())
+     149→
+     150→
+     151→def convert_unary(unary):
+     152→    if hasattr(unary, 'unary'):
+
+- [Test Output after action #60]
+  ======================================================================
+  Test: Nested fraction \frac{\frac{a^3+b}{c}}{\frac{1}{c^2}}
+  ======================================================================
+  Inner numerator \frac{a^3+b}{c}: (a**3 + b)/c
+  Inner denominator \frac{1}{c^2} (OLD): 1/(c**2)
+    Type: Pow
+  Inner denominator \frac{1}{c^2} (NEW): 1/c**2
+    Type: Mul
+
+  OLD (buggy) result: ((a**3 + b)/c)/1/(c**2)
+    Simplified: c*(a**3 + b)
+
+  NEW (fixed) result: ((a**3 + b)/c)/((1/c**2))
+    Simplified: c*(a**3 + b)
+
+  Expected: c*(a**3 + b)
+    Simplified: c*(a**3 + b)
+
+  ======================================================================
+  Results:
+  ======================================================================
+  OLD result string: ((a**3 + b)/c)/1/(c**2)
+  NEW result string: ((a**3 + b)/c)/((1/c**2))
+
+  String representation comparison:
+    OLD: '((a**3 + b)/c)/1/(c**2)' - Missing parentheses around denominator!
+    NEW: '((a**3 + b)/c)/((1/c**2))' - Has proper parentheses around denominator!
+
+  Mathematical correctness:
+    OLD simplifies to correct value: True
+    NEW simplifies to correct value: True
+
+  String representation comparison:
+    OLD string: '((a**3 + b)/c)/1/(c**2)'
+    NEW string: '((a**3 + b
+  [... truncated ...]
+- [Read Result after action #62]
+       1→from sympy.testing.pytest import raises, XFAIL
+       2→from sympy.external import import_module
+       3→
+       4→from sympy import (
+       5→    Symbol, Mul, Add, Abs, sin, asin, cos, Pow, csc, sec,
+       6→    Limit, oo, Derivative, Integral, factorial, sqrt, root,
+       7→    conjugate, StrictLessThan, LessThan, StrictGreaterThan,
+       8→    GreaterThan, Sum, Product, E, log, tan, Function, binomial,
+       9→    exp, floor, ceiling, Unequality
+      10→)
+      11→from sympy.core.relational import Eq, Ne, Lt, Le, Gt, Ge
+      12→from sympy.physics.quantum.state import Bra, Ket
+      13→from sympy.abc import x, y, z, a, b, c, t, k, n
+      14→antlr4 = import_module("antlr4")
+      15→
+      16→# disable tests if antlr4-python*-runtime is not present
+      17→if not antlr4:
+      18→    disabled = True
+      19→
+      20→theta = Symbol('theta')
+      21→f = Function('f')
+      22→
+      23→
+      24→# shorthand definitions
+      25→def _Add(a, b):
+      26→    return Add(a, b, evaluate=False)
+      27→
+      28→
+      29→def _Mul(a, b):
+      30→    return Mul(a, b, evaluate=False)
+      31→
+      32→
+      33→def _Pow(a, b):
+      34→    return Pow(a, b, evaluate=False)
+      35→
+      36→
+      37→def _Sqrt(a):
+      38→    return sqrt(a
+  [... truncated ...]
+- [Grep Result after action #64]
+  65:def test_import():
+  249:def test_parseable():
+  296:def test_not_parseable():
+  317:def test_failing_not_parseable():
+- [Read Result after action #66]
+      65→def test_import():
+      66→    from sympy.parsing.latex._build_latex_antlr import (
+      67→        build_parser,
+      68→        check_antlr_version,
+      69→        dir_latex_antlr
+      70→    )
+      71→    # XXX: It would be better to come up with a test for these...
+      72→    del build_parser, check_antlr_version, dir_latex_antlr
+      73→
+      74→
+      75→# These LaTeX strings should parse to the corresponding SymPy expression
+      76→GOOD_PAIRS = [
+      77→    (r"0", 0),
+      78→    (r"1", 1),
+      79→    (r"-3.14", -3.14),
+      80→    (r"(-7.13)(1.5)", _Mul(-7.13, 1.5)),
+      81→    (r"x", x),
+      82→    (r"2x", 2*x),
+      83→    (r"x^2", x**2),
+      84→    (r"x^{3 + 1}", x**_Add(3, 1)),
+      85→    (r"-c", -c),
+      86→    (r"a \cdot b", a * b),
+      87→    (r"a / b", a / b),
+      88→    (r"a \div b", a / b),
+      89→    (r"a + b", a + b),
+      90→    (r"a + b - a", _Add(a+b, -a)),
+      91→    (r"a^2 + b^2 = c^2", Eq(a**2 + b**2, c**2)),
+      92→    (r"(x + y) z", _Mul(_Add(x, y), z)),
+      93→    (r"\left(x + y\right) z", _Mul(_Add(x, y), z)),
+      94→    (r"\left( x + y\right ) z", _Mul(_Add(x, y), z)),
+      95→    (r"\left(  x + y\right ) z", _Mul(_Add(x, y), z)),
+      96→    (r"\left[x + y\r
+  [... truncated ...]
+- [Test Output after action #69]
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  WARNING (aesara.tensor.blas): Using NumPy C-API based implementation for BLAS functions.
+  ImportError while loading conftest './swebench_9_15/testbed/conftest.py'.
+  ../conftest.py:18: in <module>
+      collect_ignore = ["sympy/integrals/rubi"] + _get_doctest_blacklist()
+  testing/runtests.py:724: in _get_doctest_blacklist
+      if import_module('aesara') is None:
+  external/importtools.py:132: in import_module
+      mod = __import__(module, **import_kwargs)
+  /opt/anaconda3/lib/python3.8/site-packages/aesara/__init__.py:120: in <module>
+      from aesara import scalar, tensor
+  /opt/anaconda3/lib/python3.8/site-packages/aesara/tensor/__init__.py:105: in <module>
+      from aesara.tensor import (  # noqa
+  /opt/anaconda3/lib/python3.8/site-packages/aesara/tensor/blas.py:166: in <module>
+
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/parsing/latex/_parse_latex_antlr.py
+  Tool: Edit action #55
+  old_text_sha256: 2fbe874df48947e59f95b48fdbbea1deb7b9be3855023818cde9765a5a26b555
+  new_text_sha256: e3f6f9fd30de2a7ed94e7025e3bb3c3518b4dc258dbd5c4c14a9b4bd47301a96
+- validate_fix.py
+  Tool: Write action #71
+  new_text_sha256: 3936047d143eb3540e03663391359118966c350bd6ee6bc845535bd4a8bcf03e
+- test_nested_frac.py
+  Tool: Write action #44
+  new_text_sha256: 7f6d563f5cf3a7f236cd59c5aead456b456142d105a5a9eb31b6c23aafc678e8
+- test_structure.py
+  Tool: Write action #49
+  new_text_sha256: bb0c9b45ee6beabd8f0436e9ba9cb37033541c08b29101aaff32327fc1f32ce8
+- test_fix.py
+  Tool: Write action #52
+  new_text_sha256: 3edb28258c7353356050fde36b12bf4d65ead023c599edae86cd239df9fc8b34
+- test_latex_nested_frac_fix.py
+  Tool: Write action #59
+  new_text_sha256: 4d90d2675e8a7bf5dc943ac487dd1e15875c393892467f7d08d9b64c1cd0b2fc
+- sympy/parsing/tests/test_latex.py
+  Tool: Edit action #68
+  old_text_sha256: 822ceff2f196a45d9648ca607c748dc8301fc5ecaa68b83872b5638314ba55dd
+  new_text_sha256: ebbcc6a9291e3738199eb8e1bd36ef7b15f98b6b2d09227dfe6dc006290028d8
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

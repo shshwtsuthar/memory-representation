@@ -1,0 +1,488 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 8e485c0d-4cd7-4d78-bad0-106c4c10cb79
+- repo: sympy/sympy
+- instance_id: sympy__sympy-17630
+- base_commit: 58e78209c8577b9890e957b624466e5beed7eb08
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Exception when multiplying BlockMatrix containing ZeroMatrix blocks
+When a block matrix with zero blocks is defined
+
+```
+>>> from sympy import *
+>>> a = MatrixSymbol("a", 2, 2)
+>>> z = ZeroMatrix(2, 2)
+>>> b = BlockMatrix([[a, z], [z, z]])
+```
+
+then block-multiplying it once seems to work fine:
+
+```
+>>> block_collapse(b * b)
+Matrix([
+[a**2, 0],
+[0, 0]])
+>>> b._blockmul(b)
+Matrix([
+[a**2, 0],
+[0, 0]])
+```
+
+but block-multiplying twice throws an exception:
+
+```
+>>> block_collapse(b * b * b)
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py", line 297, in block_collapse
+    result = rule(expr)
+  File "/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/strategies/core.py", line 11, in exhaustive_rl
+    new, old = rule(expr), expr
+  File "/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/strategies/core.py", line 44, in chain_rl
+    expr = rule(expr)
+  File "/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/strategies/core.py", line 11, in exhaustive_rl
+    new, old = rule(expr), expr
+  File "/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/strategies/core.py", line 33, in conditioned_rl
+    return rule(expr)
+  File "/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/strategies/core.py", line 95, in switch_rl
+    return rl(expr)
+  File "/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py", line 361, in bc_matmul
+    matrices[i] = A._blockmul(B)
+  File "/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py", line 91, in _blockmul
+    self.colblocksizes == other.rowblocksizes):
+  File "/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py", line 80, in colblocksizes
+    return [self.blocks[0, i].cols for i in range(self.blockshape[1])]
+  File "/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py", line 80, in <listcomp>
+    return [self.blocks[0, i].cols for i in range(self.blockshape[1])]
+AttributeError: 'Zero' object has no attribute 'cols'
+>>> b._blockmul(b)._blockmul(b)
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py", line 91, in _blockmul
+    self.colblocksizes == other.rowblocksizes):
+  File "/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py", line 80, in colblocksizes
+    return [self.blocks[0, i].cols for i in range(self.blockshape[1])]
+  File "/home/jan/.pyenv/versions/3.7.4/lib/python3.7/site-packages/sympy/matrices/expressions/blockmatrix.py", line 80, in <listcomp>
+    return [self.blocks[0, i].cols for i in range(self.blockshape[1])]
+AttributeError: 'Zero' object has no attribute 'cols'
+```
+
+This seems to be caused by the fact that the zeros in `b._blockmul(b)` are not `ZeroMatrix` but `Zero`:
+
+```
+>>> type(b._blockmul(b).blocks[0, 1])
+<class 'sympy.core.numbers.Zero'>
+```
+
+However, I don't understand SymPy internals well enough to find out why this happens. I use Python 3.7.4 and sympy 1.4 (installed with pip).
+
+FILES INSPECTED
+---------------
+- sympy/matrices/expressions/blockmatrix.py [Read: 3]
+- sympy/matrices/expressions/tests/test_blockmatrix.py [Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='**/blockmatrix.py'
+- [3] Glob glob='testbed/**/blockmatrix.py'
+- [30] Glob glob='testbed/**/test_blockmatrix.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [test] python3 test_issue.py
+- [test] cd testbed && python3 ../test_issue.py
+- [other/reproduction] cd testbed && python3 -c "from sympy import MatrixSymbol, ZeroMatrix, BlockMatrix, block_collapse; a = MatrixSymbol('a', 2, 2); z = ZeroMatrix(2, 2); b = BlockMatrix([[a, z], [z, z]]); print(b); result = b._blockmul(b); print(result); print(type(result.blocks[0, 1]))"
+- [other/reproduction] PYTHONPATH=./swebench_9_15/testbed:$PYTHONPATH python3 -c "from sympy import MatrixSymbol, ZeroMatrix, BlockMatrix, block_collapse; a = MatrixSymbol('a', 2, 2); z = ZeroMatrix(2, 2); b = BlockMatrix([[a, z], [z, z]]); print(b); result = b._blockmul(b); print(result); print(type(result.blocks[0, 1]))"
+- [other/reproduction] PYTHONPATH=./swebench_9_15/testbed:$PYTHONPATH python3 << 'EOF'
+from sympy import MatrixSymbol, ZeroMatrix, BlockMatrix
+a = MatrixSymbol('a', 2, 2)
+z = ZeroMatrix(2, 2)
+b = BlockMatrix([[a, z], [z, z]])
+
+print("Original blocks:")
+print(b.blocks)
+print("Type:", type(b.blocks))
+
+print("\nMultiplying blocks:")
+result_blocks = b.blocks * b.blocks
+print(result_blocks)
+print("Type:", type(result_blocks))
+
+print("\nType of elements:")
+for i in range(result_blocks.rows):
+    for j in range(result_blocks
+  [... truncated ...]
+- [other/reproduction] PYTHONPATH=./swebench_9_15/testbed:$PYTHONPATH python3 << 'EOF'
+from sympy import MatrixSymbol, ZeroMatrix, BlockMatrix, block_collapse
+
+# Create the block matrix as described in the issue
+a = MatrixSymbol("a", 2, 2)
+z = ZeroMatrix(2, 2)
+b = BlockMatrix([[a, z], [z, z]])
+
+print("Testing BlockMatrix with ZeroMatrix blocks")
+print("=" * 60)
+
+print("\nOriginal BlockMatrix b:")
+print(b)
+
+print("\n1. Testing b._blockmul(b):")
+try:
+    result2 = b._blockmul(b)
+    print("b._blockmul(b) = ")
+    print(
+  [... truncated ...]
+- [other/reproduction] PYTHONPATH=./swebench_9_15/testbed:$PYTHONPATH python3 << 'EOF'
+from sympy import MatrixSymbol, ZeroMatrix, BlockMatrix, block_collapse
+
+# Create the block matrix as described in the issue
+a = MatrixSymbol("a", 2, 2)
+z = ZeroMatrix(2, 2)
+b = BlockMatrix([[a, z], [z, z]])
+
+print("Testing BlockMatrix with ZeroMatrix blocks")
+print("=" * 60)
+
+print("\nOriginal BlockMatrix b:")
+print(b)
+
+print("\n1. Testing b._blockmul(b):")
+try:
+    result2 = b._blockmul(b)
+    print("b._blockmul(b) = ")
+    print(
+  [... truncated ...]
+- [other/reproduction] PYTHONPATH=./swebench_9_15/testbed:$PYTHONPATH python3 << 'EOF'
+from sympy import MatrixSymbol, ZeroMatrix, BlockMatrix, block_collapse
+
+# Test blockadd
+a = MatrixSymbol("a", 2, 2)
+z = ZeroMatrix(2, 2)
+b1 = BlockMatrix([[a, z], [z, z]])
+b2 = BlockMatrix([[z, a], [z, z]])
+
+print("Testing _blockadd:")
+result = b1._blockadd(b2)
+print(result)
+print("Type of result.blocks[0, 0]:", type(result.blocks[0, 0]))
+print("Type of result.blocks[0, 1]:", type(result.blocks[0, 1]))
+
+# Test multiple additions
+re
+  [... truncated ...]
+- [test] python3 -m pytest sympy/matrices/expressions/tests/test_blockmatrix.py -xvs
+- [test] python3 -m pytest sympy/matrices/expressions/tests/test_blockmatrix.py::test_issue_17630 -xvs
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named sympy
+- FAILED with error:
+- FAILED with error: ValueError:
+- Traceback (most recent call last):
+- ValueError:
+- FAILED with error: Cannot set values of <class 'sympy.matrices.immutable.ImmutableDenseMatrix'>
+- TypeError: Cannot set values of <class 'sympy.matrices.immutable.ImmutableDenseMatrix'>
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #3]
+  ./swebench_9_15/testbed/sympy/matrices/expressions/blockmatrix.py
+- [Read Result after action #5]
+       1→from __future__ import print_function, division
+       2→
+       3→from sympy import ask, Q
+       4→from sympy.core import Basic, Add
+       5→from sympy.core.compatibility import range
+       6→from sympy.strategies import typed, exhaust, condition, do_one, unpack
+       7→from sympy.strategies.traverse import bottom_up
+       8→from sympy.utilities import sift
+       9→from sympy.utilities.misc import filldedent
+      10→
+      11→from sympy.matrices.expressions.matexpr import MatrixExpr, ZeroMatrix, Identity
+      12→from sympy.matrices.expressions.matmul import MatMul
+      13→from sympy.matrices.expressions.matadd import MatAdd
+      14→from sympy.matrices.expressions.matpow import MatPow
+      15→from sympy.matrices.expressions.transpose import Transpose, transpose
+      16→from sympy.matrices.expressions.trace import Trace
+      17→from sympy.matrices.expressions.determinant import det, Determinant
+      18→from sympy.matrices.expressions.slice import MatrixSlice
+      19→from sympy.matrices.expressions.inverse import Inverse
+      20→from sympy.matrices import Matrix, ShapeError
+      21→from sympy.functions.elementary.complexes import re, im
+      22→
+      23→class BlockMatrix(MatrixExpr):
+      24→    """A B
+  [... truncated ...]
+- [Test Output after action #7]
+  Exit code 1
+    File "test_issue.py", line 24
+      print(f"FAILED with error: {e}")
+                                    ^
+  SyntaxError: invalid syntax
+- [Test Output after action #9]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 4, in <module>
+      from sympy import MatrixSymbol, ZeroMatrix, BlockMatrix, block_collapse
+  ImportError: No module named sympy
+- [Test Output after action #11]
+  Testing BlockMatrix with ZeroMatrix blocks
+  ============================================================
+
+  Original BlockMatrix b:
+  Matrix([
+  [a, 0],
+  [0, 0]])
+
+  1. Testing b * b (should work):
+  FAILED with error:
+  expecting a sequence of 1 or more rows containing Matrices.
+
+  2. Testing b._blockmul(b) (should work):
+  FAILED with error:
+  expecting a sequence of 1 or more rows containing Matrices.
+
+  3. Testing b * b * b (currently fails):
+  FAILED with error: ValueError:
+  expecting a sequence of 1 or more rows containing Matrices.
+
+  4. Testing b._blockmul(b)._blockmul(b) (currently fails):
+  FAILED with error: ValueError:
+  expecting a sequence of 1 or more rows containing Matrices.
+
+  ============================================================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #13]
+  Testing BlockMatrix with ZeroMatrix blocks
+  ============================================================
+
+  Original BlockMatrix b:
+  Matrix([
+  [a, 0],
+  [0, 0]])
+
+  1. Testing b * b (should work):
+  FAILED with error:
+  expecting a sequence of 1 or more rows containing Matrices.
+
+  2. Testing b._blockmul(b) (should work):
+  FAILED with error:
+  expecting a sequence of 1 or more rows containing Matrices.
+
+  3. Testing b * b * b (currently fails):
+  FAILED with error: ValueError:
+  expecting a sequence of 1 or more rows containing Matrices.
+
+  4. Testing b._blockmul(b)._blockmul(b) (currently fails):
+  FAILED with error: ValueError:
+  expecting a sequence of 1 or more rows containing Matrices.
+
+  ============================================================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Read Result after action #20]
+     164→    def _blockmul(self, other):
+     165→        if (isinstance(other, BlockMatrix) and
+     166→                self.colblocksizes == other.rowblocksizes):
+     167→            return BlockMatrix(self.blocks*other.blocks)
+     168→
+     169→        return self * other
+     170→
+     171→    def _blockadd(self, other):
+     172→        if (isinstance(other, BlockMatrix)
+     173→                and self.structurally_equal(other)):
+     174→            return BlockMatrix(self.blocks + other.blocks)
+     175→
+     176→        return self + other
+     177→
+     178→    def _eval_transpose(self):
+     179→        # Flip all the individual matrices
+     180→        matrices = [transpose(matrix) for matrix in self.blocks]
+     181→        # Make a copy
+     182→        M = Matrix(self.blockshape[0], self.blockshape[1], matrices)
+     183→        # Transpose the block structure
+
+- [Glob Result after action #30]
+  ./swebench_9_15/testbed/sympy/matrices/expressions/tests/test_blockmatrix.py
+- [Test Output after action #32]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 15 items
+
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_bc_matmul PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_bc_matadd PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_bc_transpose PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_bc_dist_diag PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_block_plus_ident PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_BlockMatrix PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_block_collapse_explicit_matrices PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_BlockMatrix_trace PASSED
+  sympy/matri
+  [... truncated ...]
+- [Read Result after action #34]
+       1→from sympy.matrices.expressions.blockmatrix import (
+       2→    block_collapse, bc_matmul, bc_block_plus_ident, BlockDiagMatrix,
+       3→    BlockMatrix, bc_dist, bc_matadd, bc_transpose, bc_inverse,
+       4→    blockcut, reblock_2x2, deblock)
+       5→from sympy.matrices.expressions import (MatrixSymbol, Identity,
+       6→        Inverse, trace, Transpose, det)
+       7→from sympy.matrices import (
+       8→    Matrix, ImmutableMatrix, ImmutableSparseMatrix)
+       9→from sympy.core import Tuple, symbols, Expr
+      10→from sympy.core.compatibility import range
+      11→from sympy.functions import transpose
+      12→
+      13→i, j, k, l, m, n, p = symbols('i:n, p', integer=True)
+      14→A = MatrixSymbol('A', n, n)
+      15→B = MatrixSymbol('B', n, n)
+      16→C = MatrixSymbol('C', n, n)
+      17→D = MatrixSymbol('D', n, n)
+      18→G = MatrixSymbol('G', n, n)
+      19→H = MatrixSymbol('H', n, n)
+      20→b1 = BlockMatrix([[G, H]])
+      21→b2 = BlockMatrix([[G], [H]])
+      22→
+      23→def test_bc_matmul():
+      24→    assert bc_matmul(H*b1*b2*G) == BlockMatrix([[(H*G*G + H*H*H)*G]])
+      25→
+      26→def test_bc_matadd():
+      27→    assert bc_matadd(BlockMatrix([[G, H]]) + BlockMatrix([[H, H]])) == \
+      28→
+  [... truncated ...]
+- [Read Result after action #36]
+     200→    assert B.blocks.shape == (3, 3)
+     201→
+     202→    BB = reblock_2x2(B)
+     203→    assert BB.blocks.shape == (2, 2)
+     204→
+     205→    assert B.shape == BB.shape
+     206→    assert B.as_explicit() == BB.as_explicit()
+     207→
+     208→def test_deblock():
+     209→    B = BlockMatrix([[MatrixSymbol('A_%d%d'%(i,j), n, n)
+     210→                    for j in range(4)]
+     211→                    for i in range(4)])
+     212→
+     213→    assert deblock(reblock_2x2(B)) == B
+     214→
+     215→def test_block_collapse_type():
+     216→    bm1 = BlockDiagMatrix(ImmutableMatrix([1]), ImmutableMatrix([2]))
+     217→    bm2 = BlockDiagMatrix(ImmutableMatrix([3]), ImmutableMatrix([4]))
+     218→
+     219→    assert bm1.T.__class__ == BlockDiagMatrix
+     220→    assert block_collapse(bm1 - bm2).__class__ == BlockDiagMatrix
+     221→    assert block_collapse(Inverse(bm1)).__class__ == BlockDiagMatrix
+     222→    assert block_collapse(Transpose(bm1)).__class__ == BlockDiagMatrix
+     223→    assert bc_transpose(Transpose(bm1)).__class__ == BlockDiagMatrix
+     224→    assert bc_inverse(Inverse(bm1)).__class__ == BlockDiagMatrix
+     225→
+
+- [Test Output after action #39]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 1 item
+
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_issue_17630 PASSED
+
+  =============================== warnings summary ===============================
+  ../../../../../opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441
+    /opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441: PytestConfigWarning: Unknown config option: doctestplus
+
+      self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+  -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+  ========================= 1 passed, 1 warning in 0.37s =========================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-
+  [... truncated ...]
+- [Test Output after action #41]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 16 items
+
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_bc_matmul PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_bc_matadd PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_bc_transpose PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_bc_dist_diag PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_block_plus_ident PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_BlockMatrix PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_block_collapse_explicit_matrices PASSED
+  sympy/matrices/expressions/tests/test_blockmatrix.py::test_BlockMatrix_trace PASSED
+  sympy/matri
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/matrices/expressions/blockmatrix.py
+  Tool: Edit action #22
+  old_text_sha256: 106936d60bfcfa5bba4ad844d8512d5cb05aef22ed0921db124b556f3e49128c
+  new_text_sha256: 9df1212557a815f114c651a49993bf3d4454411761f40c0cfae60baa397ef74b
+- sympy/matrices/expressions/blockmatrix.py
+  Tool: Edit action #25
+  old_text_sha256: 9df1212557a815f114c651a49993bf3d4454411761f40c0cfae60baa397ef74b
+  new_text_sha256: dd13aa5b78c83631f1dd64fe2cb900a7b0a2db0e55938351e0ede3f8dea98209
+- sympy/matrices/expressions/tests/test_blockmatrix.py
+  Tool: Edit action #38
+  old_text_sha256: 029ace047edf97ba524e0664f4b9bb76faf170bf14543ab0751d111855b29570
+  new_text_sha256: dd0369fbb003806634e807fef15fcf7e8baacbe806bc5c859f6ee990a6e5eed2
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

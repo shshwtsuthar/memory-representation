@@ -1,0 +1,782 @@
+STRIPPED RAW CLAUDE CODE TRAJECTORY
+This transcript was rendered from original raw JSONL using the canonical ADP strip manifest.
+
+[RAW line 2 USER]
+PRIOR ISSUE METADATA
+repo: sympy/sympy
+instance_id: sympy__sympy-14817
+base_commit: 0dbdc0ea83d339936da175f8c3a97d0d6bafb9f8
+problem_statement:
+Error pretty printing MatAdd
+```py
+>>> pprint(MatrixSymbol('x', n, n) + MatrixSymbol('y*', n, n))
+Traceback (most recent call last):
+  File "./sympy/core/sympify.py", line 368, in sympify
+    expr = parse_expr(a, local_dict=locals, transformations=transformations, evaluate=evaluate)
+  File "./sympy/parsing/sympy_parser.py", line 950, in parse_expr
+    return eval_expr(code, local_dict, global_dict)
+  File "./sympy/parsing/sympy_parser.py", line 863, in eval_expr
+    code, global_dict, local_dict)  # take local objects in preference
+  File "<string>", line 1
+    Symbol ('y' )*
+                 ^
+SyntaxError: unexpected EOF while parsing
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "./sympy/printing/pretty/pretty.py", line 2371, in pretty_print
+    use_unicode_sqrt_char=use_unicode_sqrt_char))
+  File "./sympy/printing/pretty/pretty.py", line 2331, in pretty
+    return pp.doprint(expr)
+  File "./sympy/printing/pretty/pretty.py", line 62, in doprint
+    return self._print(expr).render(**self._settings)
+  File "./sympy/printing/printer.py", line 274, in _print
+    return getattr(self, printmethod)(expr, *args, **kwargs)
+  File "./sympy/printing/pretty/pretty.py", line 828, in _print_MatAdd
+    if S(item.args[0]).is_negative:
+  File "./sympy/core/sympify.py", line 370, in sympify
+    raise SympifyError('could not parse %r' % a, exc)
+sympy.core.sympify.SympifyError: Sympify of expression 'could not parse 'y*'' failed, because of exception being raised:
+SyntaxError: unexpected EOF while parsing (<string>, line 1)
+```
+
+The code shouldn't be using sympify to handle string arguments from MatrixSymbol.
+
+I don't even understand what the code is doing. Why does it omit the `+` when the first argument is negative? This seems to assume that the arguments of MatAdd have a certain form, and that they will always print a certain way if they are negative.
+[RAW line 5 TOOL Bash]
+
+[RAW line 10 TOOL Bash]
+ls -la testbed 2>&1 | head -20
+[RAW line 39 TOOL Bash]
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, pprint, Symbol
+n = Symbol('n')
+# This should trigger the error
+try:
+    pprint(MatrixSymbol('x', n, n) + MatrixSymbol('y*', n, n))
+except Exception as e:
+    print('Error occurred:')
+    print(type(e).__name__ + ':', str(e))
+"
+[RAW line 40 TOOL RESULT toolu_019zNaekDj5cMSiwGx2uiVJ8]
+Error occurred:
+SympifyError: Sympify of expression 'could not parse 'y*'' failed, because of exception being raised:
+SyntaxError: unexpected EOF while parsing (<string>, line 1)
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+./sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import Mapping, defaultdict
+./sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import defaultdict, Iterable
+./sympy/core/containers.py:271: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  class OrderedSet(collections.MutableSet):
+./sympy/solvers/diophantine.py:3188: SyntaxWarning: "is" with a literal. Did you mean "=="?
+  if feasible is 1:  # it's prime and k == 2
+./sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+  from collections import Callable
+[RAW line 43 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/sympy/printing/pretty/pretty.py",
+  "limit": 30,
+  "offset": 820
+}
+[RAW line 44 TOOL RESULT toolu_01VouomXfqgi1uwQe8hADBkr]
+   820→
+   821→    def _print_MatAdd(self, expr):
+   822→        s = None
+   823→        for item in expr.args:
+   824→            pform = self._print(item)
+   825→            if s is None:
+   826→                s = pform     # First element
+   827→            else:
+   828→                if S(item.args[0]).is_negative:
+   829→                    s = prettyForm(*stringPict.next(s, ' '))
+   830→                    pform = self._print(item)
+   831→                else:
+   832→                    s = prettyForm(*stringPict.next(s, ' + '))
+   833→                s = prettyForm(*stringPict.next(s, pform))
+   834→
+   835→        return s
+   836→
+   837→    def _print_MatMul(self, expr):
+   838→        args = list(expr.args)
+   839→        from sympy import Add, MatAdd, HadamardProduct
+   840→        for i, a in enumerate(args):
+   841→            if (isinstance(a, (Add, MatAdd, HadamardProduct))
+   842→                    and len(expr.args) > 1):
+   843→                args[i] = prettyForm(*self._print(a).parens())
+   844→            else:
+   845→                args[i] = self._print(a)
+   846→
+   847→        return prettyForm.__mul__(*args)
+   848→
+   849→    def _print_DotProduct(self, expr):
+
+[RAW line 47 TOOL Bash]
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol
+n = Symbol('n')
+x = MatrixSymbol('x', n, n)
+y = MatrixSymbol('y*', n, n)
+print('x.args:', x.args)
+print('y.args:', y.args)
+print('Type of x:', type(x))
+
+# Let's also check what a MatAdd looks like
+result = x + y
+print('\\nMatAdd:', result)
+print('MatAdd args:', result.args)
+print('Type of first arg:', type(result.args[0]))
+" 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+[RAW line 48 TOOL RESULT toolu_01Y1H8SmvVupkPMkmNX98XYh]
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+  from collections import Mapping, defaultdict
+  from collections import defaultdict, Iterable
+  class OrderedSet(collections.MutableSet):
+  from collections import Callable
+x.args: ('x', n, n)
+y.args: ('y*', n, n)
+Type of x: <class 'sympy.matrices.expressions.matexpr.MatrixSymbol'>
+
+MatAdd: x + y*
+MatAdd args: (x, y*)
+Type of first arg: <class 'sympy.matrices.expressions.matexpr.MatrixSymbol'>
+[RAW line 51 TOOL Grep]
+{
+  "-A": 40,
+  "output_mode": "content",
+  "path": "sympy/printing/pretty/pretty.py",
+  "pattern": "def _print_Add"
+}
+[RAW line 52 TOOL RESULT toolu_01T1TGTQGDJQb1fyiVmnseNx]
+1456:    def _print_Add(self, expr, order=None):
+1457-        if self.order == 'none':
+1458-            terms = list(expr.args)
+1459-        else:
+1460-            terms = self._as_ordered_terms(expr, order=order)
+1461-        pforms, indices = [], []
+1462-
+1463-        def pretty_negative(pform, index):
+1464-            """Prepend a minus sign to a pretty form. """
+1465-            #TODO: Move this code to prettyForm
+1466-            if index == 0:
+1467-                if pform.height() > 1:
+1468-                    pform_neg = '- '
+1469-                else:
+1470-                    pform_neg = '-'
+1471-            else:
+1472-                pform_neg = ' - '
+1473-
+1474-            if (pform.binding > prettyForm.NEG
+1475-                or pform.binding == prettyForm.ADD):
+1476-                p = stringPict(*pform.parens())
+1477-            else:
+1478-                p = pform
+1479-            p = stringPict.next(pform_neg, p)
+1480-            # Lower the binding to NEG, even if it was higher. Otherwise, it
+1481-            # will print as a + ( - (b)), instead of a - (b).
+1482-            return prettyForm(binding=prettyForm.NEG, *p)
+1483-
+1484-        for i, term in enumerate(terms):
+1485-            if term.is_Mul and _coeff_isneg(term):
+1486-                coeff, other = term.as_coeff_mul(rational=False)
+1487-                pform = self._print(Mul(-coeff, *other, evaluate=False))
+1488-                pforms.append(pretty_negative(pform, i))
+1489-            elif term.is_Rational and term.q > 1:
+1490-                pforms.append(None)
+1491-                indices.append(i)
+1492-            elif term.is_Number and term < 0:
+1493-                pform = self._print(-term)
+1494-                pforms.append(pretty_negative(pform, i))
+1495-            elif term.is_Relational:
+1496-                pforms.append(prettyForm(*self._print(term).parens()))
+[RAW line 55 TOOL Bash]
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol
+n = Symbol('n')
+x = MatrixSymbol('x', n, n)
+y = MatrixSymbol('y', n, n)
+
+# Check different scenarios
+from sympy import MatAdd, S
+
+# Case 1: Simple addition
+expr1 = x + y
+print('Case 1 (x + y):')
+for arg in expr1.args:
+    print('  ', arg, type(arg), hasattr(arg, 'is_Mul'))
+
+# Case 2: With scalar multiplication
+expr2 = x + (-1)*y
+print('\\nCase 2 (x + (-1)*y):')
+for arg in expr2.args:
+    print('  ', arg, type(arg), hasattr(arg, 'is_Mul'))
+    if hasattr(arg, 'is_Mul'):
+        print('    is_Mul:', arg.is_Mul)
+        if hasattr(arg, 'args'):
+            print('    args:', arg.args)
+
+# Case 3: Direct scalar multiplication
+expr3 = -y
+print('\\nCase 3 (-y):')
+print('  ', expr3, type(expr3))
+print('  args:', expr3.args if hasattr(expr3, 'args') else 'N/A')
+" 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+[RAW line 56 TOOL RESULT toolu_015aEndy6i1AcvwrBnxYEzm9]
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+  from collections import Mapping, defaultdict
+  from collections import defaultdict, Iterable
+  class OrderedSet(collections.MutableSet):
+  from collections import Callable
+Case 1 (x + y):
+   x <class 'sympy.matrices.expressions.matexpr.MatrixSymbol'> True
+   y <class 'sympy.matrices.expressions.matexpr.MatrixSymbol'> True
+
+Case 2 (x + (-1)*y):
+   -y <class 'sympy.matrices.expressions.matmul.MatMul'> True
+    is_Mul: False
+    args: (-1, y)
+   x <class 'sympy.matrices.expressions.matexpr.MatrixSymbol'> True
+    is_Mul: False
+    args: ('x', n, n)
+
+Case 3 (-y):
+   -y <class 'sympy.matrices.expressions.matmul.MatMul'>
+  args: (-1, y)
+[RAW line 58 TOOL Grep]
+{
+  "-A": 10,
+  "output_mode": "content",
+  "path": "sympy/printing/pretty/pretty.py",
+  "pattern": "def _coeff_isneg"
+}
+[RAW line 59 TOOL RESULT toolu_01VZnxC2uteymaktGBnFjFu3]
+No matches found
+[RAW line 61 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "sympy/printing",
+  "pattern": "_coeff_isneg"
+}
+[RAW line 62 TOOL RESULT toolu_01Y2mFxs4KAijiqYhW9dQ6qa]
+Found 5 files
+sympy/printing/pretty/pretty.py
+sympy/printing/precedence.py
+sympy/printing/mathml.py
+sympy/printing/latex.py
+sympy/printing/glsl.py
+[RAW line 64 TOOL Grep]
+{
+  "-A": 15,
+  "output_mode": "content",
+  "path": "sympy/printing/precedence.py",
+  "pattern": "def _coeff_isneg"
+}
+[RAW line 65 TOOL RESULT toolu_012Va3LycRawhfkDfTsmgrGz]
+No matches found
+[RAW line 67 TOOL Grep]
+{
+  "-n": false,
+  "output_mode": "content",
+  "path": "sympy/printing/pretty/pretty.py",
+  "pattern": "_coeff_isneg"
+}
+[RAW line 68 TOOL RESULT toolu_01J5hyxZRs2JWf7K6rne3J3A]
+from sympy.core.function import _coeff_isneg
+            if term.is_Mul and _coeff_isneg(term):
+[RAW line 70 TOOL Bash]
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol
+from sympy.core.function import _coeff_isneg
+n = Symbol('n')
+x = MatrixSymbol('x', n, n)
+y = MatrixSymbol('y', n, n)
+
+# Test different cases
+expr1 = x + y
+expr2 = x + (-1)*y
+
+print('Testing _coeff_isneg:')
+for arg in expr2.args:
+    print(f'  {arg}: is_Mul={arg.is_Mul}, _coeff_isneg={_coeff_isneg(arg)}')
+" 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+[RAW line 71 TOOL RESULT toolu_01Db2YKprNruJQ3kVUzktUQL]
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+  from collections import Mapping, defaultdict
+  from collections import defaultdict, Iterable
+  class OrderedSet(collections.MutableSet):
+  from collections import Callable
+Testing _coeff_isneg:
+  -y: is_Mul=False, _coeff_isneg=False
+  x: is_Mul=False, _coeff_isneg=False
+[RAW line 73 TOOL Bash]
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol
+n = Symbol('n')
+y = MatrixSymbol('y', n, n)
+
+# Check the type of -y
+neg_y = (-1)*y
+print(f'Type of (-1)*y: {type(neg_y)}')
+print(f'Class name: {neg_y.__class__.__name__}')
+print(f'Args: {neg_y.args}')
+print(f'First arg: {neg_y.args[0]}, type: {type(neg_y.args[0])}')
+print(f'First arg is_negative: {neg_y.args[0].is_negative}')
+
+# Check if we can use hasattr
+print(f'\\nHas is_MatMul: {hasattr(neg_y, \"is_MatMul\")}')
+if hasattr(neg_y, 'is_MatMul'):
+    print(f'is_MatMul: {neg_y.is_MatMul}')
+" 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+[RAW line 74 TOOL RESULT toolu_01VesWjsL62KCCMrfb96zFib]
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+  from collections import Mapping, defaultdict
+  from collections import defaultdict, Iterable
+  class OrderedSet(collections.MutableSet):
+  from collections import Callable
+Type of (-1)*y: <class 'sympy.matrices.expressions.matmul.MatMul'>
+Class name: MatMul
+Args: (-1, y)
+First arg: -1, type: <class 'sympy.core.numbers.NegativeOne'>
+First arg is_negative: True
+
+Has is_MatMul: True
+is_MatMul: True
+[RAW line 81 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/sympy/printing/pretty/pretty.py",
+  "new_text_sha256": "ccfd52d141c4c380d6799fddfe17f436786f8f0b660495e7c9da4acd6131e14c",
+  "old_text_sha256": "6d6baa2c8cedf916ddbfd277c740c08ce907e0733856a0e32ea354d76f54d362"
+}
+[RAW line 86 TOOL Bash]
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol
+n = Symbol('n')
+x = MatrixSymbol('x', n, n)
+y = MatrixSymbol('y*', n, n)
+
+# Test as_coeff_mmul
+print('Test as_coeff_mmul:')
+print('x.as_coeff_mmul():', x.as_coeff_mmul())
+print('y.as_coeff_mmul():', y.as_coeff_mmul())
+print('(-1*y).as_coeff_mmul():', ((-1)*y).as_coeff_mmul())
+
+# Check if the coefficient is negative
+coeff_x = x.as_coeff_mmul()[0]
+coeff_y = y.as_coeff_mmul()[0]
+coeff_neg_y = ((-1)*y).as_coeff_mmul()[0]
+
+print('\\ncoeff_x.is_negative:', coeff_x.is_negative)
+print('coeff_y.is_negative:', coeff_y.is_negative)
+print('coeff_neg_y.is_negative:', coeff_neg_y.is_negative)
+" 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+[RAW line 87 TOOL RESULT toolu_01NYKmfQr3KtRsitoVNghLuJ]
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+  from collections import Mapping, defaultdict
+  from collections import defaultdict, Iterable
+  class OrderedSet(collections.MutableSet):
+  from collections import Callable
+Traceback (most recent call last):
+  File "<string>", line 20, in <module>
+AttributeError: 'int' object has no attribute 'is_negative'
+Test as_coeff_mmul:
+x.as_coeff_mmul(): (1, x)
+y.as_coeff_mmul(): (1, y*)
+(-1*y).as_coeff_mmul(): (-1, y*)
+[RAW line 89 TOOL Bash]
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol, S
+n = Symbol('n')
+x = MatrixSymbol('x', n, n)
+y = MatrixSymbol('y*', n, n)
+
+# Test as_coeff_mmul
+print('Test as_coeff_mmul:')
+coeff_x, _ = x.as_coeff_mmul()
+coeff_y, _ = y.as_coeff_mmul()
+coeff_neg_y, _ = ((-1)*y).as_coeff_mmul()
+
+print('Type of coeff_x:', type(coeff_x), coeff_x)
+print('Type of coeff_y:', type(coeff_y), coeff_y)
+print('Type of coeff_neg_y:', type(coeff_neg_y), coeff_neg_y)
+
+# Try converting to sympy
+print('\\nUsing S():')
+print('S(coeff_x).is_negative:', S(coeff_x).is_negative)
+print('S(coeff_y).is_negative:', S(coeff_y).is_negative)
+print('S(coeff_neg_y).is_negative:', S(coeff_neg_y).is_negative)
+" 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+[RAW line 90 TOOL RESULT toolu_01TX3sjGSDChdF94FvkbTt5A]
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+  from collections import Mapping, defaultdict
+  from collections import defaultdict, Iterable
+  class OrderedSet(collections.MutableSet):
+  from collections import Callable
+Test as_coeff_mmul:
+Type of coeff_x: <class 'int'> 1
+Type of coeff_y: <class 'int'> 1
+Type of coeff_neg_y: <class 'sympy.core.numbers.NegativeOne'> -1
+
+Using S():
+S(coeff_x).is_negative: False
+S(coeff_y).is_negative: False
+S(coeff_neg_y).is_negative: True
+[RAW line 92 TOOL Bash]
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, Symbol, S
+n = Symbol('n')
+x = MatrixSymbol('x', n, n)
+y = MatrixSymbol('y*', n, n)
+
+# Test different approaches
+coeff_x, _ = x.as_coeff_mmul()
+coeff_neg_y, _ = ((-1)*y).as_coeff_mmul()
+
+print('Check if already SymPy:')
+print('coeff_x has is_negative:', hasattr(coeff_x, 'is_negative'))
+print('coeff_neg_y has is_negative:', hasattr(coeff_neg_y, 'is_negative'))
+
+# Try simpler checks
+print('\\nSimpler checks:')
+print('coeff_x < 0:', coeff_x < 0)
+print('coeff_neg_y < 0:', coeff_neg_y < 0)
+
+# Check if S() always works
+print('\\nUsing S():')
+print('S(coeff_x) < 0:', S(coeff_x) < 0)
+print('S(coeff_neg_y) < 0:', S(coeff_neg_y) < 0)
+" 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+[RAW line 93 TOOL RESULT toolu_01MBaEs6sHgWfRjFSfV8Ck6F]
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+  from collections import Mapping, defaultdict
+  from collections import defaultdict, Iterable
+  class OrderedSet(collections.MutableSet):
+  from collections import Callable
+Check if already SymPy:
+coeff_x has is_negative: False
+coeff_neg_y has is_negative: True
+
+Simpler checks:
+coeff_x < 0: False
+coeff_neg_y < 0: True
+
+Using S():
+S(coeff_x) < 0: False
+S(coeff_neg_y) < 0: True
+[RAW line 96 TOOL Bash]
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, pprint, Symbol
+n = Symbol('n')
+
+print('Test 1: Original bug case')
+try:
+    pprint(MatrixSymbol('x', n, n) + MatrixSymbol('y*', n, n))
+    print('SUCCESS: No error!')
+except Exception as e:
+    print(f'FAILED: {type(e).__name__}: {e}')
+" 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+[RAW line 97 TOOL RESULT toolu_01J6wEjwhRAcWUXe2pTaPr3Y]
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+  from collections import Mapping, defaultdict
+  from collections import defaultdict, Iterable
+  class OrderedSet(collections.MutableSet):
+  from collections import Callable
+Test 1: Original bug case
+FAILED: AttributeError: 'int' object has no attribute 'is_negative'
+[RAW line 100 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/sympy/printing/pretty/pretty.py",
+  "new_text_sha256": "875918c8b849ef7e07d3d6eff3418cf050242a699368265775912c81c951dcbf",
+  "old_text_sha256": "ccfd52d141c4c380d6799fddfe17f436786f8f0b660495e7c9da4acd6131e14c"
+}
+[RAW line 104 TOOL Bash]
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, pprint, Symbol
+n = Symbol('n')
+
+print('Test 1: Original bug case (MatrixSymbol with special character)')
+try:
+    pprint(MatrixSymbol('x', n, n) + MatrixSymbol('y*', n, n))
+    print('SUCCESS!')
+except Exception as e:
+    print(f'FAILED: {type(e).__name__}: {e}')
+" 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+[RAW line 105 TOOL RESULT toolu_01Xi6MbiFhuasvJAyZrFpEyK]
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+  from collections import Mapping, defaultdict
+  from collections import defaultdict, Iterable
+  class OrderedSet(collections.MutableSet):
+  from collections import Callable
+Test 1: Original bug case (MatrixSymbol with special character)
+x + y*
+SUCCESS\!
+[RAW line 111 TOOL Bash]
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, pprint, Symbol
+n = Symbol('n')
+
+print('Test 2: Negative coefficient (should omit + sign)')
+x = MatrixSymbol('x', n, n)
+y = MatrixSymbol('y', n, n)
+try:
+    expr = x + (-1)*y
+    print('Expression:', expr)
+    pprint(expr)
+    print('SUCCESS!')
+except Exception as e:
+    print(f'FAILED: {type(e).__name__}: {e}')
+
+print('\\nTest 3: Multiple terms with mixed signs')
+z = MatrixSymbol('z', n, n)
+try:
+    expr = x + (-1)*y + z
+    print('Expression:', expr)
+    pprint(expr)
+    print('SUCCESS!')
+except Exception as e:
+    print(f'FAILED: {type(e).__name__}: {e}')
+" 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+[RAW line 112 TOOL RESULT toolu_01LQ6sbT1bKdZicFed5SBCwP]
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+  from collections import Mapping, defaultdict
+  from collections import defaultdict, Iterable
+  class OrderedSet(collections.MutableSet):
+  from collections import Callable
+Test 2: Negative coefficient (should omit + sign)
+Expression: -y + x
+-y + x
+SUCCESS\!
+
+Test 3: Multiple terms with mixed signs
+Expression: -y + x + z
+-y + x + z
+SUCCESS\!
+[RAW line 115 TOOL Bash]
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from sympy import MatrixSymbol, pprint, Symbol
+n = Symbol('n')
+
+print('Test 4: Matrix symbols with various special characters')
+try:
+    a = MatrixSymbol('a+b', n, n)
+    b = MatrixSymbol('c-d', n, n)
+    pprint(a + b)
+    print('SUCCESS!')
+except Exception as e:
+    print(f'FAILED: {type(e).__name__}: {e}')
+
+print('\\nTest 5: Three matrix additions')
+try:
+    x = MatrixSymbol('x', n, n)
+    y = MatrixSymbol('y', n, n)
+    z = MatrixSymbol('z', n, n)
+    pprint(x + y + z)
+    print('SUCCESS!')
+except Exception as e:
+    print(f'FAILED: {type(e).__name__}: {e}')
+
+print('\\nTest 6: Fractional coefficient')
+try:
+    from sympy import Rational
+    x = MatrixSymbol('x', n, n)
+    y = MatrixSymbol('y', n, n)
+    expr = x + Rational(1, 2)*y
+    print('Expression:', expr)
+    pprint(expr)
+    print('SUCCESS!')
+except Exception as e:
+    print(f'FAILED: {type(e).__name__}: {e}')
+" 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+[RAW line 116 TOOL RESULT toolu_01E5Qn8HcqzWkCv5S5idKzk7]
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+  from collections import Mapping, defaultdict
+  from collections import defaultdict, Iterable
+  class OrderedSet(collections.MutableSet):
+  from collections import Callable
+Test 4: Matrix symbols with various special characters
+a+b + c-d
+SUCCESS\!
+
+Test 5: Three matrix additions
+x + y + z
+SUCCESS\!
+
+Test 6: Fractional coefficient
+Expression: (1/2)*y + x
+1/2⋅y + x
+SUCCESS\!
+[RAW line 126 TOOL Bash]
+cd ./swebench_9_15 && python3 test_issue.py 2>&1 | grep -v "DeprecationWarning\|SyntaxWarning\|Error processing"
+[RAW line 127 TOOL RESULT toolu_011zRVzz1CWsPkrcQv5R3aiQ]
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+  from collections import Mapping, defaultdict
+  from collections import defaultdict, Iterable
+  class OrderedSet(collections.MutableSet):
+  from collections import Callable
+Testing fix for sympy__sympy-14817
+Issue: Error pretty printing MatAdd with MatrixSymbol
+
+============================================================
+Test 1: Original bug - MatrixSymbol with '*' character
+============================================================
+Expression: x + y*
+x + y*
+✓ PASSED
+
+============================================================
+Test 2: Negative coefficient
+============================================================
+Expression: -y + x
+-y + x
+✓ PASSED
+
+============================================================
+Test 3: Multiple terms with mixed signs
+============================================================
+Expression: -y + x + z
+-y + x + z
+✓ PASSED
+
+============================================================
+Test 4: Special characters in names
+============================================================
+Expression: a+b + c-d + e*f
+a+b + c-d + e*f
+✓ PASSED
+
+============================================================
+Test 5: Fractional coefficient
+============================================================
+Expression: (1/2)*y + x
+1/2⋅y + x
+✓ PASSED
+
+============================================================
+Test 6: Negative fractional coefficient
+============================================================
+Expression: -(1/2)*y + x
+-1/2⋅y + x
+✓ PASSED
+
+============================================================
+Results: 6/6 tests passed
+============================================================
+✓ All tests passed!

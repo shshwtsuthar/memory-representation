@@ -1,0 +1,500 @@
+STRIPPED RAW CLAUDE CODE TRAJECTORY
+This transcript was rendered from original raw JSONL using the canonical ADP strip manifest.
+
+[RAW line 3 USER]
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-14155
+base_commit: 2f13c476abe4ba787b6cb71131818341911f43cc
+problem_statement:
+ResolverMatch.__repr__() doesn't handle functools.partial() nicely.
+Description
+
+        (last modified by Nick Pope)
+
+When a partial function is passed as the view, the __repr__ shows the func argument as functools.partial which isn't very helpful, especially as it doesn't reveal the underlying function or arguments provided.
+Because a partial function also has arguments provided up front, we need to handle those specially so that they are accessible in __repr__.
+ISTM that we can simply unwrap functools.partial objects in ResolverMatch.__init__().
+[RAW line 9 TOOL Bash]
+ls -la testbed 2>&1 | head -20
+[RAW line 27 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed",
+  "pattern": "class ResolverMatch"
+}
+[RAW line 28 TOOL RESULT toolu_01G8hrmyPTvAeJGb7TNqYBu3]
+Found 2 files
+testbed/tests/urlpatterns_reverse/tests.py
+testbed/django/urls/resolvers.py
+[RAW line 30 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/django/urls/resolvers.py"
+}
+[RAW line 31 TOOL RESULT toolu_01CLx9Gt51NdhsXzGb5aWCUz]
+     1→"""
+     2→This module converts requested URLs to callback view functions.
+     3→
+     4→URLResolver is the main class here. Its resolve() method takes a URL (as
+     5→a string) and returns a ResolverMatch object which provides access to all
+     6→attributes of the resolved URL match.
+     7→"""
+     8→import functools
+     9→import inspect
+    10→import re
+    11→import string
+    12→from importlib import import_module
+    13→from urllib.parse import quote
+    14→
+    15→from asgiref.local import Local
+    16→
+    17→from django.conf import settings
+    18→from django.core.checks import Error, Warning
+    19→from django.core.checks.urls import check_resolver
+    20→from django.core.exceptions import ImproperlyConfigured, ViewDoesNotExist
+    21→from django.utils.datastructures import MultiValueDict
+    22→from django.utils.functional import cached_property
+    23→from django.utils.http import RFC3986_SUBDELIMS, escape_leading_slashes
+    24→from django.utils.regex_helper import _lazy_re_compile, normalize
+    25→from django.utils.translation import get_language
+    26→
+    27→from .converters import get_converter
+    28→from .exceptions import NoReverseMatch, Resolver404
+    29→from .utils import get_callable
+    30→
+    31→
+    32→class ResolverMatch:
+    33→    def __init__(self, func, args, kwargs, url_name=None, app_names=None, namespaces=None, route=None, tried=None):
+    34→        self.func = func
+    35→        self.args = args
+    36→        self.kwargs = kwargs
+    37→        self.url_name = url_name
+    38→        self.route = route
+    39→        self.tried = tried
+    40→
+    41→        # If a URLRegexResolver doesn't have a namespace or app_name, it passes
+    42→        # in an empty value.
+    43→        self.app_names = [x for x in app_names if x] if app_names else []
+    44→        self.app_name = ':'.join(self.app_names)
+    45→        self.namespaces = [x for x in namespaces if x] if namespaces else []
+    46→        self.namespace = '
+[... truncated ...]
+[RAW line 34 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed/tests",
+  "pattern": "functools.partial"
+}
+[RAW line 35 TOOL RESULT toolu_01TcANFMyXKFR3wXtMwNNvm9]
+Found 2 files
+testbed/tests/migrations/test_writer.py
+testbed/tests/migrations/test_autodetector.py
+[RAW line 37 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed/tests",
+  "pattern": "ResolverMatch.*repr"
+}
+[RAW line 40 TOOL Grep]
+{
+  "-n": true,
+  "head_limit": 50,
+  "output_mode": "content",
+  "path": "testbed/tests/urlpatterns_reverse",
+  "pattern": "ResolverMatch"
+}
+[RAW line 41 TOOL RESULT toolu_01HLVrSxWsJNAc9ez5dAJ1t5]
+testbed/tests/urlpatterns_reverse/tests.py:21:    NoReverseMatch, Resolver404, ResolverMatch, URLPattern, URLResolver,
+testbed/tests/urlpatterns_reverse/tests.py:1106:class ResolverMatchTests(SimpleTestCase):
+testbed/tests/urlpatterns_reverse/tests.py:1116:                # ResolverMatch capabilities.
+testbed/tests/urlpatterns_reverse/tests.py:1118:                self.assertEqual(match.__class__, ResolverMatch)
+testbed/tests/urlpatterns_reverse/tests.py:1143:            "ResolverMatch(func=urlpatterns_reverse.views.empty_view, "
+
+[Showing results with pagination = limit: 50, offset: 0]
+[RAW line 43 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/tests/urlpatterns_reverse/tests.py",
+  "limit": 100,
+  "offset": 1106
+}
+[RAW line 44 TOOL RESULT toolu_01JQdqL8DtaqqSfYhcdjURxQ]
+  1106→class ResolverMatchTests(SimpleTestCase):
+  1107→
+  1108→    def test_urlpattern_resolve(self):
+  1109→        for path_, url_name, app_name, namespace, view_name, func, args, kwargs in resolve_test_data:
+  1110→            with self.subTest(path=path_):
+  1111→                # Legacy support for extracting "function, args, kwargs".
+  1112→                match_func, match_args, match_kwargs = resolve(path_)
+  1113→                self.assertEqual(match_func, func)
+  1114→                self.assertEqual(match_args, args)
+  1115→                self.assertEqual(match_kwargs, kwargs)
+  1116→                # ResolverMatch capabilities.
+  1117→                match = resolve(path_)
+  1118→                self.assertEqual(match.__class__, ResolverMatch)
+  1119→                self.assertEqual(match.url_name, url_name)
+  1120→                self.assertEqual(match.app_name, app_name)
+  1121→                self.assertEqual(match.namespace, namespace)
+  1122→                self.assertEqual(match.view_name, view_name)
+  1123→                self.assertEqual(match.func, func)
+  1124→                self.assertEqual(match.args, args)
+  1125→                self.assertEqual(match.kwargs, kwargs)
+  1126→                # and for legacy purposes:
+  1127→                self.assertEqual(match[0], func)
+  1128→                self.assertEqual(match[1], args)
+  1129→                self.assertEqual(match[2], kwargs)
+  1130→
+  1131→    def test_resolver_match_on_request(self):
+  1132→        response = self.client.get('/resolver_match/')
+  1133→        resolver_match = response.resolver_match
+  1134→        self.assertEqual(resolver_match.url_name, 'test-resolver-match')
+  1135→
+  1136→    def test_resolver_match_on_request_before_resolution(self):
+  1137→        request = HttpRequest()
+  1138→        self.assertIsNone(request.resolver_match)
+  1139→
+  1140→    def test_repr(self):
+  1141→        self.assertEqual(
+  1142→            repr(resolve('/no_kwargs/42/37/')),
+  1
+[... truncated ...]
+[RAW line 51 TOOL Bash]
+cd testbed && python test_issue.py
+[RAW line 52 TOOL RESULT toolu_01HZ5jFz5RafrjQmkC2S9Mg9]
+Exit code 1
+  File "test_issue.py", line 37
+    print(f"  partial.func: {partial_view.func}")
+                                               ^
+SyntaxError: invalid syntax
+[RAW line 54 TOOL Bash]
+python --version
+[RAW line 55 TOOL RESULT toolu_01Y5hegcRjELsTg9F1epmztV]
+Python 2.7.3
+[RAW line 57 TOOL Bash]
+python3 --version
+[RAW line 58 TOOL RESULT toolu_0156Tchj61QYkDpqKXWxGSyX]
+Python 3.8.8
+[RAW line 60 TOOL Bash]
+cd testbed && python3 test_issue.py
+[RAW line 61 TOOL RESULT toolu_014jecW4nmVVV4G55pTixjY3]
+Current __repr__ output:
+ResolverMatch(func=functools.partial, args=(), kwargs={'arg1': 'test'}, url_name=test-view, app_names=[], namespaces=[], route=None)
+
+Expected output should show:
+- The underlying function (my_view) instead of functools.partial
+- Ideally include information about the partial's preset arguments
+
+Current _func_path:
+functools.partial
+
+Partial function details:
+  partial.func: <function my_view at 0x7f94a006d160>
+  partial.func.__module__: __main__
+  partial.func.__name__: my_view
+  partial.args: ()
+  partial.keywords: {'arg2': 'fixed_value'}
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+[RAW line 67 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/django/urls/resolvers.py",
+  "new_text_sha256": "f45a5425db581ef77312807bdfb64e3bf61245c9246ec8283833b621c516ea78",
+  "old_text_sha256": "db6d5f83825bad7f3bd15958f2dc022a159aa9f4e6e8e9ddca04c1d67d699440"
+}
+[RAW line 71 TOOL Bash]
+cd testbed && python3 test_issue.py
+[RAW line 74 TOOL Bash]
+python3 ./swebench_9_15/testbed/test_issue.py
+[RAW line 75 TOOL RESULT toolu_01ReRzVQGQhsAUAc9xRezCaB]
+Current __repr__ output:
+ResolverMatch(func=__main__.my_view, args=(), kwargs={'arg2': 'fixed_value', 'arg1': 'test'}, url_name=test-view, app_names=[], namespaces=[], route=None)
+
+Expected output should show:
+- The underlying function (my_view) instead of functools.partial
+- Ideally include information about the partial's preset arguments
+
+Current _func_path:
+__main__.my_view
+
+Partial function details:
+  partial.func: <function my_view at 0x7fb58808d160>
+  partial.func.__module__: __main__
+  partial.func.__name__: my_view
+  partial.args: ()
+  partial.keywords: {'arg2': 'fixed_value'}
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+[RAW line 81 TOOL Bash]
+python3 -m pytest tests/urlpatterns_reverse/tests.py::ResolverMatchTests -xvs
+[RAW line 82 TOOL RESULT toolu_01AHaJwfwKDnt8Y8QiYa8sL7]
+Exit code 4
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+ERROR: found no collectors for ./swebench_9_15/testbed/tests/urlpatterns_reverse/tests.py::ResolverMatchTests
+
+
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+rootdir: ./swebench_9_15/testbed
+configfile: pyproject.toml
+plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+collecting ... collected 0 items / 1 error
+
+==================================== ERRORS ====================================
+_____________ ERROR collecting tests/urlpatterns_reverse/tests.py ______________
+tests/urlpatterns_reverse/tests.py:10: in <module>
+    from django.contrib.auth.models import User
+django/contrib/auth/models.py:3: in <module>
+    from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
+django/contrib/auth/base_user.py:47: in <module>
+    class AbstractBaseUser(models.Model):
+django/db/models/base.py:108: in __new__
+    app_config = apps.get_containing_app_config(module)
+django/apps/registry.py:253: in get_containing_app_config
+    self.check_apps_ready()
+django/apps/registry.py:135: in check_apps_ready
+    settings.INSTALLED_APPS
+django/conf/__init__.py:67: in __getattr__
+    self._setup(name)
+django/conf/__init__.py:48: in _setup
+    raise ImproperlyConfigured(
+E   django.core.exceptions.ImproperlyConfigured: Requested setting INSTALLED_APPS, but settings are
+[... truncated ...]
+[RAW line 84 TOOL Bash]
+python3 tests/runtests.py urlpatterns_reverse.tests.ResolverMatchTests
+[RAW line 85 TOOL RESULT toolu_01VkMknYFA45tCXdYos92RAE]
+Testing against Django installed in './swebench_9_15/testbed/django'
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.012s
+
+OK
+[RAW line 88 TOOL Write]
+{
+  "content_sha256": "2db2e28f21cf58a258509369a96990726a05914a5762e255d2fdfa4a3fa529ba",
+  "file_path": "./swebench_9_15/testbed/test_comprehensive.py"
+}
+[RAW line 92 TOOL Bash]
+python3 ./swebench_9_15/testbed/test_comprehensive.py
+[RAW line 93 TOOL RESULT toolu_01Bnhz1b25HUETT3ToR21QhT]
+Test 1: Partial with keyword arguments
+--------------------------------------------------
+repr: ResolverMatch(func=__main__.my_view, args=(), kwargs={'arg2': 'fixed_value', 'arg1': 'test'}, url_name=test-view, app_names=[], namespaces=[], route=None)
+_func_path: __main__.my_view
+func: <function my_view at 0x7f85300cd160>
+kwargs: {'arg2': 'fixed_value', 'arg1': 'test'}
+✓ Test 1 passed
+
+Test 2: Partial with positional arguments
+--------------------------------------------------
+repr: ResolverMatch(func=__main__.my_view, args=('preset_arg1', 'additional_arg'), kwargs={'arg3': 'test'}, url_name=test-view2, app_names=[], namespaces=[], route=None)
+args: ('preset_arg1', 'additional_arg')
+✓ Test 2 passed
+
+Test 3: Partial with both positional and keyword arguments
+--------------------------------------------------
+repr: ResolverMatch(func=__main__.my_view, args=('preset_arg1',), kwargs={'arg2': 'preset_arg2', 'arg3': 'test'}, url_name=test-view3, app_names=[], namespaces=[], route=None)
+args: ('preset_arg1',)
+kwargs: {'arg2': 'preset_arg2', 'arg3': 'test'}
+✓ Test 3 passed
+
+Test 4: Kwargs override - provided kwargs should override partial kwargs
+--------------------------------------------------
+kwargs: {'arg2': 'override_value', 'arg1': 'test'}
+✓ Test 4 passed
+
+Test 5: Regular function (non-partial) should still work
+--------------------------------------------------
+repr: ResolverMatch(func=__main__.class_view_func, args=(), kwargs={}, url_name=test-view5, app_names=[], namespaces=[], route=None)
+_func_path: __main__.class_view_func
+✓ Test 5 passed
+
+Test 6: Class-based view (non-partial) should still work
+--------------------------------------------------
+repr: ResolverMatch(func=__main__.MyClassView, args=(), kwargs={}, url_name=test-view6, app_names=[], namespaces=[], route=None)
+_func_path: __main__.MyClassView
+✓ Test 6 passed
+
+==================================================
+All tests passed!
+==================================================
+Error processing line 1
+[... truncated ...]
+[RAW line 96 TOOL Bash]
+python3 tests/runtests.py urlpatterns_reverse --verbosity=2
+[RAW line 97 TOOL RESULT toolu_013mRjTMmFshQbD9VgC4CcZ8]
+Exit code 1
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+test_build_absolute_uri (urlpatterns_reverse.tests.ReverseLazyTest) ... ok
+test_inserting_reverse_lazy_into_string (urlpatterns_reverse.tests.ReverseLazyTest) ... ok
+test_redirect_with_lazy_reverse (urlpatterns_reverse.tests.ReverseLazyTest) ... ok
+test_user_permission_with_lazy_reverse (urlpatterns_reverse.tests.ReverseLazyTest) ... ok
+test_access_locale_regex_descriptor (urlpatterns_reverse.test_localeregexdescriptor.LocaleRegexDescriptorPathLibTests) ... ok
+test_nontranslated_regex_compiled_once (urlpatterns_reverse.test_localeregexdescriptor.LocaleRegexDescriptorPathLibTests) ... ok
+test_regex_compile_error (urlpatterns_reverse.test_localeregexdescriptor.LocaleRegexDescriptorPathLibTests)
+Regex errors are re-raised as ImproperlyConfigured. ... ok
+test_translated_regex_compiled_per_language (urlpatterns_reverse.test_localeregexdescriptor.LocaleRegexDescriptorPathLibTests) ... ok
+test_access_locale_regex_descriptor (urlpatterns_reverse.test_localeregexdescriptor.LocaleRegexDescriptorTests) ... ok
+test_nontranslated_regex_compiled_once (urlpatterns_reverse.test_localeregexdescriptor.LocaleRegexDescriptorTests) ... ok
+test_regex_compile_error (urlpatterns_reverse.test_localeregexdescriptor.LocaleRegexDescriptorTests)
+Regex errors are re-raised as ImproperlyConfigured. ... ok
+test_translated_regex_compiled_per_language (urlpatterns_reverse.test_localeregexdescriptor.LocaleRegexDescriptorTests) ... ok
+test_default_handler (urlpatterns_reverse.test
+[... truncated ...]
+[RAW line 99 TOOL Grep]
+{
+  "-i": true,
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/tests/urlpatterns_reverse",
+  "pattern": "partial.*view|view.*partial"
+}
+[RAW line 102 TOOL Grep]
+{
+  "-i": true,
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/tests/urlpatterns_reverse",
+  "pattern": "partial.*view|view.*partial"
+}
+[RAW line 103 TOOL RESULT toolu_01RwAxuoYDrtj64khZXMZTGx]
+tests/urlpatterns_reverse/views.py:59:empty_view_partial = partial(empty_view, template_name="template.html")
+tests/urlpatterns_reverse/views.py:60:empty_view_nested_partial = partial(empty_view_partial, template_name="nested_partial.html")
+tests/urlpatterns_reverse/views.py:62:    partial(empty_view, template_name="template.html"), empty_view,
+tests/urlpatterns_reverse/urls.py:4:    absolute_kwargs_view, defaults_view, empty_view, empty_view_nested_partial,
+tests/urlpatterns_reverse/urls.py:5:    empty_view_partial, empty_view_wrapped, nested_view,
+tests/urlpatterns_reverse/urls.py:62:    path('partial/', empty_view_partial, name='partial'),
+tests/urlpatterns_reverse/urls.py:63:    path('partial_nested/', empty_view_nested_partial, name='partial_nested'),
+tests/urlpatterns_reverse/urls.py:64:    path('partial_wrapped/', empty_view_wrapped, name='partial_wrapped'),
+[RAW line 105 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/tests/urlpatterns_reverse/views.py",
+  "limit": 30,
+  "offset": 50
+}
+[RAW line 106 TOOL RESULT toolu_01XyKRbYw3pixG2tPUoCdmfv]
+    50→@user_passes_test(lambda u: u.is_authenticated, login_url=reverse_lazy('some-login-page'))
+    51→def login_required_view(request):
+    52→    return HttpResponse('Hello you')
+    53→
+    54→
+    55→def bad_view(request, *args, **kwargs):
+    56→    raise ValueError("I don't think I'm getting good value for this view")
+    57→
+    58→
+    59→empty_view_partial = partial(empty_view, template_name="template.html")
+    60→empty_view_nested_partial = partial(empty_view_partial, template_name="nested_partial.html")
+    61→empty_view_wrapped = update_wrapper(
+    62→    partial(empty_view, template_name="template.html"), empty_view,
+    63→)
+    64→
+
+[RAW line 108 TOOL Write]
+{
+  "content_sha256": "fd449a675749e93f6769346e52d7373ae245d9f22a36610dc82f0486a92a1e36",
+  "file_path": "./swebench_9_15/testbed/test_partial_urls.py"
+}
+[RAW line 112 TOOL Bash]
+ls ./swebench_9_15/testbed/tests/urlpatterns_reverse/*.py | head -10
+[RAW line 113 TOOL RESULT toolu_016sHLdP1mbAvwT7FZMSJVco]
+./swebench_9_15/testbed/tests/urlpatterns_reverse/__init__.py
+./swebench_9_15/testbed/tests/urlpatterns_reverse/erroneous_urls.py
+./swebench_9_15/testbed/tests/urlpatterns_reverse/extra_urls.py
+./swebench_9_15/testbed/tests/urlpatterns_reverse/included_app_urls.py
+./swebench_9_15/testbed/tests/urlpatterns_reverse/included_named_urls.py
+./swebench_9_15/testbed/tests/urlpatterns_reverse/included_named_urls2.py
+./swebench_9_15/testbed/tests/urlpatterns_reverse/included_namespace_urls.py
+./swebench_9_15/testbed/tests/urlpatterns_reverse/included_no_kwargs_urls.py
+./swebench_9_15/testbed/tests/urlpatterns_reverse/included_urls.py
+./swebench_9_15/testbed/tests/urlpatterns_reverse/included_urls2.py
+[RAW line 115 TOOL Write]
+{
+  "content_sha256": "020913817c49cce057fa98d191f5381de770be16c7a08a06beded4ad2bb241f8",
+  "file_path": "./swebench_9_15/testbed/test_partial_simple.py"
+}
+[RAW line 119 TOOL Bash]
+python3 ./swebench_9_15/testbed/test_partial_simple.py
+[RAW line 120 TOOL RESULT toolu_011pQCcgciDDTjxmmfQYW7CW]
+Exit code 1
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+No sympy found
+Traceback (most recent call last):
+  File "./swebench_9_15/testbed/test_partial_simple.py", line 14, in <module>
+    django.setup()
+  File "./swebench_9_15/testbed/django/__init__.py", line 19, in setup
+    configure_logging(settings.LOGGING_CONFIG, settings.LOGGING)
+  File "./swebench_9_15/testbed/django/conf/__init__.py", line 67, in __getattr__
+    self._setup(name)
+  File "./swebench_9_15/testbed/django/conf/__init__.py", line 54, in _setup
+    self._wrapped = Settings(settings_module)
+  File "./swebench_9_15/testbed/django/conf/__init__.py", line 141, in __init__
+    mod = importlib.import_module(self.SETTINGS_MODULE)
+  File "/opt/anaconda3/lib/python3.8/importlib/__init__.py", line 127, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1014, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 991, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 961, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 219, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1014, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 991, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 975, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 671, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 783, in exec_module
+  File "<frozen importlib._bootstrap>", line 219, in _call_with_frames_removed
+  File "/opt/anaconda3/lib/python3.8/site-pack
+[... truncated ...]

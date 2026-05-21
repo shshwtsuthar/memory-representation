@@ -1,0 +1,580 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 09df8145-40b8-47d3-a87d-81a121fc64ca
+- repo: django/django
+- instance_id: django__django-15695
+- base_commit: 647480166bfe7532e8c471fef0146e3a17e6c0c9
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-15695
+base_commit: 647480166bfe7532e8c471fef0146e3a17e6c0c9
+problem_statement:
+RenameIndex() crashes when unnamed index is moving backward and forward.
+Description
+
+RenameIndex() should restore the old auto-generated name when an unnamed index for unique_together is moving backward. Now re-applying RenameIndex() crashes. For example:
+tests/migrations/test_operations.py
+29882988        with connection.schema_editor() as editor, self.assertNumQueries(0):
+29892989            operation.database_backwards(app_label, editor, new_state, project_state)
+29902990        self.assertIndexNameExists(table_name, "new_pony_test_idx")
+ 2991        # Re-apply renaming.
+ 2992        with connection.schema_editor() as editor:
+ 2993            operation.database_forwards(app_label, editor, project_state, new_state)
+ 2994        self.assertIndexNameExists(table_name, "new_pony_test_idx")
+29912995        # Deconstruction.
+29922996        definition = operation.deconstruct()
+29932997        self.assertEqual(definition[0], "RenameIndex")
+crashes on PostgreSQL:
+django.db.utils.ProgrammingError: relation "new_pony_test_idx" already exists
+sha256: f651dd9a8e23520774bdeb8a44e68a508cf51742c11bd7c676b8c3abd6e53767
+truncated: false
+
+[ADP ACTION current=1 original=3: api_action Grep]
+payload:
+{
+  "output_mode": "files_with_matches",
+  "pattern": "class RenameIndex",
+  "type": "py"
+}
+sha256: e4d621dcdcf1f296cd602c3a062c212b89b692e061f65450e15a603ba4e52215
+truncated: false
+
+[ADP ACTION current=2 original=5: api_action Grep]
+payload:
+{
+  "output_mode": "files_with_matches",
+  "pattern": "def test_rename_index",
+  "type": "py"
+}
+sha256: d619a4f0629ff7c98ac8075e83cee23349b5b1d58b57d2a44de32e9970685f4f
+truncated: false
+
+[ADP ACTION current=3 original=7: code_action bash]
+payload:
+ls -la testbed 2>&1 | head -20
+sha256: e752578337231d2a2b84b17a8625beb233c229a302d09772074e95df408b778a
+truncated: false
+
+[ADP ACTION current=4 original=17: api_action Grep]
+path: testbed
+payload:
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed",
+  "pattern": "class RenameIndex",
+  "type": "py"
+}
+sha256: c7c393f8a96ea740442b6602d60ddf6b89b296cf1d870ddf1ea7c200aab0fd15
+truncated: false
+
+[ADP OBSERVATION current=5 original=18 source=environment]
+name: Grep:toolu_011boNEWfXCQDmEqsesNvgtM
+excerpt:
+Found 1 file
+testbed/django/db/migrations/operations/models.py
+sha256: d94620a692d6ad961265cb12a5beac56f9a77f84bc9649c625a96baa1155d464
+truncated: false
+
+[ADP ACTION current=6 original=19: api_action Grep]
+path: testbed
+payload:
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed",
+  "pattern": "def test_rename_index",
+  "type": "py"
+}
+sha256: 4fbc960ec6513bccc9bd5d1c9437b31217f8338616649ce2187595895832e15f
+truncated: false
+
+[ADP OBSERVATION current=7 original=20 source=environment]
+name: Grep:toolu_01PbAQbBUqriT4xLAn7DHkPo
+excerpt:
+Found 2 files
+testbed/tests/migrations/test_optimizer.py
+testbed/tests/migrations/test_operations.py
+sha256: 925b7c23dc89f23fb43c5405e386c798b2b8f6156190604645d621bfdd0091f8
+truncated: false
+
+[ADP ACTION current=8 original=21: api_action Read]
+path: django/db/migrations/operations/models.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/migrations/operations/models.py",
+  "limit": 200,
+  "offset": 900
+}
+sha256: f6913b4f3ae682f01e09758803abc9ea1a7ee8785b9c79880d8bbd390424f15a
+truncated: false
+
+[ADP OBSERVATION current=9 original=22 source=environment]
+name: Read:toolu_01LJEaDfBHz6ZEUnzgzdqZde
+excerpt:
+   900→
+   901→    @cached_property
+   902→    def new_name_lower(self):
+   903→        return self.new_name.lower()
+   904→
+   905→    def deconstruct(self):
+   906→        kwargs = {
+   907→            "model_name": self.model_name,
+   908→            "new_name": self.new_name,
+   909→        }
+   910→        if self.old_name:
+   911→            kwargs["old_name"] = self.old_name
+   912→        if self.old_fields:
+   913→            kwargs["old_fields"] = self.old_fields
+   914→        return (self.__class__.__qualname__, [], kwargs)
+   915→
+   916→    def state_forwards(self, app_label, state):
+   917→        if self.old_fields:
+   918→            state.add_index(
+   919→                app_label,
+   920→                self.model_name_lower,
+   921→                models.Index(fields=self.old_fields, name=self.new_name),
+   922→            )
+   923→            state.remove_model_options(
+   924→                app_label,
+   925→                self.model_name_lower,
+   926→                AlterIndexTogether.option_name,
+   927→                self.old_fields,
+   928→            )
+   929→        else:
+   930→            state.rename_index(
+   931→                app_label, self.model_name_lower, self.old_name, self.new_name
+   932→            )
+   933→
+   934→    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+   935→        model = to_state.apps.get_model(app_label, self.model_name)
+   936→        if not self.allow_migrate_model(schema_editor.connection.alias, model):
+   937→            return
+   938→
+   939→        if self.old_fields:
+   940→            from_model = from_state.apps.get_model(app_label, self.model_name)
+   941→            columns = [
+   942→                from_model._meta.get_field(field).column for field in self.old_fields
+   943→            ]
+   944→            matching_index_name = schema_editor._constraint_names(
+   945→                from_model, column_names=columns, index=True
+   946→            )
+   947→
+sha256: 85d538cbbff9c1317b9cc8a755a72e93d2d8851c9775ab564f7656562054e6af
+truncated: true
+
+[ADP ACTION current=10 original=23: api_action Grep]
+path: testbed
+payload:
+{
+  "-A": 120,
+  "output_mode": "content",
+  "path": "testbed",
+  "pattern": "class RenameIndex",
+  "type": "py"
+}
+sha256: 788b4601f373757e5537b690b6ddac3e913f1b2963cdffa173785df3e74ac9a6
+truncated: false
+
+[ADP OBSERVATION current=11 original=24 source=environment]
+name: Grep:toolu_016emkpNhWb2ivomYRNT8dfn
+excerpt:
+testbed/django/db/migrations/operations/models.py:879:class RenameIndex(IndexOperation):
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-880-    """Rename an index."""
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-881-
+testbed/django/db/migrations/operations/models.py-882-    def __init__(self, model_name, new_name, old_name=None, old_fields=None):
+testbed/django/db/migrations/operations/models.py-883-        if not old_name and not old_fields:
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-884-            raise ValueError(
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-885-                "RenameIndex requires one of old_name and old_fields arguments to be "
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-886-                "set."
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-887-            )
+testbed/django/db/migrations/operations/models.py-888-        if old_name and old_fields:
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-889-            raise ValueError(
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-890-                "RenameIndex.old_name and old_fields are mutually exclusive."
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-891-            )
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-892-        self.model_name = model_name
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-893-        self.new_name = new_name
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-894-        self.old_name = old_name
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-895-        self.old_fields = old_fields
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-896-
+./swebench_9_15/testbed/django/db/migrations/operations/models.py-897-    @cached_property
+testbed/django/db/migrations/operations/models.py-898-    def old_name_lowe
+sha256: e217a3f4df6807159ec6107be4c84b6ea1ce6b44bda9ab8029aa277bb7b1a690
+truncated: true
+
+[ADP ACTION current=12 original=25: api_action Grep]
+path: tests/migrations/test_operations.py
+payload:
+{
+  "-A": 100,
+  "output_mode": "content",
+  "path": "testbed/tests/migrations/test_operations.py",
+  "pattern": "def test_rename_index",
+  "type": "py"
+}
+sha256: 0ea6d4a53dcc0eb88d03f58a879d8e8d6bcf2ad60c51fcb0484093bbcf38ff51
+truncated: false
+
+[ADP OBSERVATION current=13 original=26 source=environment]
+name: Grep:toolu_01VL4BxRBB5BFVz5jR62oqaH
+excerpt:
+2903:    def test_rename_index(self):
+2904-        app_label = "test_rnin"
+2905-        project_state = self.set_up_test_model(app_label, index=True)
+2906-        table_name = app_label + "_pony"
+2907-        self.assertIndexNameExists(table_name, "pony_pink_idx")
+2908-        self.assertIndexNameNotExists(table_name, "new_pony_test_idx")
+2909-        operation = migrations.RenameIndex(
+2910-            "Pony", new_name="new_pony_test_idx", old_name="pony_pink_idx"
+2911-        )
+2912-        self.assertEqual(
+2913-            operation.describe(),
+2914-            "Rename index pony_pink_idx on Pony to new_pony_test_idx",
+2915-        )
+2916-        self.assertEqual(
+2917-            operation.migration_name_fragment,
+2918-            "rename_pony_pink_idx_new_pony_test_idx",
+2919-        )
+2920-
+2921-        new_state = project_state.clone()
+2922-        operation.state_forwards(app_label, new_state)
+2923-        # Rename index.
+2924-        expected_queries = 1 if connection.features.can_rename_index else 2
+2925-        with connection.schema_editor() as editor, self.assertNumQueries(
+2926-            expected_queries
+2927-        ):
+2928-            operation.database_forwards(app_label, editor, project_state, new_state)
+2929-        self.assertIndexNameNotExists(table_name, "pony_pink_idx")
+2930-        self.assertIndexNameExists(table_name, "new_pony_test_idx")
+2931-        # Reversal.
+2932-        with connection.schema_editor() as editor, self.assertNumQueries(
+2933-            expected_queries
+2934-        ):
+2935-            operation.database_backwards(app_label, editor, new_state, project_state)
+2936-        self.assertIndexNameExists(table_name, "pony_pink_idx")
+2937-        self.assertIndexNameNotExists(table_name, "new_pony_test_idx")
+2938-        # Deconstruction.
+2939-        definition = operation.deconstruct()
+2940-        self.assertEqual(definition[0], "RenameIndex")
+2941-        self.assertEqual(definition[1], [])
+2942-        self.assertEqual(
+sha256: 098713829a7c56b2c340003be229ec80960aed08c366eda9c26623df5c3cef5c
+truncated: true
+
+[ADP ACTION current=14 original=29: api_action Read]
+path: django/db/migrations/operations/models.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/migrations/operations/models.py",
+  "limit": 20,
+  "offset": 968
+}
+sha256: a7ae7f107957fc162e24207e06b185db567bfe73a0dd510f9ddb327340d0d429
+truncated: false
+
+[ADP OBSERVATION current=15 original=30 source=environment]
+name: Read:toolu_015skSoMWYMjDFPgzivzdPhD
+excerpt:
+   968→    def database_backwards(self, app_label, schema_editor, from_state, to_state):
+   969→        if self.old_fields:
+   970→            # Backward operation with unnamed index is a no-op.
+   971→            return
+   972→
+   973→        self.new_name_lower, self.old_name_lower = (
+   974→            self.old_name_lower,
+   975→            self.new_name_lower,
+   976→        )
+   977→        self.new_name, self.old_name = self.old_name, self.new_name
+   978→
+   979→        self.database_forwards(app_label, schema_editor, from_state, to_state)
+   980→
+   981→        self.new_name_lower, self.old_name_lower = (
+   982→            self.old_name_lower,
+   983→            self.new_name_lower,
+   984→        )
+   985→        self.new_name, self.old_name = self.old_name, self.new_name
+   986→
+   987→    def describe(self):
+
+sha256: ed8e95045d5d58f8f010c06455fa2bd164949230394ea7aa7dcd61f7f347d3fb
+truncated: false
+
+[ADP ACTION current=16 original=31: api_action Edit]
+path: django/db/migrations/operations/models.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/migrations/operations/models.py",
+  "new_text_sha256": "c0a1ae08f8c6bc553cc7c6a22d191ed4ea07e9101bb995c10794952938d56c74",
+  "old_text_sha256": "89b18ce9d248d242f58bd39dc0047b69b3aca9791faac299fabf497e7ecd4ee2"
+}
+sha256: a972fb6de6dde114e1ceaace50d455aaac7d1de4f3a52a8d9092c94921a384e1
+truncated: false
+
+[ADP ACTION current=17 original=35: api_action Read]
+path: tests/migrations/test_operations.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/tests/migrations/test_operations.py",
+  "limit": 40,
+  "offset": 2964
+}
+sha256: ede4678249f5a2c882989320c6f82b7d29778491cbbf1d9d416a5dc71bb737be
+truncated: false
+
+[ADP OBSERVATION current=18 original=36 source=environment]
+name: Read:toolu_01EUqajSw4weSEnx2rMgVDnz
+excerpt:
+  2964→    def test_rename_index_unnamed_index(self):
+  2965→        app_label = "test_rninui"
+  2966→        project_state = self.set_up_test_model(app_label, index_together=True)
+  2967→        table_name = app_label + "_pony"
+  2968→        self.assertIndexNameNotExists(table_name, "new_pony_test_idx")
+  2969→        operation = migrations.RenameIndex(
+  2970→            "Pony", new_name="new_pony_test_idx", old_fields=("weight", "pink")
+  2971→        )
+  2972→        self.assertEqual(
+  2973→            operation.describe(),
+  2974→            "Rename unnamed index for ('weight', 'pink') on Pony to new_pony_test_idx",
+  2975→        )
+  2976→        self.assertEqual(
+  2977→            operation.migration_name_fragment,
+  2978→            "rename_pony_weight_pink_new_pony_test_idx",
+  2979→        )
+  2980→
+  2981→        new_state = project_state.clone()
+  2982→        operation.state_forwards(app_label, new_state)
+  2983→        # Rename index.
+  2984→        with connection.schema_editor() as editor:
+  2985→            operation.database_forwards(app_label, editor, project_state, new_state)
+  2986→        self.assertIndexNameExists(table_name, "new_pony_test_idx")
+  2987→        # Reverse is a no-op.
+  2988→        with connection.schema_editor() as editor, self.assertNumQueries(0):
+  2989→            operation.database_backwards(app_label, editor, new_state, project_state)
+  2990→        self.assertIndexNameExists(table_name, "new_pony_test_idx")
+  2991→        # Deconstruction.
+  2992→        definition = operation.deconstruct()
+  2993→        self.assertEqual(definition[0], "RenameIndex")
+  2994→        self.assertEqual(definition[1], [])
+  2995→        self.assertEqual(
+  2996→            definition[2],
+  2997→            {
+  2998→                "model_name": "Pony",
+  2999→                "new_name": "new_pony_test_idx",
+  3000→                "old_fields": ("weight", "pink"),
+  3001→            },
+  3002→        )
+  3003→
+
+sha256: 0f9fe04df7aaeb3e9d90a10b6969a2251374aba6005e9ff395248e1f9662374a
+truncated: false
+
+[ADP ACTION current=19 original=37: api_action Edit]
+path: tests/migrations/test_operations.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/tests/migrations/test_operations.py",
+  "new_text_sha256": "655b7aaac9a5b94dda38463ee54f51899ceff50ee1e6462266cfeaa53eefe69c",
+  "old_text_sha256": "3a7a8c5dc73b94a3ec4130143d97ec680284efd03848261f09fe062009a9b60d"
+}
+sha256: c2d8847316d5b2ffd9e1206f03bb384d070cc553251b9f0447b3f465575bd68d
+truncated: false
+
+[ADP ACTION current=20 original=39: code_action bash]
+payload:
+cd testbed && python -m pytest tests/migrations/test_operations.py::OperationTests::test_rename_index_unnamed_index -xvs 2>&1 | head -100
+sha256: 816d5e4ba2e9ff547eb3d6854bfe1513cc255b0d632981a4da1ce318d0fe2574
+truncated: false
+
+[ADP OBSERVATION current=21 original=40 source=environment]
+name: Bash:toolu_01Ja95n9DmjiU8hFeDKCFerE
+excerpt:
+/Applications/ADFRsuite-1.0/bin/python: No module named pytest
+sha256: 9bc4c10ea594378d5c17d338dde8c8695e6c3ca185860659ce3c6c1efccc3335
+truncated: false
+
+[ADP ACTION current=22 original=41: code_action bash]
+payload:
+cd testbed && python tests/runtests.py migrations.test_operations.OperationTests.test_rename_index_unnamed_index --verbosity=2 2>&1
+sha256: 7548a49a41942608a8dcb8ad373c6ff9df01e7c2d73f556bec6f8e005b924ee0
+truncated: false
+
+[ADP ACTION current=23 original=45: code_action bash]
+payload:
+python tests/runtests.py migrations.test_operations.OperationTests.test_rename_index_unnamed_index --verbosity=2 2>&1
+sha256: f3156af2d4c844b1affdda43af68d191d2b8f17b084927034ab68c4157e862e9
+truncated: false
+
+[ADP OBSERVATION current=24 original=46 source=environment]
+name: Bash:toolu_01SeXW9yWQhy3vC1Go82thWw:error
+excerpt:
+Exit code 1
+  File "tests/runtests.py", line 22
+    ) from e
+         ^
+SyntaxError: invalid syntax
+sha256: 35dcb43503fd1cbab5b37c9a70510a7a4279b5d18de6a4031eafaf8fa3f5a3a9
+truncated: false
+
+[ADP ACTION current=25 original=47: code_action bash]
+payload:
+python3 tests/runtests.py migrations.test_operations.OperationTests.test_rename_index_unnamed_index --verbosity=2 2>&1
+sha256: ac6fc98179c7e8d7602de86f8d287e4ffe3063311ad8d0effd129228ad9acf54
+truncated: false
+
+[ADP OBSERVATION current=26 original=48 source=environment]
+name: Bash:toolu_01QvrMpQJR44SxpC4n3G7Rji
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Importing application migrations
+Found 1 test(s).
+Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+Operations to perform:
+  Synchronize unmigrated apps: auth, contenttypes, messages, migrations, sessions, staticfiles
+  Apply all migrations: admin, sites
+Synchronizing apps without migrations:
+  Creating tables...
+    Creating table django_content_type
+    Creating table auth_permission
+    Creating table auth_group
+    Creating table auth_user
+    Creating table django_session
+    Creating table migrations_modelwithcustombase
+    Creating table migrations_unmigratedmodel
+    Running deferred SQL...
+Running migrations:
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying sites.0001_initial... OK
+  Applying sites.0002_alter_domain_unique... OK
+Creating test database for alias 'other' ('file:memorydb_other?mode=memory&cache=shared')...
+Operations to perform:
+  Synchronize unmigrated apps: auth, contenttypes, messages, migrations, sessions, staticfiles
+  Apply all migrations: admin, sites
+Synchronizing apps without migrations:
+  Creating tables...
+    Creating table django_content_type
+    Creating table auth_permission
+    Creating table auth_group
+    Creating table auth_user
+    Creating table django_session
+    Creating table migrations_modelwithcustombase
+    Creating table migrations_unmigratedmodel
+    Runn
+sha256: e63fb6f81a8c9b55072e6a18b9612d80b8119b8f56253dd251f17f6204760752
+truncated: true
+
+[ADP ACTION current=27 original=51: code_action bash]
+payload:
+python3 tests/runtests.py migrations.test_operations.OperationTests.test_rename_index --verbosity=2 2>&1
+sha256: 9820f4d5fabcada6490a1d1fc5b6d7d6152ce97fdb03c5282f377f77944fbe3d
+truncated: false
+
+[ADP OBSERVATION current=28 original=52 source=environment]
+name: Bash:toolu_01XdsejD5mmTvn1jDXGbhKmP
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Importing application migrations
+Found 1 test(s).
+Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+Operations to perform:
+  Synchronize unmigrated apps: auth, contenttypes, messages, migrations, sessions, staticfiles
+  Apply all migrations: admin, sites
+Synchronizing apps without migrations:
+  Creating tables...
+    Creating table django_content_type
+    Creating table auth_permission
+    Creating table auth_group
+    Creating table auth_user
+    Creating table django_session
+    Creating table migrations_modelwithcustombase
+    Creating table migrations_unmigratedmodel
+    Running deferred SQL...
+Running migrations:
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying sites.0001_initial... OK
+  Applying sites.0002_alter_domain_unique... OK
+Creating test database for alias 'other' ('file:memorydb_other?mode=memory&cache=shared')...
+Operations to perform:
+  Synchronize unmigrated apps: auth, contenttypes, messages, migrations, sessions, staticfiles
+  Apply all migrations: admin, sites
+Synchronizing apps without migrations:
+  Creating tables...
+    Creating table django_content_type
+    Creating table auth_permission
+    Creating table auth_group
+    Creating table auth_user
+    Creating table django_session
+    Creating table migrations_modelwithcustombase
+    Creating table migrations_unmigratedmodel
+    Runn
+sha256: 378286a83dd9110bcac8194d9bd887fb594bbcffbca8687233dcb39322978e71
+truncated: true
+
+[ADP ACTION current=29 original=53: code_action bash]
+payload:
+python3 tests/runtests.py migrations.test_operations.OperationTests.test_rename_index_unknown_unnamed_index migrations.test_operations.OperationTests.test_rename_index_state_forwards migrations.test_operations.OperationTests.test_rename_index_state_forwards_unnamed_index migrations.test_operations.OperationTests.test_rename_index_arguments --verbosity=2 2>&1 | tail -30
+sha256: fe13b9a9dc5edd138605d5fb5a55fb722816837b8e6942d7275f51cc4ed2a49b
+truncated: false
+
+[ADP OBSERVATION current=30 original=54 source=environment]
+name: Bash:toolu_01K3dLj7f1x2ayRMd3QB3427
+excerpt:
+  Synchronize unmigrated apps: auth, contenttypes, messages, migrations, sessions, staticfiles
+  Apply all migrations: admin, sites
+Synchronizing apps without migrations:
+  Creating tables...
+    Creating table django_content_type
+    Creating table auth_permission
+    Creating table auth_group
+    Creating table auth_user
+    Creating table django_session
+    Creating table migrations_modelwithcustombase
+    Creating table migrations_unmigratedmodel
+    Running deferred SQL...
+Running migrations:
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying sites.0001_initial... OK
+  Applying sites.0002_alter_domain_unique... OK
+System check identified no issues (0 silenced).
+test_rename_index_unknown_unnamed_index (migrations.test_operations.OperationTests) ... ok
+test_rename_index_state_forwards (migrations.test_operations.OperationTests) ... ok
+test_rename_index_state_forwards_unnamed_index (migrations.test_operations.OperationTests) ... ok
+test_rename_index_arguments (migrations.test_operations.OperationTests) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.022s
+
+OK
+Destroying test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+Destroying test database for alias 'other' ('file:memorydb_other?mode=memory&cache=shared')...
+sha256: 8e8050ea4a0c833b7cb5dc1dbd84debbc39e210612c042e9e0a0e969f06d0cca
+truncated: false

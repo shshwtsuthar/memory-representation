@@ -1,0 +1,336 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 7672e5bc-5c72-4aa5-9e8f-b19785ce6a1c
+- repo: django/django
+- instance_id: django__django-15061
+- base_commit: 2c01ebb4be5d53cbf6450f356c10e436025d6d07
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Remove "for = ..." from MultiWidget's <label>.
+Description
+
+The instance from Raw MultiWidget class generate id_for_label like f'{id_}0'
+It has not sense.
+For example ChoiceWidget has self.add_id_index and I can decide it myself, how I will see label_id - with or without index.
+I think, it is better to remove completely id_for_label method from MultiWidget Class.
+
+FILES INSPECTED
+---------------
+- django/forms/widgets.py [Grep: 3, Read: 1]
+- tests/forms_tests/widget_tests/test_multiwidget.py [Read: 1]
+- tests/forms_tests/tests/test_forms.py [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [4] Grep pattern='class MultiWidget' path='django/forms/widgets.py'
+- [6] Grep pattern='def id_for_label' path='django/forms/widgets.py'
+- [25] Grep pattern='test_boundfield_subwidget_id_for_label' path='tests/forms_tests/tests/test_forms.py'
+- [27] Grep pattern='class Widget' path='django/forms/widgets.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [diagnostic] find testbed -name "*.py" -type f | xargs grep -l "class MultiWidget" | head -5
+- [diagnostic] grep -r "id_for_label" testbed/tests/forms_tests/ --include="*.py" | grep -i multiwidget
+- [test] cd testbed && python -m pytest tests/forms_tests/widget_tests/test_multiwidget.py -xvs
+- [test] cd testbed && python tests/runtests.py forms_tests.widget_tests.test_multiwidget --verbosity=2
+- [other/reproduction] python --version && python3 --version
+- [test] cd testbed && python3 tests/runtests.py forms_tests.widget_tests.test_multiwidget --verbosity=2
+- [diagnostic] cd testbed && grep -r "id_for_label" tests/ --include="*.py" | head -20
+- [diagnostic] grep -r "id_for_label" ./swebench_9_15/testbed/tests/ --include="*.py" | head -20
+- [test] python3 ./swebench_9_15/testbed/tests/runtests.py forms_tests.tests.test_forms -v 2 2>&1 | tail -50
+- [test] python3 ./swebench_9_15/test_multiwidget_fix.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #2]
+  testbed/tests/forms_tests/widget_tests/test_multiwidget.py
+  testbed/django/forms/widgets.py
+- [Grep Result after action #4]
+  793:class MultiWidget(Widget):
+  794-    """
+  795-    A widget that is composed of multiple widgets.
+  796-
+  797-    In addition to the values added by Widget.get_context(), this widget
+  798-    adds a list of subwidgets to the context as widget['subwidgets'].
+  799-    These can be looped over and rendered like normal widgets.
+  800-
+  801-    You'll probably want to use this class with MultiValueField.
+  802-    """
+  803-    template_name = 'django/forms/widgets/multiwidget.html'
+  804-
+  805-    def __init__(self, widgets, attrs=None):
+  806-        if isinstance(widgets, dict):
+  807-            self.widgets_names = [
+  808-                ('_%s' % name) if name else '' for name in widgets
+  809-            ]
+  810-            widgets = widgets.values()
+  811-        else:
+  812-            self.widgets_names = ['_%s' % i for i in range(len(widgets))]
+  813-        self.widgets = [w() if isinstance(w, type) else w for w in widgets]
+  814-        super().__init__(attrs)
+  815-
+  816-    @property
+  817-    def is_hidden(self):
+  818-        return all(w.is_hidden for w in self.widgets)
+  819-
+  820-    def get_context(self, name, value, attrs):
+  821-        context = super().get_context(name, value, attrs)
+  822-        if self.is
+  [... truncated ...]
+- [Grep Result after action #6]
+  265-    def value_omitted_from_data(self, data, files, name):
+  266-        return name not in data
+  267-
+  268:    def id_for_label(self, id_):
+  269-        """
+  270-        Return the HTML ID attribute of this Widget for use by a <label>,
+  271-        given the ID of the field. Return None if no ID is available.
+  272-
+  273-        This hook is necessary because some widgets have multiple HTML
+  274-        elements and, thus, multiple IDs. In that case, this method should
+  275-        return an ID value that corresponds to the first ID in the widget's
+  276-        tags.
+  277-        """
+  278-        return id_
+  --
+  642-        context['widget']['optgroups'] = self.optgroups(name, context['widget']['value'], attrs)
+  643-        return context
+  644-
+  645:    def id_for_label(self, id_, index='0'):
+  646-        """
+  647-        Use an incremented id for each option where the main widget
+  648-        references the zero index.
+  649-        """
+  650-        if id_ and self.add_id_index:
+  651-            id_ = '%s_%s' % (id_, index)
+  652-        return id_
+  653-
+  654-    def value_from_datadict(self, data, files, name):
+  655-        getter = data.get
+  --
+  762-    template_name = 'django/forms/widgets/radio.html'
+  763-
+  [... truncated ...]
+- [Read Result after action #8]
+     793→class MultiWidget(Widget):
+     794→    """
+     795→    A widget that is composed of multiple widgets.
+     796→
+     797→    In addition to the values added by Widget.get_context(), this widget
+     798→    adds a list of subwidgets to the context as widget['subwidgets'].
+     799→    These can be looped over and rendered like normal widgets.
+     800→
+     801→    You'll probably want to use this class with MultiValueField.
+     802→    """
+     803→    template_name = 'django/forms/widgets/multiwidget.html'
+     804→
+     805→    def __init__(self, widgets, attrs=None):
+     806→        if isinstance(widgets, dict):
+     807→            self.widgets_names = [
+     808→                ('_%s' % name) if name else '' for name in widgets
+     809→            ]
+     810→            widgets = widgets.values()
+     811→        else:
+     812→            self.widgets_names = ['_%s' % i for i in range(len(widgets))]
+     813→        self.widgets = [w() if isinstance(w, type) else w for w in widgets]
+     814→        super().__init__(attrs)
+     815→
+     816→    @property
+     817→    def is_hidden(self):
+     818→        return all(w.is_hidden for w in self.widgets)
+     819→
+     820→    def get_context(self, name, value, attrs):
+
+  [... truncated ...]
+- [Read Result after action #10]
+       1→import copy
+       2→from datetime import datetime
+       3→
+       4→from django.forms import (
+       5→    CharField, FileInput, MultipleChoiceField, MultiValueField, MultiWidget,
+       6→    RadioSelect, SelectMultiple, SplitDateTimeField, SplitDateTimeWidget,
+       7→    TextInput,
+       8→)
+       9→
+      10→from .base import WidgetTest
+      11→
+      12→
+      13→class MyMultiWidget(MultiWidget):
+      14→    def decompress(self, value):
+      15→        if value:
+      16→            return value.split('__')
+      17→        return ['', '']
+      18→
+      19→
+      20→class ComplexMultiWidget(MultiWidget):
+      21→    def __init__(self, attrs=None):
+      22→        widgets = (
+      23→            TextInput(),
+      24→            SelectMultiple(choices=WidgetTest.beatles),
+      25→            SplitDateTimeWidget(),
+      26→        )
+      27→        super().__init__(widgets, attrs)
+      28→
+      29→    def decompress(self, value):
+      30→        if value:
+      31→            data = value.split(',')
+      32→            return [
+      33→                data[0], list(data[1]), datetime.strptime(data[2], "%Y-%m-%d %H:%M:%S")
+      34→            ]
+      35→        return [None, None, None]
+      36→
+      37→
+      38→class C
+  [... truncated ...]
+- [Test Output after action #14]
+  Exit code 1
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #16]
+  Exit code 1
+    File "tests/runtests.py", line 20
+      ) from e
+           ^
+  SyntaxError: invalid syntax
+- [Test Output after action #20]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Importing application forms_tests
+  Found 12 test(s).
+  Skipping setup of unused database(s): default, other.
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  test_constructor_attrs (forms_tests.widget_tests.test_multiwidget.MultiWidgetTest) ... ok
+  test_constructor_attrs_with_type (forms_tests.widget_tests.test_multiwidget.MultiWidgetTest) ... ok
+  test_deepcopy (forms_tests.widget_tests.test_multiwidget.MultiWidgetTest)
+  MultiWidget should define __deepcopy__() (#12048). ... ok
+  test_needs_multipart_false (forms_tests.widget_tests.test_multiwidget.MultiWidgetTest)
+  needs_multipart_form should be False if no widgets need it. ... ok
+  test_needs_multipart_true (forms_tests.widget_tests.test_multiwidget.MultiWidge
+  [... truncated ...]
+- [Diagnostic Output after action #23]
+  ./swebench_9_15/testbed/tests//auth_tests/test_forms.py:        self.assertIsNone(bound_field.field.widget.id_for_label('id'))
+  ./swebench_9_15/testbed/tests//forms_tests/tests/test_forms.py:        self.assertEqual(fields[0].id_for_label, 'id_name_0')
+  ./swebench_9_15/testbed/tests//forms_tests/tests/test_forms.py:        self.assertEqual(fields[1].id_for_label, 'id_name_1')
+  ./swebench_9_15/testbed/tests//forms_tests/tests/test_forms.py:        self.assertEqual(fields[0].id_for_label, None)
+  ./swebench_9_15/testbed/tests//forms_tests/tests/test_forms.py:    def test_boundfield_label_tag_custom_widget_id_for_label(self):
+  ./swebench_9_15/testbed/tests//forms_tests/tests/test_forms.py:            def id_for_label(self, id):
+  ./swebench_9_15/testbed/tests//forms_tests/tests/test_forms.py:            def id_for_label(self, id):
+  ./swebench_9_15/testbed/tests//forms_tests/tests/test_forms.py:    def test_boundfield_id_for_label(self):
+  ./swebench_9_15/testbed/tests//forms_tests/tests/test_forms.py:        self.assertEqual(SomeForm()['field'].id_for_label, 'id_field')
+  ./swebench_9_15/testbed/tests//forms_tests/tests/test_forms.py:    def test_boundfield_id_for_label_override_by_attrs(self):
+  ./
+  [... truncated ...]
+- [Grep Result after action #25]
+  3039:    def test_boundfield_subwidget_id_for_label(self):
+  3040-        """
+  3041-        If auto_id is provided when initializing the form, the generated ID in
+  3042-        subwidgets must reflect that prefix.
+  3043-        """
+  3044-        class SomeForm(Form):
+  3045-            field = MultipleChoiceField(
+  3046-                choices=[('a', 'A'), ('b', 'B')],
+  3047-                widget=CheckboxSelectMultiple,
+  3048-            )
+  3049-
+  3050-        form = SomeForm(auto_id='prefix_%s')
+  3051-        subwidgets = form['field'].subwidgets
+  3052-        self.assertEqual(subwidgets[0].id_for_label, 'prefix_field_0')
+  3053-        self.assertEqual(subwidgets[1].id_for_label, 'prefix_field_1')
+  3054-
+- [Grep Result after action #27]
+  199:class Widget(metaclass=MediaDefiningClass):
+  200-    needs_multipart_form = False  # Determines does this widget need multipart form
+  201-    is_localized = False
+  202-    is_required = False
+  203-    supports_microseconds = True
+  204-
+- [Test Output after action #29]
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Importing application forms_tests
+  No sympy found
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/tests/runtests.py", line 657, in <module>
+      failures = django_tests(
+    File "./swebench_9_15/testbed/tests/runtests.py", line 377, in django_tests
+      failures = test_runner.run_tests(test_labels)
+    File "./swebench_9_15/testbed/django/test/runner.py", line 920, in run_tests
+      suite = self.build_suite(test_labels, extra_tests)
+    File "./swebench_9_15/testbed/django/test/runner.py", line 781, in build_suite
+      tests = self.load_tests_for_label(label, discover_kwargs)
+    File "./swebench_9_15/testbed/django/test/runner.py", line 732, in load_tests_for_label
+      tests = self.test_loader.loadTestsFromName(label)
+    File "/opt/anaconda3/lib/python3.8/unittest/loader.py", line 154, in loadTestsFromName
+      module = __import__(module_name)
+    File ".
+  [... truncated ...]
+- [Test Output after action #32]
+  Test 1: id_for_label('my_widget_id') = 'my_widget_id'
+  Expected: 'my_widget_id' (no '_0' appended)
+  Result: PASS
+
+  Test 2: id_for_label(None) = None
+  Expected: None
+  Result: PASS
+
+  Test 3: id_for_label('') = ''
+  Expected: ''
+  Result: PASS
+
+
+  ==================================================
+  Overall: ALL TESTS PASSED
+  ==================================================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/forms/widgets.py
+  Tool: Edit action #13
+  old_text_sha256: 63b07297a8fa87eec37dce21750c903e93640d9a436ad37a708f202425e4722e
+  new_text_sha256: 997e488d9b6cbe209b6e30696fb91af3c5f6672931bb78aeef71aa6c36fa6fa9
+- swebench_9_15/test_multiwidget_fix.py
+  Tool: Write action #31
+  new_text_sha256: 7458cd7c02176b6314e9b72792bb85a62b9571590aa9ba455555516d5c1efbb2
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

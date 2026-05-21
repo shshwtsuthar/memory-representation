@@ -1,0 +1,452 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: acac24b4-c557-44fc-8a48-9dfc400e9e47
+- repo: django/django
+- instance_id: django__django-15202
+- base_commit: 4fd3044ca0135da903a70dfb66992293f529ecf1
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-15202
+base_commit: 4fd3044ca0135da903a70dfb66992293f529ecf1
+problem_statement:
+URLField throws ValueError instead of ValidationError on clean
+Description
+
+forms.URLField( ).clean('////]@N.AN')
+results in:
+    ValueError: Invalid IPv6 URL
+    Traceback (most recent call last):
+     File "basic_fuzzer.py", line 22, in TestOneInput
+     File "fuzzers.py", line 350, in test_forms_URLField
+     File "django/forms/fields.py", line 151, in clean
+     File "django/forms/fields.py", line 136, in run_validators
+     File "django/core/validators.py", line 130, in __call__
+     File "urllib/parse.py", line 440, in urlsplit
+sha256: 9446ba9e874625c0ccd07d1cff7a6721751bf1b9f0516411b380983eec0caa53
+truncated: false
+
+[ADP ACTION current=1 original=3: code_action bash]
+payload:
+find ./swebench_9_15 -type f -name "validators.py" | grep -E "django|testbed"
+sha256: f21432436f9995fe959e32f843ae01aa25a24ddece6cce1185dc96ce1bacd524
+truncated: false
+
+[ADP ACTION current=2 original=5: code_action bash]
+payload:
+find ./swebench_9_15 -type f -path "*/forms/fields.py" | grep -E "django|testbed"
+sha256: a70526291baf7f44b00109160cd9c91dbaaa06d0c99f3598dfff3b0b2991132d
+truncated: false
+
+[ADP ACTION current=3 original=23: api_action Read]
+path: django/core/validators.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/core/validators.py",
+  "limit": 150,
+  "offset": 100
+}
+sha256: 30f90714f7542e3b8c05e8da98b9449ae7cf0a845f5fd1c29729e7ee93790bbf
+truncated: false
+
+[ADP OBSERVATION current=4 original=24 source=environment]
+name: Read:toolu_01WkYUfCgrJSkZaPH6W9E987
+excerpt:
+   100→    def __call__(self, value):
+   101→        if not isinstance(value, str):
+   102→            raise ValidationError(self.message, code=self.code, params={'value': value})
+   103→        if self.unsafe_chars.intersection(value):
+   104→            raise ValidationError(self.message, code=self.code, params={'value': value})
+   105→        # Check if the scheme is valid.
+   106→        scheme = value.split('://')[0].lower()
+   107→        if scheme not in self.schemes:
+   108→            raise ValidationError(self.message, code=self.code, params={'value': value})
+   109→
+   110→        # Then check full URL
+   111→        try:
+   112→            super().__call__(value)
+   113→        except ValidationError as e:
+   114→            # Trivial case failed. Try for possible IDN domain
+   115→            if value:
+   116→                try:
+   117→                    scheme, netloc, path, query, fragment = urlsplit(value)
+   118→                except ValueError:  # for example, "Invalid IPv6 URL"
+   119→                    raise ValidationError(self.message, code=self.code, params={'value': value})
+   120→                try:
+   121→                    netloc = punycode(netloc)  # IDN -> ACE
+   122→                except UnicodeError:  # invalid domain part
+   123→                    raise e
+   124→                url = urlunsplit((scheme, netloc, path, query, fragment))
+   125→                super().__call__(url)
+   126→            else:
+   127→                raise
+   128→        else:
+   129→            # Now verify IPv6 in the netloc part
+   130→            host_match = re.search(r'^\[(.+)\](?::\d{1,5})?$', urlsplit(value).netloc)
+   131→            if host_match:
+   132→                potential_ip = host_match[1]
+   133→                try:
+   134→                    validate_ipv6_address(potential_ip)
+   135→                except ValidationError:
+   136→                    raise ValidationError(self.message, code=self.code, params={'value': value})
+   13
+sha256: fb3c03ddbaa99846f0e551fe54ad3eb2ec95b3c17d9425acb5ed73ac47f38ba5
+truncated: true
+
+[ADP ACTION current=5 original=25: api_action Read]
+path: django/core/validators.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/core/validators.py",
+  "limit": 60,
+  "offset": 75
+}
+sha256: aad50a9df7d27bc8a79fe0044ce34266cf24010b41d564be1c5d76c17ca6875a
+truncated: false
+
+[ADP OBSERVATION current=6 original=26 source=environment]
+name: Read:toolu_01432qQptVfgvKPrByXDDfTL
+excerpt:
+    75→        r'\.'                                # dot
+    76→        r'(?!-)'                             # can't start with a dash
+    77→        r'(?:[a-z' + ul + '-]{2,63}'         # domain label
+    78→        r'|xn--[a-z0-9]{1,59})'              # or punycode label
+    79→        r'(?<!-)'                            # can't end with a dash
+    80→        r'\.?'                               # may have a trailing dot
+    81→    )
+    82→    host_re = '(' + hostname_re + domain_re + tld_re + '|localhost)'
+    83→
+    84→    regex = _lazy_re_compile(
+    85→        r'^(?:[a-z0-9.+-]*)://'  # scheme is validated separately
+    86→        r'(?:[^\s:@/]+(?::[^\s:@/]*)?@)?'  # user:pass authentication
+    87→        r'(?:' + ipv4_re + '|' + ipv6_re + '|' + host_re + ')'
+    88→        r'(?::\d{1,5})?'  # port
+    89→        r'(?:[/?#][^\s]*)?'  # resource path
+    90→        r'\Z', re.IGNORECASE)
+    91→    message = _('Enter a valid URL.')
+    92→    schemes = ['http', 'https', 'ftp', 'ftps']
+    93→    unsafe_chars = frozenset('\t\r\n')
+    94→
+    95→    def __init__(self, schemes=None, **kwargs):
+    96→        super().__init__(**kwargs)
+    97→        if schemes is not None:
+    98→            self.schemes = schemes
+    99→
+   100→    def __call__(self, value):
+   101→        if not isinstance(value, str):
+   102→            raise ValidationError(self.message, code=self.code, params={'value': value})
+   103→        if self.unsafe_chars.intersection(value):
+   104→            raise ValidationError(self.message, code=self.code, params={'value': value})
+   105→        # Check if the scheme is valid.
+   106→        scheme = value.split('://')[0].lower()
+   107→        if scheme not in self.schemes:
+   108→            raise ValidationError(self.message, code=self.code, params={'value': value})
+   109→
+   110→        # Then check full URL
+   111→        try:
+   112→            super().__call__(value)
+   113→        except ValidationError as e:
+   114→            #
+sha256: 35c3aa0282d2389ffa568101b7576c720a8e21c16ef8e42b87a0e415899e3c01
+truncated: true
+
+[ADP ACTION current=7 original=31: code_action bash]
+payload:
+cd testbed && python test_issue.py
+sha256: e2fe6c9cd61b3b8fef06025b852bd363ec11526cd13b9f2bc1ec85be5d2d9eb2
+truncated: false
+
+[ADP OBSERVATION current=8 original=32 source=environment]
+name: Bash:toolu_01ESivy8QfLATs8TUxvdCb5F:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 28
+    print(f"Result: {result}")
+                            ^
+SyntaxError: invalid syntax
+sha256: 28e50393aedcc4f1a90228c762fe4e9b9ab960cb9e14320e680a0ccb772fcede
+truncated: false
+
+[ADP ACTION current=9 original=35: code_action bash]
+payload:
+cd testbed && python test_issue.py
+sha256: 437611c9d5d28ba60e98b5f51eb5e91fc88e76cbd20fda992c6c7f017fe71e9f
+truncated: false
+
+[ADP OBSERVATION current=10 original=36 source=environment]
+name: Bash:toolu_01KaQ3QCjnt8ixnaxXaToCWb:error
+excerpt:
+Exit code 1
+Traceback (most recent call last):
+  File "test_issue.py", line 13, in <module>
+    import django
+  File "./swebench_9_15/testbed/django/__init__.py", line 1, in <module>
+    from django.utils.version import get_version
+  File "./swebench_9_15/testbed/django/utils/version.py", line 7, in <module>
+    from django.utils.regex_helper import _lazy_re_compile
+  File "./swebench_9_15/testbed/django/utils/regex_helper.py", line 10, in <module>
+    from django.utils.functional import SimpleLazyObject
+  File "./swebench_9_15/testbed/django/utils/functional.py", line 372, in <module>
+    class SimpleLazyObject(LazyObject):
+TypeError: Error when calling the metaclass bases
+    'property' object is not callable
+sha256: 43e97d820125361b63b7fd5cad7884ea2c3d3cb01f4dbe52957c4c63f04edfc9
+truncated: false
+
+[ADP ACTION current=11 original=37: code_action bash]
+payload:
+cd testbed && python3 test_issue.py
+sha256: d9f2e9068dfa2106a3e595da14ceb80b26d3299db364cb2eefc2a9161d11a969
+truncated: false
+
+[ADP OBSERVATION current=12 original=38 source=environment]
+name: Bash:toolu_01At6dQP9ChVb2bh2ENaZKEm
+excerpt:
+Testing URLField with malformed URL: '////]@N.AN'
+ERROR: ValueError raised (should be ValidationError): Invalid IPv6 URL
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 87e446639a44fac5212b50c4e502f6ee488a2d578c93b0061722ebcf2ea2c78e
+truncated: false
+
+[ADP ACTION current=13 original=41: api_action Read]
+path: django/core/validators.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/core/validators.py",
+  "limit": 50,
+  "offset": 100
+}
+sha256: 93c7da70a0d96b151971fef9cf666de00b3810fa5c8bc91e832bbdf9275a08b8
+truncated: false
+
+[ADP OBSERVATION current=14 original=42 source=environment]
+name: Read:toolu_01J82EupAy2ATHaWT6xsd51u
+excerpt:
+   100→    def __call__(self, value):
+   101→        if not isinstance(value, str):
+   102→            raise ValidationError(self.message, code=self.code, params={'value': value})
+   103→        if self.unsafe_chars.intersection(value):
+   104→            raise ValidationError(self.message, code=self.code, params={'value': value})
+   105→        # Check if the scheme is valid.
+   106→        scheme = value.split('://')[0].lower()
+   107→        if scheme not in self.schemes:
+   108→            raise ValidationError(self.message, code=self.code, params={'value': value})
+   109→
+   110→        # Then check full URL
+   111→        try:
+   112→            super().__call__(value)
+   113→        except ValidationError as e:
+   114→            # Trivial case failed. Try for possible IDN domain
+   115→            if value:
+   116→                try:
+   117→                    scheme, netloc, path, query, fragment = urlsplit(value)
+   118→                except ValueError:  # for example, "Invalid IPv6 URL"
+   119→                    raise ValidationError(self.message, code=self.code, params={'value': value})
+   120→                try:
+   121→                    netloc = punycode(netloc)  # IDN -> ACE
+   122→                except UnicodeError:  # invalid domain part
+   123→                    raise e
+   124→                url = urlunsplit((scheme, netloc, path, query, fragment))
+   125→                super().__call__(url)
+   126→            else:
+   127→                raise
+   128→        else:
+   129→            # Now verify IPv6 in the netloc part
+   130→            host_match = re.search(r'^\[(.+)\](?::\d{1,5})?$', urlsplit(value).netloc)
+   131→            if host_match:
+   132→                potential_ip = host_match[1]
+   133→                try:
+   134→                    validate_ipv6_address(potential_ip)
+   135→                except ValidationError:
+   136→                    raise ValidationError(self.message, code=self.code, params={'value': value})
+   13
+sha256: 465cf85eb37eeeac55286f34388030e0d83292c7b362afa951a88b7932e9939e
+truncated: true
+
+[ADP ACTION current=15 original=43: api_action Edit]
+path: django/core/validators.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/core/validators.py",
+  "new_text_sha256": "94f3e0b42c4ae9707710b8601684c6fe8feff16b82dcb0609f1392d709852320",
+  "old_text_sha256": "644484f5c014dd3ad28133ae35943b7b30adb698e124787962adb7721517f6f9"
+}
+sha256: 7d8ddbe6853b4c9fa49cfc2724a39cec10cc09d040461327ee6f233b18cac80d
+truncated: false
+
+[ADP ACTION current=16 original=47: code_action bash]
+payload:
+cd testbed && python3 test_issue.py
+sha256: 06da36bc1108d10d3909cc49bdeb5d38d7569a939bf8c9d37b5ea41a72e4e730
+truncated: false
+
+[ADP ACTION current=17 original=53: code_action bash]
+payload:
+python3 test_issue.py
+sha256: 16326d036a06a3b5d57af2d13d7ec57e558aa24d35fed449ab2ed03f6f88ab31
+truncated: false
+
+[ADP OBSERVATION current=18 original=54 source=environment]
+name: Bash:toolu_01EJywf7RD1SWTVLdkuvaDeK
+excerpt:
+Testing URLField with malformed URL: '////]@N.AN'
+SUCCESS: ValidationError raised as expected: ['Enter a valid URL.']
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 4abb9ed5e70ad93703d970d79e51bce391705ab7560ffc53e07d305e9e6e688a
+truncated: false
+
+[ADP ACTION current=19 original=55: api_action Write]
+path: test_comprehensive.py
+payload:
+{
+  "content_sha256": "e7e67b2b375cd683e9d7693ca46d33e6b01932f9e52074ac265b6f2a6761b62b",
+  "file_path": "./swebench_9_15/testbed/test_comprehensive.py"
+}
+sha256: e1244de7da52b765ed603083732994082885a1f1f2c280855055f7ee188d9143
+truncated: false
+
+[ADP ACTION current=20 original=57: code_action bash]
+payload:
+python3 test_comprehensive.py
+sha256: 7f4ce4954646d34823920ae0a79c4a1ba5dd9835a23f415693ca117f3a441758
+truncated: false
+
+[ADP OBSERVATION current=21 original=58 source=environment]
+name: Bash:toolu_01FAtz9BTQdPz6Vwj4arUFzK
+excerpt:
+Running comprehensive URLField validation tests...
+
+PASS: Malformed URL with invalid IPv6 - ValidationError raised as expected: ['Enter a valid URL.']
+PASS: Valid HTTP URL - Validated successfully: http://example.com
+PASS: Valid HTTPS URL - Validated successfully: https://example.com
+PASS: Valid IPv6 URL - Validated successfully: http://[::1]/
+PASS: Valid IPv6 URL with full address - Validated successfully: http://[2001:0db8:85a3::8a2e:0370:7334]/
+PASS: Valid FTP URL - Validated successfully: ftp://example.com
+PASS: Valid URL with all components - Validated successfully: http://example.com:8080/path?query=value#fragment
+PASS: Invalid URL without scheme - ValidationError raised as expected: ['Enter a valid URL.']
+PASS: Invalid URL without domain - ValidationError raised as expected: ['Enter a valid URL.']
+
+==================================================
+Results: 9 passed, 0 failed
+==================================================
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 55687b49d101623ca7ae6910fe6ee7e6c78df496dfeca81a7d0ae93dab2581c0
+truncated: false
+
+[ADP ACTION current=22 original=59: code_action bash]
+payload:
+python3 tests/runtests.py validators --verbosity=2
+sha256: e6cad3ac47efbf901397766890e40e000b6e10e803a7cbb2e1da5cace10d9e74
+truncated: false
+
+[ADP OBSERVATION current=23 original=60 source=environment]
+name: Bash:toolu_01A8E4SLwTr2N6iHcQUaxyEa
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django'
+Importing application validators
+Found 14 test(s).
+Skipping setup of unused database(s): default, other.
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+test_max_length_validator_message (validators.tests.TestValidators) ... ok
+test_message_dict (validators.tests.TestValidators) ... ok
+test_message_list (validators.tests.TestValidators) ... ok
+test_regex_validator_flags (validators.tests.TestValidators) ... ok
+test_single_message (validators.tests.TestValidators) ... ok
+test_validators (validators.tests.TestValidators) ... ok
+test_basic_equality (validators.tests.TestValidatorEquality) ... ok
+test_decimal_equality (validators.tests.TestValidatorEquality) ... ok
+test_email_equality (validators.tests.TestValidatorEquality) ... ok
+test_file_extension_equality (validators.tests.TestValidatorEquality) ... ok
+test_prohibit_null_characters_validator_equality (validators.tests.TestValidatorEquality) ... ok
+test_regex_equality (validators.tests.TestValidatorEquality) ... ok
+test_regex_equality_blank (validators.tests.TestValidatorEquality) ... ok
+test_regex_equality_nocache (validators.tests.TestValidatorEquality) ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.117s
+
+OK
+sha256: 65298bf03f21e177771e4a947142c777eb747aa1f88b2ddc5c47bf5ff0842a77
+truncated: false
+
+[ADP ACTION current=24 original=61: code_action bash]
+payload:
+python3 tests/runtests.py forms_tests.field_tests.test_urlfield --verbosity=2
+sha256: 144ab56faa324b96e96cb27ac850fd7eaa1ecda3cec000274eafd2a325511c8e
+truncated: false
+
+[ADP OBSERVATION current=25 original=62 source=environment]
+name: Bash:toolu_01D8BHGFHv7WWLJ2d9USXZnr
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django'
+Importing application forms_tests
+Found 8 test(s).
+Skipping setup of unused database(s): default, other.
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+test_urlfield_clean (forms_tests.field_tests.test_urlfield.URLFieldTest) ... ok
+test_urlfield_clean_invalid (forms_tests.field_tests.test_urlfield.URLFieldTest) ... ok
+test_urlfield_clean_not_required (forms_tests.field_tests.test_urlfield.URLFieldTest) ... ok
+test_urlfield_clean_required (forms_tests.field_tests.test_urlfield.URLFieldTest) ... ok
+test_urlfield_strip_on_none_value (forms_tests.field_tests.test_urlfield.URLFieldTest) ... ok
+test_urlfield_unable_to_set_strip_kwarg (forms_tests.field_tests.test_urlfield.URLFieldTest) ... ok
+test_urlfield_widget (forms_tests.field_tests.test_urlfield.URLFieldTest) ... ok
+test_urlfield_widget_max_min_length (forms_tests.field_tests.test_urlfield.URLFieldTest) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.043s
+
+OK
+sha256: 6e3beb2f26a0414e8a74ae368a4647edd9f136ed6cafd3676217517f72e940a0
+truncated: false

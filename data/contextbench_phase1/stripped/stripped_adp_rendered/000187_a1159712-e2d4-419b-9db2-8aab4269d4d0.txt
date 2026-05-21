@@ -1,0 +1,389 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: a1159712-e2d4-419b-9db2-8aab4269d4d0
+- repo: scikit-learn/scikit-learn
+- instance_id: scikit-learn__scikit-learn-12471
+- base_commit: 02dc9ed680e7f53f1b0d410dcdd37341c7958eb1
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: scikit-learn/scikit-learn
+instance_id: scikit-learn__scikit-learn-12471
+base_commit: 02dc9ed680e7f53f1b0d410dcdd37341c7958eb1
+problem_statement:
+OneHotEncoder ignore unknown error when categories are strings
+#### Description
+
+This bug is very specific, but it happens when you set OneHotEncoder to ignore unknown entries.
+and your labels are strings. The memory of the arrays is not handled safely and it can lead to a ValueError
+
+Basically, when you call the transform method it will sets all the unknown strings on your array to OneHotEncoder.categories_[i][0] which is the first category alphabetically sorted given for fit
+If this OneHotEncoder.categories_[i][0] is a long string, and the array that you want to transform has small strings, then it is impossible to fit the whole  OneHotEncoder.categories_[i][0] into the entries of the array we want to transform. So  OneHotEncoder.categories_[i][0]  is truncated and this raise the ValueError.
+
+
+
+#### Steps/Code to Reproduce
+```
+
+import numpy as np
+from sklearn.preprocessing import OneHotEncoder
+
+
+# It needs to be numpy arrays, the error does not appear
+# is you have lists of lists because it gets treated like an array of objects.
+train  = np.array([ '22','333','4444','11111111' ]).reshape((-1,1))
+test   = np.array([ '55555',  '22' ]).reshape((-1,1))
+
+ohe = OneHotEncoder(dtype=bool,handle_unknown='ignore')
+
+ohe.fit( train )
+enc_test = ohe.transform( test )
+
+```
+
+
+#### Expected Results
+Here we should get an sparse matrix 2x4 false everywhere except at (1,1) the '22' that is known
+
+#### Actual Results
+
+> ValueError: y contains previously unseen labels: ['111111']
+
+
+#### Versions
+System:
+    python: 2.7.12 (default, Dec  4 2017, 14:50:18)  [GCC 5.4.0 20160609]
+   machine: Linux-4.4.0-138-generic-x86_64-with-Ubuntu-16.04-xenial
+executable: /usr/bin/python
+
+BLAS:
+    macros: HAVE_CBLAS=None
+cblas_libs: openblas, openblas
+  lib_dirs: /usr/lib
+
+Python deps:
+    Cython: 0.25.2
+     scipy: 0.18.1
+setuptool
+sha256: 3fc819b725389f5de6648a4b936b393f3e4d1543e07cbe9073902ea00db8b55a
+truncated: true
+
+[ADP ACTION current=1 original=15: api_action Glob]
+path: swebench_9_15/testbed
+payload:
+{
+  "path": "./swebench_9_15/testbed",
+  "pattern": "**/preprocessing/_encoders.py"
+}
+sha256: 1e9c338ddc1a596db8ac0f4e64c6f7a099b62c2d06f2a416d90b7a8b247886e8
+truncated: false
+
+[ADP OBSERVATION current=2 original=16 source=environment]
+name: Glob:toolu_016wBpp2iUwPXua1XNmdyZTA
+excerpt:
+./swebench_9_15/testbed/sklearn/preprocessing/_encoders.py
+sha256: 867a9ab4fd90cf4dd743aead264cafe3af53b1c2b6122d4e829690f98b341878
+truncated: false
+
+[ADP ACTION current=3 original=19: api_action Read]
+path: sklearn/preprocessing/_encoders.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/preprocessing/_encoders.py"
+}
+sha256: cc328dc745c390938b3a13b4542af01d34afcd403396d6ab6fa9a6db8b9045ac
+truncated: false
+
+[ADP OBSERVATION current=4 original=20 source=environment]
+name: Read:toolu_01FLiQy6c2zCPjZ8HArNAAfL
+excerpt:
+     1→# Authors: Andreas Mueller <amueller@ais.uni-bonn.de>
+     2→#          Joris Van den Bossche <jorisvandenbossche@gmail.com>
+     3→# License: BSD 3 clause
+     4→
+     5→from __future__ import division
+     6→
+     7→import numbers
+     8→import warnings
+     9→
+    10→import numpy as np
+    11→from scipy import sparse
+    12→
+    13→from .. import get_config as _get_config
+    14→from ..base import BaseEstimator, TransformerMixin
+    15→from ..externals import six
+    16→from ..utils import check_array
+    17→from ..utils import deprecated
+    18→from ..utils.fixes import _argmax, _object_dtype_isnan
+    19→from ..utils.validation import check_is_fitted
+    20→
+    21→from .base import _transform_selected
+    22→from .label import _encode, _encode_check_unknown
+    23→
+    24→range = six.moves.range
+    25→
+    26→__all__ = [
+    27→    'OneHotEncoder',
+    28→    'OrdinalEncoder'
+    29→]
+    30→
+    31→
+    32→class _BaseEncoder(BaseEstimator, TransformerMixin):
+    33→    """
+    34→    Base class for encoders that includes the code to categorize and
+    35→    transform the input features.
+    36→
+    37→    """
+    38→
+    39→    def _check_X(self, X):
+    40→        """
+    41→        Perform custom check_array:
+    42→        - convert list of strings to object dtype
+    43→        - check for missing values for object dtype data (check_array does
+    44→          not do that)
+    45→
+    46→        """
+    47→        X_temp = check_array(X, dtype=None)
+    48→        if not hasattr(X, 'dtype') and np.issubdtype(X_temp.dtype, np.str_):
+    49→            X = check_array(X, dtype=np.object)
+    50→        else:
+    51→            X = X_temp
+    52→
+    53→        if X.dtype == np.dtype('object'):
+    54→            if not _get_config()['assume_finite']:
+    55→                if _object_dtype_isnan(X).any():
+    56→                    raise ValueError("Input contains NaN")
+    57→
+    58→        return X
+    59→
+    60→    def _fit(self, X, handle_unk
+sha256: b226471ba90dc2675ddd4ed7beb236e45b5f7451bde180efda355da81b41d00e
+truncated: true
+
+[ADP ACTION current=5 original=21: api_action Glob]
+path: swebench_9_15/testbed
+payload:
+{
+  "path": "./swebench_9_15/testbed",
+  "pattern": "**/preprocessing/label.py"
+}
+sha256: 9216587bdff759f22811942e4364439b5d0a88515dc50a47368be336112d60ae
+truncated: false
+
+[ADP OBSERVATION current=6 original=22 source=environment]
+name: Glob:toolu_01Anb6WsVtbzAVZiN9najSUZ
+excerpt:
+./swebench_9_15/testbed/sklearn/preprocessing/label.py
+sha256: fad9b854f248f95bdd015fd454b3fe8de8c965dd8b6501773b7f3eff919ff719
+truncated: false
+
+[ADP ACTION current=7 original=23: api_action Grep]
+path: sklearn/preprocessing/label.py
+payload:
+{
+  "-A": 20,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sklearn/preprocessing/label.py",
+  "pattern": "def _encode_check_unknown"
+}
+sha256: c13831ec5ec7eaa5314ce60743bc87af710dfd6c8e0763ec60898967c189bc96
+truncated: false
+
+[ADP OBSERVATION current=8 original=24 source=environment]
+name: Grep:toolu_01TR5MJE7xjv5a1oArzYsAJR
+excerpt:
+113:def _encode_check_unknown(values, uniques, return_mask=False):
+114-    """
+115-    Helper function to check for unknowns in values to be encoded.
+116-
+117-    Uses pure python method for object dtype, and numpy method for
+118-    all other dtypes.
+119-
+120-    Parameters
+121-    ----------
+122-    values : array
+123-        Values to check for unknowns.
+124-    uniques : array
+125-        Allowed uniques values.
+126-    return_mask : bool, default False
+127-        If True, return a mask of the same shape as `values` indicating
+128-        the valid values.
+129-
+130-    Returns
+131-    -------
+132-    diff : list
+133-        The unique values present in `values` and not in `uniques` (the
+sha256: 7b5f148bd79070ede64d3fd4f72b62b1e218d8988afc8a6d3393cb9d31204f91
+truncated: false
+
+[ADP ACTION current=9 original=25: api_action Read]
+path: sklearn/preprocessing/label.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/preprocessing/label.py",
+  "limit": 80,
+  "offset": 110
+}
+sha256: 87b42a8f9678deb4560aeaf25ad5a61026a6df550dd13a1c569a765844315732
+truncated: false
+
+[ADP OBSERVATION current=10 original=26 source=environment]
+name: Read:toolu_01CACorT4DNKwxh1NP5NSL2j
+excerpt:
+   110→        return _encode_numpy(values, uniques, encode)
+   111→
+   112→
+   113→def _encode_check_unknown(values, uniques, return_mask=False):
+   114→    """
+   115→    Helper function to check for unknowns in values to be encoded.
+   116→
+   117→    Uses pure python method for object dtype, and numpy method for
+   118→    all other dtypes.
+   119→
+   120→    Parameters
+   121→    ----------
+   122→    values : array
+   123→        Values to check for unknowns.
+   124→    uniques : array
+   125→        Allowed uniques values.
+   126→    return_mask : bool, default False
+   127→        If True, return a mask of the same shape as `values` indicating
+   128→        the valid values.
+   129→
+   130→    Returns
+   131→    -------
+   132→    diff : list
+   133→        The unique values present in `values` and not in `uniques` (the
+   134→        unknown values).
+   135→    valid_mask : boolean array
+   136→        Additionally returned if ``return_mask=True``.
+   137→
+   138→    """
+   139→    if values.dtype == object:
+   140→        uniques_set = set(uniques)
+   141→        diff = list(set(values) - uniques_set)
+   142→        if return_mask:
+   143→            if diff:
+   144→                valid_mask = np.array([val in uniques_set for val in values])
+   145→            else:
+   146→                valid_mask = np.ones(len(values), dtype=bool)
+   147→            return diff, valid_mask
+   148→        else:
+   149→            return diff
+   150→    else:
+   151→        unique_values = np.unique(values)
+   152→        diff = list(np.setdiff1d(unique_values, uniques, assume_unique=True))
+   153→        if return_mask:
+   154→            if diff:
+   155→                valid_mask = np.in1d(values, uniques)
+   156→            else:
+   157→                valid_mask = np.ones(len(values), dtype=bool)
+   158→            return diff, valid_mask
+   159→        else:
+   160→            return diff
+   161→
+   162→
+   163→class LabelEncoder(BaseEstimator, TransformerMixin):
+
+sha256: 794f6686268f181cd64d61fb36db9421f2c9378c2ec800b08bac2703090776d3
+truncated: true
+
+[ADP ACTION current=11 original=31: code_action bash]
+payload:
+cd ./swebench_9_15/testbed && python test_issue.py
+sha256: a4705f767dd2e68335130e75a38768627f590c7685ea0de6a3dea6e4ef4881d5
+truncated: false
+
+[ADP OBSERVATION current=12 original=32 source=environment]
+name: Bash:toolu_01FByEVAgiwqtJhivbbU1i4x:error
+excerpt:
+Exit code 1
+Traceback (most recent call last):
+  File "test_issue.py", line 4, in <module>
+    from sklearn.preprocessing import OneHotEncoder
+  File "./swebench_9_15/testbed/sklearn/__init__.py", line 63, in <module>
+    from . import __check_build
+  File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 46, in <module>
+    raise_build_error(e)
+  File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 41, in raise_build_error
+    %s""" % (e, local_dir, ''.join(dir_content).strip(), msg))
+ImportError: No module named _check_build
+___________________________________________________________________________
+Contents of ./swebench_9_15/testbed/sklearn/__check_build:
+__init__.py               __pycache__               _check_build.c
+setup.py                  __init__.pyc              _check_build.pyx
+_check_build.cpython-38-darwin.so
+___________________________________________________________________________
+It seems that scikit-learn has not been built correctly.
+
+If you have installed scikit-learn from source, please do not forget
+to build the package before using it: run `python setup.py install` or
+`make` in the source directory.
+
+If you have used an installer, please check that it is suited for your
+Python version, your operating system and your platform.
+sha256: e16c99a6a8e6d196eb42581c5148ebd84893e8db4dadc20547cd8b97df9d979f
+truncated: false
+
+[ADP ACTION current=13 original=35: api_action Read]
+path: sklearn/preprocessing/_encoders.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/preprocessing/_encoders.py",
+  "limit": 30,
+  "offset": 91
+}
+sha256: 743eb9a7697d767a95e528391da93d42aa4efc4aacf3a86b594f8e983fdf4d97
+truncated: false
+
+[ADP OBSERVATION current=14 original=36 source=environment]
+name: Read:toolu_01XnX5vhdKrp8ur5ABxBTbHy
+excerpt:
+    91→    def _transform(self, X, handle_unknown='error'):
+    92→        X = self._check_X(X)
+    93→
+    94→        _, n_features = X.shape
+    95→        X_int = np.zeros_like(X, dtype=np.int)
+    96→        X_mask = np.ones_like(X, dtype=np.bool)
+    97→
+    98→        for i in range(n_features):
+    99→            Xi = X[:, i]
+   100→            diff, valid_mask = _encode_check_unknown(Xi, self.categories_[i],
+   101→                                                     return_mask=True)
+   102→
+   103→            if not np.all(valid_mask):
+   104→                if handle_unknown == 'error':
+   105→                    msg = ("Found unknown categories {0} in column {1}"
+   106→                           " during transform".format(diff, i))
+   107→                    raise ValueError(msg)
+   108→                else:
+   109→                    # Set the problematic rows to an acceptable value and
+   110→                    # continue `The rows are marked `X_mask` and will be
+   111→                    # removed later.
+   112→                    X_mask[:, i] = valid_mask
+   113→                    Xi = Xi.copy()
+   114→                    Xi[~valid_mask] = self.categories_[i][0]
+   115→            _, encoded = _encode(Xi, self.categories_[i], encode=True)
+   116→            X_int[:, i] = encoded
+   117→
+   118→        return X_int, X_mask
+   119→
+   120→
+
+sha256: 3d5331404f793f4f4eef2ddc56d2ce3c9742a49f0644b397f7dacc1361478880
+truncated: false
+
+[ADP ACTION current=15 original=37: api_action Edit]
+path: sklearn/preprocessing/_encoders.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/preprocessing/_encoders.py",
+  "new_text_sha256": "75b3ee178568c307fe383b80f3d0dc5dc2c0f1458d693d1e308322beb45dd10a",
+  "old_text_sha256": "0bf11fa41bfe734abd4bd72e75e792e8920971db79292abd370f2206772c8332"
+}
+sha256: 22eec6418eb809adf908d5ccb0dccee2a68f8c70bf36be97f384d5ddda90b279
+truncated: false

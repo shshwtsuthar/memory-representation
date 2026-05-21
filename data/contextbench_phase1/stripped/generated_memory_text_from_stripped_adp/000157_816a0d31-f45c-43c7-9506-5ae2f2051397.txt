@@ -1,0 +1,286 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 816a0d31-f45c-43c7-9506-5ae2f2051397
+- repo: matplotlib/matplotlib
+- instance_id: matplotlib__matplotlib-23562
+- base_commit: 29a86636a9c45ab5ac4d80ac76eaee497f460dce
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+'Poly3DCollection' object has no attribute '_facecolors2d'
+The following minimal example demonstrates the issue:
+
+```
+import numpy as np
+import matplotlib.tri as mtri
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+y,x = np.ogrid[1:10:100j, 1:10:100j]
+z2 = np.cos(x)**3 - np.sin(y)**2
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+r = ax.plot_surface(x,y,z2, cmap='hot')
+r.get_facecolors()
+```
+
+It fails on the last line with the following traceback:
+
+```
+AttributeError                            Traceback (most recent call last)
+<ipython-input-13-de0f41d662cd> in <module>()
+----> 1 r.get_facecolors()
+
+/home/oliver/.virtualenvs/mpl/local/lib/python2.7/site-packages/mpl_toolkits/mplot3d/art3d.pyc in get_facecolors(self)
+    634
+    635     def get_facecolors(self):
+--> 636         return self._facecolors2d
+    637     get_facecolor = get_facecolors
+    638
+
+AttributeError: 'Poly3DCollection' object has no attribute '_facecolors2d'
+```
+
+Tested with mpl versions 1.3.1 and 1.4.2.
+
+Sent here by Benjamin, from the mpl users mailing list (mail with the same title). Sorry for dumping this without more assistance, I'm not yet at a python level where I can help in debugging, I think (well, it seems daunting).
+
+FILES INSPECTED
+---------------
+- lib/mpl_toolkits/mplot3d/art3d.py [Read: 4, Grep: 2]
+- lib/matplotlib/collections.py [Grep: 10, Read: 3]
+- lib/mpl_toolkits/mplot3d/axes3d.py [Grep: 2]
+
+SEARCH ANCHORS
+--------------
+- [7] Grep pattern='def get_facecolors' path='lib/mpl_toolkits/mplot3d/art3d.py'
+- [13] Grep pattern='def get_facecolors' path='lib/matplotlib/collections.py'
+- [15] Grep pattern='def get_facecolor' path='lib/matplotlib/collections.py'
+- [17] Grep pattern='get_facecolors' path='lib/matplotlib/collections.py'
+- [27] Grep pattern='get_facecolor.*=.*get_facecolors' path='lib/matplotlib/collections.py'
+- [29] Grep pattern='get_facecolors' path='lib/matplotlib/collections.py'
+- [33] Grep pattern='^\\s*get_facecolors\\s*=' path='lib/matplotlib/collections.py'
+- [38] Grep pattern='^\\s*get_facecolors\\s*=' path='lib/matplotlib/collections.py'
+- [40] Grep pattern='get_facecolors' path='lib/matplotlib/collections.py'
+- [46] Grep pattern='get_facecolors.*get_facecolor' path='lib/matplotlib/collections.py'
+- [48] Grep pattern='get_facecolor' path='lib/matplotlib/collections.py'
+- [78] Grep pattern='set_3d_properties' path='lib/mpl_toolkits/mplot3d/art3d.py'
+- [84] Grep pattern='def plot_surface' path='lib/mpl_toolkits/mplot3d/axes3d.py'
+- [86] Grep pattern='Poly3DCollection' path='lib/mpl_toolkits/mplot3d/axes3d.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] cd ./swebench_9_15/testbed && find . -type f -name "art3d.py" | grep -v __pycache__
+- [diagnostic] cd ./swebench_9_15/testbed && python -c "import matplotlib; print(matplotlib.__version__)"
+- [diagnostic] find testbed -name "art3d.py" -type f | grep -v __pycache__
+- [diagnostic] find testbed -name "collections.py" -type f | grep -v __pycache__ | head -1
+- [diagnostic] find testbed/lib -name "collections.py" -type f | grep -v __pycache__
+- [test] python test_issue.py
+- [other/reproduction] python --version
+- [other/reproduction] python3 --version
+- [test] python3 test_issue.py
+- [other/reproduction] cd testbed && python3 -c "from matplotlib.collections import PolyCollection; print(dir(PolyCollection))" | tr ',' '\n' | grep -i facecolor
+- [diagnostic] ls -la testbed/lib/matplotlib/collections.py
+- [diagnostic] find testbed -name "collections.py" -type f | grep -v __pycache__ | grep -v examples
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+(none)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #3]
+  testbed/lib/mpl_toolkits/mplot3d/art3d.py
+- [Read Result after action #5]
+       1→# art3d.py, original mplot3d version by John Porter
+       2→# Parts rewritten by Reinier Heeres <reinier@heeres.eu>
+       3→# Minor additions by Ben Axelrod <baxelrod@coroware.com>
+       4→
+       5→"""
+       6→Module containing 3D artist code and functions to convert 2D
+       7→artists into 3D versions which can be added to an Axes3D.
+       8→"""
+       9→
+      10→import math
+      11→
+      12→import numpy as np
+      13→
+      14→from matplotlib import (
+      15→    artist, cbook, colors as mcolors, lines, text as mtext, path as mpath)
+      16→from matplotlib.collections import (
+      17→    LineCollection, PolyCollection, PatchCollection, PathCollection)
+      18→from matplotlib.colors import Normalize
+      19→from matplotlib.patches import Patch
+      20→from . import proj3d
+      21→
+      22→
+      23→def _norm_angle(a):
+      24→    """Return the given angle normalized to -180 < *a* <= 180 degrees."""
+      25→    a = (a + 360) % 360
+      26→    if a > 180:
+      27→        a = a - 360
+      28→    return a
+      29→
+      30→
+      31→def _norm_text_angle(a):
+      32→    """Return the given angle normalized to -90 < *a* <= 90 degrees."""
+      33→    a = (a + 180) % 180
+      34→    if a > 90:
+      35→        a = a - 1
+  [... truncated ...]
+- [Grep Result after action #7]
+  No matches found
+- [Diagnostic Output after action #9]
+  testbed/examples/shapes_and_collections/collections.py
+- [Diagnostic Output after action #11]
+  testbed/lib/matplotlib/collections.py
+- [Grep Result after action #13]
+  No matches found
+- [Grep Result after action #15]
+  757:    def get_facecolor(self):
+  758-        return self._facecolors
+  759-
+  760-    def get_edgecolor(self):
+  761-        if cbook._str_equal(self._edgecolors, 'face'):
+  762-            return self.get_facecolor()
+- [Grep Result after action #17]
+  No matches found
+- [Test Output after action #19]
+  Exit code 1
+    File "test_issue.py", line 18
+      print(f"AttributeError: {e}")
+                                 ^
+  SyntaxError: invalid syntax
+- [Test Output after action #25]
+  Type of r: <class 'mpl_toolkits.mplot3d.art3d.Poly3DCollection'>
+  Attempting to call get_facecolors()...
+  AttributeError: 'Poly3DCollection' object has no attribute '_facecolors2d'
+  test_issue.py:8: MatplotlibDeprecationWarning: The resize_event function was deprecated in Matplotlib 3.6 and will be removed two minor releases later. Use callbacks.process('resize_event', ResizeEvent(...)) instead.
+    fig = plt.figure()
+- [Grep Result after action #27]
+  No matches found
+- [Grep Result after action #29]
+  No matches found
+- [Diagnostic Output after action #36]
+  lib/matplotlib/collections.py
+- [Grep Result after action #38]
+  No matches found
+- [Grep Result after action #40]
+  No matches found
+- [Grep Result after action #46]
+  No matches found
+- [Grep Result after action #48]
+  376:        facecolors = self.get_facecolor()
+  377-        edgecolors = self.get_edgecolor()
+  378-        do_single_path_optimization = False
+  379-        if (len(paths) == 1 and len(trans) <= 1 and
+  --
+  413:                self.get_facecolor(), self.get_edgecolor(),
+  414-                self._linewidths, self._linestyles,
+  415-                self._antialiaseds, self._urls,
+  416-                "screen")  # offset_position, kept for backcompat.
+  --
+  757:    def get_facecolor(self):
+  758-        return self._facecolors
+  759-
+  760-    def get_edgecolor(self):
+  --
+  762:            return self.get_facecolor()
+  763-        else:
+  764-            return self._edgecolors
+  765-
+  --
+  1812:                    return patch.get_facecolor()
+  1813-                return [0, 0, 0, 0]
+  1814-
+  1815-            kwargs['facecolors'] = [determine_facecolor(p) for p in patches]
+  --
+  2119:        c = self.get_facecolor().reshape((*coordinates.shape[:2], 4))
+  2120-        c_a = c[:-1, :-1]
+  2121-        c_b = c[:-1, 1:]
+  2122-        c_c = c[1:, 1:]
+  --
+  2177:                self.get_facecolor().reshape((-1, 4)),
+  2178-                self._antialiased, self.get_edgecolors().reshape((-1, 4)))
+  2179-        gc.restore()
+  2180-        re
+  [... truncated ...]
+- [Read Result after action #50]
+     756→
+     757→    def get_facecolor(self):
+     758→        return self._facecolors
+     759→
+     760→    def get_edgecolor(self):
+     761→        if cbook._str_equal(self._edgecolors, 'face'):
+     762→            return self.get_facecolor()
+     763→        else:
+     764→            return self._edgecolors
+     765→
+     766→    def _get_default_edgecolor(self):
+     767→        # This may be overridden in a subclass.
+     768→        return mpl.rcParams['patch.edgecolor']
+     769→
+     770→    def _set_edgecolor(self, c):
+     771→        set_hatch_color = True
+     772→        if c is None:
+     773→            if (mpl.rcParams['patch.force_edgecolor']
+     774→                    or self._edge_default
+     775→                    or cbook._str_equal(self._original_facecolor, 'none')):
+
+- [Read Result after action #52]
+     850→        if self._A is not None:
+     851→            if not cbook._str_equal(self._original_facecolor, 'none'):
+     852→                self._face_is_mapped = True
+     853→                if cbook._str_equal(self._original_edgecolor, 'face'):
+     854→                    self._edge_is_mapped = True
+     855→            else:
+     856→                if self._original_edgecolor is None:
+     857→                    self._edge_is_mapped = True
+     858→
+     859→        mapped = self._face_is_mapped or self._edge_is_mapped
+     860→        changed = (edge0 is None or face0 is None
+     861→                   or self._edge_is_mapped != edge0
+     862→                   or self._face_is_mapped != face0)
+     863→        return mapped or changed
+     864→
+     865→    def update_scalarmappable(self):
+     866→        """
+     867→        Update colors from the scalar mappable array, if any.
+     868→
+     869→        Assign colors to edges and faces based on the array and/or
+     870→        colors that were directly set, as appropriate.
+     871→        """
+     872→        if not self._set_mappable_flags():
+     873→            return
+     874→        # Allow possibility to call 'self.set_array(None)'.
+     875→        if se
+  [... truncated ...]
+- [Diagnostic Output after action #55]
+  2178:                self._antialiased, self.get_edgecolors().reshape((-1, 4)))
+
+SOURCE EDIT EVIDENCE
+--------------------
+- lib/mpl_toolkits/mplot3d/art3d.py
+  Tool: Edit action #88
+  old_text_sha256: 99a53f1a1eee0c6f15dc0ab4728573af0898f3eb10804bc3b7f2d16d7db0c3d7
+  new_text_sha256: 3c84d4a6586f56daf219796869376f9eaaee16e05433e984757afe244357b347
+- lib/mpl_toolkits/mplot3d/art3d.py
+  Tool: Edit action #89
+  old_text_sha256: 23b7a87137f5ab037632ade6c6323b1108b52abae2759639f67977f803cee074
+  new_text_sha256: 5988a065fbe0bf082ffa565e8f9ae0a498a19194aeb4f903c7b1092c736c49db
+- swebench_9_15/test_comprehensive.py
+  Tool: Write action #92
+  new_text_sha256: cb012dc078ae3f4f0382304fcda694386d7c0dad34ae707b573c4fb08d8defa3
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

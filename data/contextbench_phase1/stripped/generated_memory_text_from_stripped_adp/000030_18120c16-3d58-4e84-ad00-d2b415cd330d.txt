@@ -1,0 +1,278 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 18120c16-3d58-4e84-ad00-d2b415cd330d
+- repo: astropy/astropy
+- instance_id: astropy__astropy-14365
+- base_commit: 7269fa3e33e8d02485a647da91a5a2a60a06af61
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+ascii.qdp Table format assumes QDP commands are upper case
+### Description
+
+ascii.qdp assumes that commands in a QDP file are upper case, for example, for errors they must be "READ SERR 1 2" whereas QDP itself is not case sensitive and case use "read serr 1 2".
+
+As many QDP files are created by hand, the expectation that all commands be all-caps should be removed.
+
+### Expected behavior
+
+The following qdp file should read into a `Table` with errors, rather than crashing.
+```
+read serr 1 2
+1 0.5 1 0.5
+```
+
+### How to Reproduce
+
+Create a QDP file:
+```
+> cat > test.qdp
+read serr 1 2
+1 0.5 1 0.5
+<EOF>
+
+ > python
+Python 3.10.9 (main, Dec  7 2022, 02:03:23) [Clang 13.0.0 (clang-1300.0.29.30)] on darwin
+Type "help", "copyright", "credits" or "license" for more information.
+>>> from astropy.table import Table
+>>> Table.read('test.qdp',format='ascii.qdp')
+WARNING: table_id not specified. Reading the first available table [astropy.io.ascii.qdp]
+Traceback (most recent call last):
+...
+    raise ValueError(f'Unrecognized QDP line: {line}')
+ValueError: Unrecognized QDP line: read serr 1 2
+```
+
+Running "qdp test.qdp" works just fine.
+
+
+### Versions
+
+Python 3.10.9 (main, Dec  7 2022, 02:03:23) [Clang 13.0.0 (clang-1300.0.29.30)]
+astropy 5.1
+Numpy 1.24.1
+pyerfa 2.0.0.1
+Scipy 1.10.0
+Matplotlib 3.6.3
+
+FILES INSPECTED
+---------------
+- astropy/io/ascii/qdp.py [Read: 1]
+- astropy/io/ascii/tests/test_qdp.py [Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='**/*qdp*.py'
+- [4] Glob glob='**/*qdp*.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15/testbed -type f -name "*.py" | grep -i qdp | head -20
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [diagnostic] cat > /tmp/test.qdp << 'EOF'
+read serr 1 2
+1 0.5 1 0.5
+EOF
+
+- [other/reproduction] python3 << 'EOF'
+from astropy.table import Table
+import warnings
+warnings.filterwarnings('ignore')
+
+# Test with lowercase commands
+table = Table.read('/tmp/test.qdp', format='ascii.qdp')
+print("Test 1 - Lowercase commands:")
+print(table)
+print("Columns:", table.colnames)
+print()
+
+# Test with mixed case
+with open('/tmp/test_mixed.qdp', 'w') as f:
+    f.write('ReAd SeRr 1 2\n')
+    f.write('1 0.5 1 0.5\n')
+
+table2 = Table.read('/tmp/test_mixed.qdp', format='ascii.qdp')
+print("Test 2 - Mixed case c
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+import sys
+sys.path.insert(0, './swebench_9_15/testbed')
+
+# Import the function directly
+from astropy.io.ascii.qdp import _line_type
+
+# Test with lowercase commands
+try:
+    result = _line_type("read serr 1 2")
+    print(f"Test 1 - lowercase 'read serr 1 2': {result}")
+except ValueError as e:
+    print(f"Test 1 FAILED: {e}")
+
+# Test with mixed case
+try:
+    result = _line_type("ReAd SeRr 1 2")
+    print(f"Test 2 - mixed case 'ReAd SeRr 1 2': {result}")
+except ValueError as e:
+
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+import re
+
+# Copy the _line_type function code directly
+def _line_type(line, delimiter=None):
+    _decimal_re = r"[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?"
+    _command_re = r"READ [TS]ERR(\s+[0-9]+)+"
+
+    sep = delimiter
+    if delimiter is None:
+        sep = r"\s+"
+    _new_re = rf"NO({sep}NO)+"
+    _data_re = rf"({_decimal_re}|NO|[-+]?nan)({sep}({_decimal_re}|NO|[-+]?nan))*)"
+    _type_re = rf"^\s*((?P<command>{_command_re})|(?P<new>{_new_re})|(?P<data>{_data_re})?\s*(\!(?P<
+  [... truncated ...]
+- [test] python3 -m pytest astropy/io/ascii/tests/test_qdp.py -v 2>&1 | grep -A 5 -B 5 "test_"
+- [test] python3 -c "import pytest; pytest.main(['-xvs', 'astropy/io/ascii/tests/test_qdp.py::test_read_example'])" 2>&1 | tail -50
+- [other/reproduction] python3 << 'EOF'
+import re
+
+# This is the EXACT code from the fix
+def _line_type(line, delimiter=None):
+    """Interpret a QDP file line."""
+    _decimal_re = r"[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?"
+    _command_re = r"READ [TS]ERR(\s+[0-9]+)+"
+
+    sep = delimiter
+    if delimiter is None:
+        sep = r"\s+"
+    _new_re = rf"NO({sep}NO)+"
+    _data_re = rf"({_decimal_re}|NO|[-+]?nan)({sep}({_decimal_re}|NO|[-+]?nan))*)"
+    _type_re = rf"^\s*((?P<command>{_command_re})|(?P<new>{_new_re})|(
+  [... truncated ...]
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #4]
+  ./swebench_9_15/testbed/astropy/io/ascii/qdp.py
+  ./swebench_9_15/testbed/astropy/io/ascii/tests/test_qdp.py
+- [Read Result after action #6]
+       1→# Licensed under a 3-clause BSD style license - see LICENSE.rst
+       2→"""
+       3→This package contains functions for reading and writing QDP tables that are
+       4→not meant to be used directly, but instead are available as readers/writers in
+       5→`astropy.table`. See :ref:`astropy:table_io` for more details.
+       6→"""
+       7→import copy
+       8→import re
+       9→import warnings
+      10→from collections.abc import Iterable
+      11→
+      12→import numpy as np
+      13→
+      14→from astropy.table import Table
+      15→from astropy.utils.exceptions import AstropyUserWarning
+      16→
+      17→from . import basic, core
+      18→
+      19→
+      20→def _line_type(line, delimiter=None):
+      21→    """Interpret a QDP file line.
+      22→
+      23→    Parameters
+      24→    ----------
+      25→    line : str
+      26→        a single line of the file
+      27→
+      28→    Returns
+      29→    -------
+      30→    type : str
+      31→        Line type: "comment", "command", or "data"
+      32→
+      33→    Examples
+      34→    --------
+      35→    >>> _line_type("READ SERR 3")
+      36→    'command'
+      37→    >>> _line_type(" \\n    !some gibberish")
+      38→    'comment'
+      39→    >>> _line_type("   ")
+      40→    'comment'
+  [... truncated ...]
+- [Read Result after action #8]
+       1→import numpy as np
+       2→import pytest
+       3→
+       4→from astropy.io import ascii
+       5→from astropy.io.ascii.qdp import _get_lines_from_file, _read_table_qdp, _write_table_qdp
+       6→from astropy.table import Column, MaskedColumn, Table
+       7→from astropy.utils.exceptions import AstropyUserWarning
+       8→
+       9→
+      10→def test_get_tables_from_qdp_file(tmp_path):
+      11→    example_qdp = """
+      12→    ! Swift/XRT hardness ratio of trigger: XXXX, name: BUBU X-2
+      13→    ! Columns are as labelled
+      14→    READ TERR 1
+      15→    READ SERR 2
+      16→    ! WT -- hard data
+      17→    !MJD            Err (pos)       Err(neg)        Rate            Error
+      18→    53000.123456 2.37847222222222e-05    -2.37847222222222e-05   -0.212439       0.212439
+      19→    55045.099887 1.14467592592593e-05    -1.14467592592593e-05   0.000000        0.000000
+      20→    NO NO NO NO NO
+      21→    ! WT -- soft data
+      22→    !MJD            Err (pos)       Err(neg)        Rate            Error
+      23→    53000.123456 2.37847222222222e-05    -2.37847222222222e-05   0.726155        0.583890
+      24→    55045.099887 1.14467592592593e-05    -1.14467592592593e-05   2.410935        1.393592
+
+  [... truncated ...]
+- [Read Result after action #18]
+     230→    # Give a non-None err_specs
+     231→    t1.write(test_file, format="ascii.qdp")
+     232→    t2 = Table.read(test_file, table_id=0, format="ascii.qdp", names=["a"])
+     233→    assert np.all(t2["a"] == t1["a"])
+     234→
+     235→
+     236→def test_get_lines_from_qdp(tmp_path):
+     237→    test_file = str(tmp_path / "test.qdp")
+     238→    text_string = "A\nB"
+     239→    text_output = _get_lines_from_file(text_string)
+     240→    with open(test_file, "w") as fobj:
+     241→        print(text_string, file=fobj)
+     242→    file_output = _get_lines_from_file(test_file)
+     243→    list_output = _get_lines_from_file(["A", "B"])
+     244→    for i, line in enumerate(["A", "B"]):
+     245→        assert file_output[i] == line
+     246→        assert list_output[i] == line
+     247→        assert text_output[i] == line
+     248→
+
+
+SOURCE EDIT EVIDENCE
+--------------------
+- astropy/io/ascii/qdp.py
+  Tool: Edit action #10
+  old_text_sha256: 48fe1bd74626b0717cfe93ac64a53f838f1c7d877704ddce90112acbb21bd0be
+  new_text_sha256: 89bc782cf11385ca2bf2cdc19af28844783f6255eb9abb31c8ae31b656fa0ce4
+- astropy/io/ascii/qdp.py
+  Tool: Edit action #21
+  old_text_sha256: 7d23a331cabd0491539d3a2fce182a12db48a6f44d8288d033e1c722055a6a7b
+  new_text_sha256: 335b35948ef50c670d0acfc27b6f70cb080838ed96a35d2f0ef1c3bf53873b7a
+- astropy/io/ascii/tests/test_qdp.py
+  Tool: Edit action #20
+  old_text_sha256: de6510f0a5aa6a5ee7bace0cf6300f3e8c5a83c20b3ff0c19da499a1460e3b5d
+  new_text_sha256: 519cc47f5e8abbe0e3a4ac21753e78a1b862b13e62c3dfd34bfd654e0a3a1909
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

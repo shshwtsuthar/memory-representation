@@ -1,0 +1,389 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 3502dfc1-0838-46a4-bbab-11e99d5db461
+- repo: django/django
+- instance_id: django__django-13028
+- base_commit: 78ad4b4b0201003792bfdbf1a7781cbc9ee03539
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Queryset raises NotSupportedError when RHS has filterable=False attribute.
+Description
+
+        (last modified by Nicolas Baccelli)
+
+I'm migrating my app to django 3.0.7 and I hit a strange behavior using a model class with a field labeled filterable
+class ProductMetaDataType(models.Model):
+    label = models.CharField(max_length=255, unique=True, blank=False, null=False)
+    filterable = models.BooleanField(default=False, verbose_name=_("filterable"))
+    class Meta:
+        app_label = "adminpricing"
+        verbose_name = _("product meta data type")
+        verbose_name_plural = _("product meta data types")
+    def __str__(self):
+        return self.label
+class ProductMetaData(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    product = models.ForeignKey(
+        Produit, null=False, blank=False, on_delete=models.CASCADE
+    )
+    value = models.TextField(null=False, blank=False)
+    marketplace = models.ForeignKey(
+        Plateforme, null=False, blank=False, on_delete=models.CASCADE
+    )
+    date_created = models.DateTimeField(null=True, default=timezone.now)
+    metadata_type = models.ForeignKey(
+        ProductMetaDataType, null=False, blank=False, on_delete=models.CASCADE
+    )
+    class Meta:
+        app_label = "adminpricing"
+        verbose_name = _("product meta data")
+        verbose_name_plural = _("product meta datas")
+Error happened when filtering ProductMetaData with a metadata_type :
+ProductMetaData.objects.filter(value="Dark Vador", metadata_type=self.brand_metadata)
+Error traceback :
+Traceback (most recent call last):
+ File "/backoffice/backoffice/adminpricing/tests/test_pw.py", line 481, in test_checkpolicywarning_by_fields
+    for p in ProductMetaData.objects.filter(
+ File "/usr/local/lib/python3.8/site-packages/django/db/models/manager.py", line 82, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+ File "/usr/local/lib/python3.8/site-packages/django/db/models/query.py", line 904, in filter
+    return self._filter_or_exclude(False, *args, **kwargs)
+ File "/usr/local/lib/python3.8/site-packages/django/db/models/query.py", line 923, in _filter_or_exclude
+    clone.query.add_q(Q(*args, **kwargs))
+ File "/usr/local/lib/python3.8/site-packages/django/db/models/sql/query.py", line 1351, in add_q
+    clause, _ = self._add_q(q_object, self.used_aliases)
+ File "/usr/local/lib/python3.8/site-packages/django/db/models/sql/query.py", line 1378, in _add_q
+    child_clause, needed_inner = self.build_filter(
+ File "/usr/local/lib/python3.8/site-packages/django/db/models/sql/query.py", line 1264, in build_filter
+    self.check_filterable(value)
+ File "/usr/local/lib/python3.8/site-packages/django/db/models/sql/query.py", line 1131, in check_filterable
+    raise NotSupportedError(
+django.db.utils.NotSupportedError: ProductMetaDataType is disallowed in the filter clause.
+I changed label to filterable_test and it fixed this issue
+This should be documented or fix.
+
+FILES INSPECTED
+---------------
+- django/db/models/sql/query.py [Read: 4, Grep: 1]
+- django [Grep: 1]
+- django/db/models/expressions.py [Read: 1, Grep: 2]
+
+SEARCH ANCHORS
+--------------
+- [6] Grep pattern='check_filterable' path='django/db/models/sql/query.py'
+- [10] Grep pattern='filterable\\s*=\\s*False' path='django'
+- [14] Grep pattern='^class Expression' path='django/db/models/expressions.py'
+- [16] Grep pattern='^class BaseExpression' path='django/db/models/expressions.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [diagnostic] ls -la ./swebench_9_15/testbed/setup.* 2>&1
+- [test] python test_filterable_bug.py
+- [other/reproduction] python --version
+- [test] python3 test_filterable_bug.py
+- [test] python3 test_filterable_bug.py
+- [test] python3 tests/runtests.py queries --settings=test_sqlite -v 2 2>&1 | head -100
+- [test] python3 tests/runtests.py queries --settings=test_sqlite -v 0 2>&1 | tail -20
+- [test] python3 test_window_filterable.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- ERROR: NotSupportedError: ProductMetaDataType is disallowed in the filter clause.
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #2]
+  -rw-r--r--@ 1 user  staff  2192 12 Dec 12:13 ./swebench_9_15/testbed/setup.cfg
+  -rw-r--r--@ 1 user  staff  2368 12 Dec 12:13 ./swebench_9_15/testbed/setup.py
+- [Read Result after action #4]
+    1120→                self.check_query_object_type(value, opts, field)
+    1121→            elif hasattr(value, '__iter__'):
+    1122→                for v in value:
+    1123→                    self.check_query_object_type(v, opts, field)
+    1124→
+    1125→    def check_filterable(self, expression):
+    1126→        """Raise an error if expression cannot be used in a WHERE clause."""
+    1127→        if not getattr(expression, 'filterable', True):
+    1128→            raise NotSupportedError(
+    1129→                expression.__class__.__name__ + ' is disallowed in the filter '
+    1130→                'clause.'
+    1131→            )
+    1132→        if hasattr(expression, 'get_source_expressions'):
+    1133→            for expr in expression.get_source_expressions():
+    1134→                self.check_filterable(expr)
+    1135→
+    1136→    def build_lookup(self, lookups, lhs, rhs):
+    1137→        """
+    1138→        Try to extract transforms and lookup from given lhs.
+    1139→
+    1140→        The lhs value is something that works like SQLExpression.
+    1141→        The rhs value is what the lookup is going to compare against.
+    1142→        The lookups is a list of names to extract using get_lookup()
+    1143→
+  [... truncated ...]
+- [Grep Result after action #6]
+  1125:    def check_filterable(self, expression):
+  1134:                self.check_filterable(expr)
+  1203:                     reuse_with_filtered_relation=False, check_filterable=True):
+  1242:                check_filterable=check_filterable,
+  1258:        if check_filterable:
+  1259:            self.check_filterable(reffed_expression)
+  1268:        if check_filterable:
+  1269:            self.check_filterable(value)
+  1366:               check_filterable=True):
+  1378:                split_subq=split_subq, check_filterable=check_filterable,
+- [Read Result after action #8]
+    1240→                allow_joins=allow_joins,
+    1241→                split_subq=split_subq,
+    1242→                check_filterable=check_filterable,
+    1243→            )
+    1244→        if hasattr(filter_expr, 'resolve_expression'):
+    1245→            if not getattr(filter_expr, 'conditional', False):
+    1246→                raise TypeError('Cannot filter against a non-conditional expression.')
+    1247→            condition = self.build_lookup(
+    1248→                ['exact'], filter_expr.resolve_expression(self, allow_joins=allow_joins), True
+    1249→            )
+    1250→            clause = self.where_class()
+    1251→            clause.add(condition, AND)
+    1252→            return clause, []
+    1253→        arg, value = filter_expr
+    1254→        if not arg:
+    1255→            raise FieldError("Cannot parse keyword query %r" % arg)
+    1256→        lookups, parts, reffed_expression = self.solve_lookup_type(arg)
+    1257→
+    1258→        if check_filterable:
+    1259→            self.check_filterable(reffed_expression)
+    1260→
+    1261→        if not allow_joins and len(parts) > 1:
+    1262→            raise FieldError("Joined field references are not permitted in this query")
+    1263→
+    1264→
+  [... truncated ...]
+- [Grep Result after action #10]
+  django/db/models/query_utils.py:105:            check_filterable=False,
+  django/db/models/expressions.py:1205:    filterable = False
+- [Read Result after action #12]
+    1195→        self.descending = True
+    1196→
+    1197→
+    1198→class Window(Expression):
+    1199→    template = '%(expression)s OVER (%(window)s)'
+    1200→    # Although the main expression may either be an aggregate or an
+    1201→    # expression with an aggregate function, the GROUP BY that will
+    1202→    # be introduced in the query as a result is not desired.
+    1203→    contains_aggregate = False
+    1204→    contains_over_clause = True
+    1205→    filterable = False
+    1206→
+    1207→    def __init__(self, expression, partition_by=None, order_by=None, frame=None, output_field=None):
+    1208→        self.partition_by = partition_by
+    1209→        self.order_by = order_by
+    1210→        self.frame = frame
+    1211→
+    1212→        if not getattr(expression, 'window_compatible', False):
+    1213→            raise ValueError(
+    1214→                "Expression '%s' isn't compatible with OVER clauses." %
+    1215→                expression.__class__.__name__
+    1216→            )
+    1217→
+    1218→        if self.partition_by is not None:
+    1219→            if not isinstance(self.partition_by, (tuple, list)):
+    1220→                self.partition_by = (self.partition_by,)
+    1221→            self.partiti
+  [... truncated ...]
+- [Grep Result after action #14]
+  418:class Expression(BaseExpression, Combinable):
+  835:class ExpressionList(Func):
+  852:class ExpressionWrapper(Expression):
+- [Grep Result after action #16]
+  152:class BaseExpression:
+- [Test Output after action #19]
+  Exit code 1
+    File "test_filterable_bug.py", line 54
+      print(f"Created metadata_type: {metadata_type.label}, filterable={metadata_type.filterable}")
+                                                                                                 ^
+  SyntaxError: invalid syntax
+- [Test Output after action #23]
+  Creating test data...
+  Created metadata_type: Brand, filterable=False
+  Created metadata: Test Value
+
+  Attempting to filter ProductMetaData with metadata_type having filterable=False...
+  ERROR: NotSupportedError: ProductMetaDataType is disallowed in the filter clause.
+
+  Now testing with filterable=True...
+  SUCCESS: Filter worked! Found 1 result(s)
+    - Test Value 2, metadata_type=Category
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "test_filterable_bug.py", line 61, in <module>
+      result = ProductMetaData.objects.filter(value="Test Value", metadata_type=metadata_type)
+    File "./swebench_9_15/testbed/django/db/models/manager.py", line 85, in manager_method
+      return getattr(self.get_queryset(), name)(*args, **kwargs)
+    File "./swebench_9_15/testbed/django/db/models/query.py",
+  [... truncated ...]
+- [Read Result after action #25]
+       0→"""
+       1→Create SQL statements for QuerySets.
+       2→
+       3→The code in here encapsulates all of the SQL construction so that QuerySets
+       4→themselves do not have to (and could be backed by things other than SQL
+       5→databases). The abstraction barrier only works one way: this module has to know
+       6→all about the internals of models in order to get the information it needs.
+       7→"""
+       8→import copy
+       9→import difflib
+      10→import functools
+      11→import inspect
+      12→import sys
+      13→import warnings
+      14→from collections import Counter, namedtuple
+      15→from collections.abc import Iterator, Mapping
+      16→from itertools import chain, count, product
+      17→from string import ascii_uppercase
+      18→
+      19→from django.core.exceptions import (
+      20→    EmptyResultSet, FieldDoesNotExist, FieldError,
+      21→)
+      22→from django.db import DEFAULT_DB_ALIAS, NotSupportedError, connections
+      23→from django.db.models.aggregates import Count
+      24→from django.db.models.constants import LOOKUP_SEP
+      25→from django.db.models.expressions import BaseExpression, Col, F, OuterRef, Ref
+      26→from django.db.models.fields import Field
+      27→from django.db.model
+  [... truncated ...]
+- [Read Result after action #27]
+    1125→    def check_filterable(self, expression):
+    1126→        """Raise an error if expression cannot be used in a WHERE clause."""
+    1127→        if not getattr(expression, 'filterable', True):
+    1128→            raise NotSupportedError(
+    1129→                expression.__class__.__name__ + ' is disallowed in the filter '
+    1130→                'clause.'
+    1131→            )
+    1132→        if hasattr(expression, 'get_source_expressions'):
+    1133→            for expr in expression.get_source_expressions():
+    1134→                self.check_filterable(expr)
+    1135→
+    1136→    def build_lookup(self, lookups, lhs, rhs):
+    1137→        """
+    1138→        Try to extract transforms and lookup from given lhs.
+    1139→
+
+- [Test Output after action #30]
+  Creating test data...
+  Created metadata_type: Brand, filterable=False
+  Created metadata: Test Value
+
+  Attempting to filter ProductMetaData with metadata_type having filterable=False...
+  SUCCESS: Filter worked! Found 1 result(s)
+    - Test Value, metadata_type=Brand
+
+  Now testing with filterable=True...
+  SUCCESS: Filter worked! Found 1 result(s)
+    - Test Value 2, metadata_type=Category
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #32]
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+  test_batch_size (queries.test_bulk_update.BulkUpdateNoteTests) ... ok
+  test_foreign_keys_do_not_lookup (queries.test_bulk_update.BulkUpdateNoteTests) ... ok
+  test_functions (queries.test_bulk_update.BulkUpdateNoteTests) ... ok
+  test_multiple_fields (queries.test_bulk_update.BulkUpdateNoteTests) ... ok
+  test_set_field_to_null (queries.test_bulk_update.BulkUpdateNoteTests) ... ok
+  test_set_mixed_fields_to_null (queries.test_bulk_update.BulkUpdateNoteTests) ... ok
+  test_simple (queries.test_bulk_update.BulkUpdateNoteTests) ... ok
+  test_unsaved_models (queries.test_bulk_update.BulkUpdateNoteTests) ... ok
+  test_booleanfield (queries.test_bulk_update.BulkUpdateTests) ... ok
+  test_custom_
+  [... truncated ...]
+- [Test Output after action #34]
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ----------------------------------------------------------------------
+  Ran 386 tests in 0.728s
+
+  OK (skipped=13, expected failures=2)
+  System check identified no issues (1 silenced).
+- [Test Output after action #37]
+  Creating test data...
+
+  Attempting to use Window expression in filter (should fail)...
+  SUCCESS: Correctly rejected Window expression in filter
+    Error message: Window is disallowed in the filter clause.
+
+  Normal filter should still work...
+  SUCCESS: Normal filter worked! Found 1 result(s)
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/models/sql/query.py
+  Tool: Edit action #29
+  old_text_sha256: 3bccbe54d389899eb7efb304b4cc6951ed6f433f32b83f62177d17a22e601bac
+  new_text_sha256: 4bead7affde320b3c0b5432e6054c3da67dabf21169a94b66323608a0fe4b05c
+- test_filterable_bug.py
+  Tool: Write action #18
+  new_text_sha256: d0c42fdf809358d75c96efc8ea60cdd33f795e7adc731f129cf70a81e93c85ad
+- test_window_filterable.py
+  Tool: Write action #36
+  new_text_sha256: 1e409f60e77329c3891ceaf060077be7d951a79a613ab8bbb3acfa5c99353d6c
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

@@ -1,0 +1,248 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 647ca95a-3da9-4970-8654-d1ab5c824942
+- repo: django/django
+- instance_id: django__django-15400
+- base_commit: 4c76ffc2d6c77c850b4bef8d9acc197d11c47937
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+SimpleLazyObject doesn't implement __radd__
+Description
+
+Technically, there's a whole bunch of magic methods it doesn't implement, compared to a complete proxy implementation, like that of wrapt.ObjectProxy, but __radd__ being missing is the one that's biting me at the moment.
+As far as I can tell, the implementation can't just be
+__radd__ = new_method_proxy(operator.radd)
+because that doesn't exist, which is rubbish.
+__radd__ = new_method_proxy(operator.attrgetter("__radd__"))
+also won't work because types may not have that attr, and attrgetter doesn't supress the exception (correctly)
+The minimal implementation I've found that works for me is:
+    def __radd__(self, other):
+        if self._wrapped is empty:
+            self._setup()
+        return other + self._wrapped
+
+FILES INSPECTED
+---------------
+- django/utils/functional.py [Read: 1]
+- tests/utils_tests/test_lazyobject.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [3] Grep pattern='class SimpleLazyObject'
+- [5] Grep pattern='class SimpleLazyObject' path='testbed'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15 -name "*.py" -type f | head -20
+- [diagnostic] ls -la ./swebench_9_15/testbed 2>&1 | head -20
+- [test] python test_radd.py
+- [other/reproduction] python --version
+- [other/reproduction] python3 --version
+- [test] python3 test_radd.py
+- [test] cd testbed && python3 -m pytest tests/utils_tests/test_lazyobject.py -xvs
+- [test] cd testbed && python3 tests/runtests.py utils_tests.test_lazyobject -v 2
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- E   django.core.exceptions.ImproperlyConfigured: Requested setting INSTALLED_APPS, but settings are not configured. You must either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing settings.
+- ERROR tests/utils_tests/test_lazyobject.py - django.core.exceptions.Improperl...
+- ERROR: test_pickle_model (utils_tests.test_lazyobject.SimpleLazyObjectPickleTestCase)
+- FAILED (errors=1)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #1]
+  ./swebench_9_15/calculate_session_usage.py
+- [Grep Result after action #5]
+  Found 2 files
+  testbed/tests/utils_tests/test_lazyobject.py
+  testbed/django/utils/functional.py
+- [Read Result after action #7]
+       1→import copy
+       2→import itertools
+       3→import operator
+       4→import warnings
+       5→from functools import total_ordering, wraps
+       6→
+       7→
+       8→class cached_property:
+       9→    """
+      10→    Decorator that converts a method with a single self argument into a
+      11→    property cached on the instance.
+      12→
+      13→    A cached property can be made out of an existing method:
+      14→    (e.g. ``url = cached_property(get_absolute_url)``).
+      15→    """
+      16→
+      17→    name = None
+      18→
+      19→    @staticmethod
+      20→    def func(instance):
+      21→        raise TypeError(
+      22→            "Cannot use cached_property instance without calling "
+      23→            "__set_name__() on it."
+      24→        )
+      25→
+      26→    def __init__(self, func, name=None):
+      27→        from django.utils.deprecation import RemovedInDjango50Warning
+      28→
+      29→        if name is not None:
+      30→            warnings.warn(
+      31→                "The name argument is deprecated as it's unnecessary as of "
+      32→                "Python 3.6.",
+      33→                RemovedInDjango50Warning,
+      34→                stacklevel=2,
+      35→            )
+      36→        self.r
+  [... truncated ...]
+- [Read Result after action #9]
+       1→import copy
+       2→import pickle
+       3→import sys
+       4→import warnings
+       5→from unittest import TestCase
+       6→
+       7→from django.utils.functional import LazyObject, SimpleLazyObject, empty
+       8→
+       9→from .models import Category, CategoryInfo
+      10→
+      11→
+      12→class Foo:
+      13→    """
+      14→    A simple class with just one attribute.
+      15→    """
+      16→
+      17→    foo = "bar"
+      18→
+      19→    def __eq__(self, other):
+      20→        return self.foo == other.foo
+      21→
+      22→
+      23→class LazyObjectTestCase(TestCase):
+      24→    def lazy_wrap(self, wrapped_object):
+      25→        """
+      26→        Wrap the given object into a LazyObject
+      27→        """
+      28→
+      29→        class AdHocLazyObject(LazyObject):
+      30→            def _setup(self):
+      31→                self._wrapped = wrapped_object
+      32→
+      33→        return AdHocLazyObject()
+      34→
+      35→    def test_getattr(self):
+      36→        obj = self.lazy_wrap(Foo())
+      37→        self.assertEqual(obj.foo, "bar")
+      38→
+      39→    def test_setattr(self):
+      40→        obj = self.lazy_wrap(Foo())
+      41→        obj.foo = "BAR"
+      42→        obj.bar = "baz"
+      43→        self.asse
+  [... truncated ...]
+- [Test Output after action #13]
+  Exit code 1
+    File "test_radd.py", line 16
+      assert result == "hello world", f"Expected 'hello world', got '{result}'"
+                                                                              ^
+  SyntaxError: invalid syntax
+- [Test Output after action #19]
+  Testing __radd__ implementation...
+
+  ✓ String concatenation test passed
+  ✓ List concatenation test passed
+  ✓ Numeric addition test passed
+  ✓ Tuple concatenation test passed
+  ✓ LazyObject test passed
+  ✓ Evaluation timing test passed
+
+  ==================================================
+  All tests passed! ✓
+  ==================================================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #21]
+  Exit code 2
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  rootdir: ./swebench_9_15/testbed
+  configfile: pyproject.toml
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 0 items / 1 error
+
+  ==================================== ERRORS ====================================
+  ____________ ERROR collecting tests/utils_tests/test_lazyobject.py _____________
+  tests/utils_tests/test_lazyobject.py:9: in <module>
+      from .models import Category, CategoryInfo
+  tests/utils_tests/mod
+  [... truncated ...]
+- [Test Output after action #23]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  test_bool (utils_tests.test_lazyobject.LazyObjectTestCase) ... ok
+  test_bytes (utils_tests.test_lazyobject.LazyObjectTestCase) ... ok
+  test_class (utils_tests.test_lazyobject.LazyObjectTestCase) ... ok
+  test_cmp (utils_tests.test_lazyobject.LazyObjectTestCase) ... ok
+  test_contains (utils_tests.test_lazyobject.LazyObjectTestCase) ... ok
+  test_copy_class (utils_tests.test_lazyobject.LazyObjectTestCase) ... ok
+  test_copy_class_no_evaluation (utils_tests.test_lazyobject.LazyObjectTestCase) ... ok
+  test_copy_list (utils_tests.test_lazyobject.LazyObjectTestCase) ... ok
+  test_copy_list_no_evaluation (utils_tests.test_lazyobject.LazyObjectTestCase) ... ok
+  test_deepcopy_class (utils_tests.test_lazyobject.LazyObjectTestCase) ... ok
+  test_deepcopy_class_no_evaluation (utils_
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/utils/functional.py
+  Tool: Edit action #11
+  old_text_sha256: 5cd4f90e5be0b044fb383cca28f4184ce3c9a09aee5fdd45c7361c5faf93eddf
+  new_text_sha256: 20c7769c80031a6653ef991da6d16acd85c238e36b1ffeb3eeb3b600c6e1f11a
+- swebench_9_15/test_radd.py
+  Tool: Write action #12
+  new_text_sha256: 017134ff4f479f4214dbe3935e9da55d96648bfd56fae3e2fc04396e6da0c23b
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

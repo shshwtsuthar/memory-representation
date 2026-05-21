@@ -1,0 +1,311 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 9d410eca-bd6c-434c-aeb7-ca3b6244e47d
+- repo: sympy/sympy
+- instance_id: sympy__sympy-11400
+- base_commit: 8dcb12a6cf500e8738d6729ab954a261758f49ca
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+ccode(sinc(x)) doesn't work
+```
+In [30]: ccode(sinc(x))
+Out[30]: '// Not supported in C:\n// sinc\nsinc(x)'
+```
+
+I don't think `math.h` has `sinc`, but it could print
+
+```
+In [38]: ccode(Piecewise((sin(theta)/theta, Ne(theta, 0)), (1, True)))
+Out[38]: '((Ne(theta, 0)) ? (\n   sin(theta)/theta\n)\n: (\n   1\n))'
+```
+
+FILES INSPECTED
+---------------
+- sympy/functions/elementary/trigonometric.py [Grep: 3]
+- sympy/printing/ccode.py [Read: 3, Grep: 1]
+- sympy/printing/tests/test_ccode.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='*.py'
+- [4] Glob glob='run_*.py'
+- [9] Grep pattern='class sinc' path='sympy/functions/elementary/trigonometric.py'
+- [16] Grep pattern='class sinc' path='sympy/functions/elementary/trigonometric.py'
+- [22] Grep pattern='def _print_' path='sympy/printing/ccode.py'
+- [26] Grep pattern='def _eval_rewrite_as_Piecewise' path='sympy/functions/elementary/trigonometric.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] cd ./swebench_9_15/testbed && find . -name "*.py" -path "*/sympy/*" -type f | grep -E "(sinc|ccode)" | head -20
+- [diagnostic] cd testbed && find . -name "*.py" -type f | xargs grep -l "class.*sinc" | head -10
+- [diagnostic] cd testbed && find . -name "*c_code*.py" -o -name "*ccode*.py" | head -10
+- [diagnostic] cd testbed && find . -name "*.py" -type f | xargs grep -l "def sinc\|class sinc" | head -5
+- [diagnostic] find testbed -name "*.py" -type f -exec grep -l "def sinc\|class sinc" {} \; | head -5
+- [diagnostic] find . -name "*.py" -type f -exec grep -l "class sinc\|def sinc" {} \; | head -10
+- [other/reproduction] python3 -c "from sympy import sinc, ccode, symbols; x = symbols('x'); print(ccode(sinc(x)))"
+- [other/reproduction] python3 -c "from sympy import sin, ccode, symbols, Piecewise, Ne; x = symbols('x'); print(ccode(Piecewise((sin(x)/x, Ne(x, 0)), (1, True))))"
+- [other/reproduction] python3 -c "from sympy import sinc, Piecewise, symbols; x = symbols('x'); print(sinc(x).rewrite(Piecewise))"
+- [other/reproduction] python3 -c "from sympy import sinc, ccode, symbols; x = symbols('x'); print(ccode(sinc(x)))"
+- [other/reproduction] python3 -c "
+from sympy import sinc, ccode, symbols, sin
+
+# Test various cases
+x, theta = symbols('x theta')
+
+print('Test 1: ccode(sinc(x))')
+print(ccode(sinc(x)))
+print()
+
+print('Test 2: ccode(sinc(theta))')
+print(ccode(sinc(theta)))
+print()
+
+print('Test 3: ccode(sinc(2*x))')
+print(ccode(sinc(2*x)))
+"
+- [test] python -m pytest sympy/printing/tests/test_ccode.py::test_ccode_sinc -xvs
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ERROR: found no collectors for ./swebench_9_15/testbed/sympy/printing/tests/test_ccode.py::test_ccode_sinc
+- ImportError while importing test module './swebench_9_15/testbed/sympy/printing/tests/test_ccode.py'.
+- Traceback:
+- E   ImportError: cannot import name 'raises' from 'sympy.utilities.pytest' (./swebench_9_15/testbed/sympy/utilities/pytest.py)
+- ERROR sympy/printing/tests/test_ccode.py
+- Traceback (most recent call last):
+- ImportError: SymPy now depends on mpmath as an external library. See http://docs.sympy.org/latest/install.html#mpmath for more information.
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #2]
+  ./swebench_9_15/calculate_session_usage.py
+- [Diagnostic Output after action #5]
+  ./sympy/integrals/risch.py
+  ./sympy/functions/elementary/trigonometric.py
+- [Diagnostic Output after action #7]
+  ./sympy/printing/tests/test_ccode.py
+  ./sympy/printing/ccode.py
+- [Read Result after action #10]
+       1→"""
+       2→C code printer
+       3→
+       4→The CCodePrinter converts single sympy expressions into single C expressions,
+       5→using the functions defined in math.h where possible.
+       6→
+       7→A complete code generator, which uses ccode extensively, can be found in
+       8→sympy.utilities.codegen. The codegen module can be used to generate complete
+       9→source code files that are compilable without further modifications.
+      10→
+      11→
+      12→"""
+      13→
+      14→from __future__ import print_function, division
+      15→
+      16→from sympy.core import S
+      17→from sympy.core.compatibility import string_types, range
+      18→from sympy.codegen.ast import Assignment
+      19→from sympy.printing.codeprinter import CodePrinter
+      20→from sympy.printing.precedence import precedence
+      21→from sympy.sets.fancysets import Range
+      22→
+      23→# dictionary mapping sympy function to (argument_conditions, C_function).
+      24→# Used in CCodePrinter._print_Function(self)
+      25→known_functions = {
+      26→    "Abs": [(lambda x: not x.is_integer, "fabs")],
+      27→    "gamma": "tgamma",
+      28→    "sin": "sin",
+      29→    "cos": "cos",
+      30→    "tan": "tan",
+      31→    "asin": "asin",
+      3
+  [... truncated ...]
+- [Diagnostic Output after action #14]
+  ./sympy/integrals/tests/test_transforms.py
+  ./sympy/integrals/manualintegrate.py
+  ./sympy/functions/elementary/trigonometric.py
+- [Grep Result after action #16]
+  1620:class sinc(TrigonometricFunction):
+  1621-    r"""Represents unnormalized sinc function
+  1622-
+  1623-    Examples
+  1624-    ========
+  1625-
+  1626-    >>> from sympy import sinc, oo, jn, Product, Symbol
+  1627-    >>> from sympy.abc import x
+  1628-    >>> sinc(x)
+  1629-    sinc(x)
+  1630-
+  1631-    * Automated Evaluation
+  1632-
+  1633-    >>> sinc(0)
+  1634-    1
+  1635-    >>> sinc(oo)
+  1636-    0
+  1637-
+  1638-    * Differentiation
+  1639-
+  1640-    >>> sinc(x).diff()
+  1641-    (x*cos(x) - sin(x))/x**2
+  1642-
+  1643-    * Series Expansion
+  1644-
+  1645-    >>> sinc(x).series()
+  1646-    1 - x**2/6 + x**4/120 + O(x**6)
+  1647-
+  1648-    * As zero'th order spherical Bessel Function
+  1649-
+  1650-    >>> sinc(x).rewrite(jn)
+  1651-    jn(0, x)
+  1652-
+  1653-    References
+  1654-    ==========
+  1655-
+  1656-    .. [1] http://en.wikipedia.org/wiki/Sinc_function
+  1657-
+  1658-    """
+  1659-
+  1660-    def fdiff(self, argindex=1):
+  1661-        x = self.args[0]
+  1662-        if argindex == 1:
+  1663-            return (x*cos(x) - sin(x)) / x**2
+  1664-        else:
+  1665-            raise ArgumentIndexError(self, argindex)
+  1666-
+  1667-    @classmethod
+  1668-    def eval(cls, arg):
+  1669-        if arg.is_zero:
+  1670-            return S.One
+- [Grep Result after action #22]
+  143:    def _print_Pow(self, expr):
+  155:    def _print_Rational(self, expr):
+  159:    def _print_Indexed(self, expr):
+  169:    def _print_Idx(self, expr):
+  172:    def _print_Exp1(self, expr):
+  175:    def _print_Pi(self, expr):
+  178:    def _print_Infinity(self, expr):
+  181:    def _print_NegativeInfinity(self, expr):
+  184:    def _print_Piecewise(self, expr):
+  216:    def _print_ITE(self, expr):
+  221:    def _print_MatrixElement(self, expr):
+  225:    def _print_Symbol(self, expr):
+  234:    def _print_AugmentedAssignment(self, expr):
+  240:    def _print_For(self, expr):
+  251:    def _print_sign(self, func):
+- [Read Result after action #24]
+     251→    def _print_sign(self, func):
+     252→        return '((({0}) > 0) - (({0}) < 0))'.format(self._print(func.args[0]))
+     253→
+     254→    def indent_code(self, code):
+     255→        """Accepts a string of code or a list of code lines"""
+
+- [Grep Result after action #26]
+  No matches found
+- [Read Result after action #30]
+     250→
+     251→    def _print_sign(self, func):
+     252→        return '((({0}) > 0) - (({0}) < 0))'.format(self._print(func.args[0]))
+     253→
+     254→    def indent_code(self, code):
+     255→        """Accepts a string of code or a list of code lines"""
+     256→
+     257→        if isinstance(code, string_types):
+     258→            code_lines = self.indent_code(code.splitlines(True))
+     259→            return ''.join(code_lines)
+
+- [Read Result after action #37]
+       1→from sympy.core import (pi, oo, symbols, Rational, Integer,
+       2→                        GoldenRatio, EulerGamma, Catalan, Lambda, Dummy, Eq)
+       3→from sympy.functions import (Piecewise, sin, cos, Abs, exp, ceiling, sqrt,
+       4→                             gamma, sign)
+       5→from sympy.sets import Range
+       6→from sympy.logic import ITE
+       7→from sympy.codegen import For, aug_assign, Assignment
+       8→from sympy.utilities.pytest import raises
+       9→from sympy.printing.ccode import CCodePrinter
+      10→from sympy.utilities.lambdify import implemented_function
+      11→from sympy.tensor import IndexedBase, Idx
+      12→from sympy.matrices import Matrix, MatrixSymbol
+      13→
+      14→from sympy import ccode
+      15→
+      16→x, y, z = symbols('x,y,z')
+      17→
+      18→
+      19→def test_printmethod():
+      20→    class fabs(Abs):
+      21→        def _ccode(self, printer):
+      22→            return "fabs(%s)" % printer._print(self.args[0])
+      23→    assert ccode(fabs(x)) == "fabs(x)"
+      24→
+      25→
+      26→def test_ccode_sqrt():
+      27→    assert ccode(sqrt(x)) == "sqrt(x)"
+      28→    assert ccode(x**0.5) == "sqrt(x)"
+      29→    assert ccode(sqrt(x)) == "sqrt(x)"
+      30→
+      31→
+
+  [... truncated ...]
+- [Test Output after action #41]
+  Exit code 1
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #43]
+  Exit code 4
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ERROR: found no collectors for ./swebench_9_15/testbed/sympy/printing/tests/test_ccode.py::test_ccode_sinc
+
+
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 0 items / 1 error
+
+  ==================================== ERRORS ====================================
+  _____________ ERROR collecting sympy/printing/tests/tes
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/printing/ccode.py
+  Tool: Edit action #32
+  old_text_sha256: bdb551a93a347184a62be6ac67c7b916c6cad70a4ac1738c2ef50b9eeed39ecb
+  new_text_sha256: fa8ebe2c7992c1d93ae5ab6013b3f0a6757116bba927b5272e772b7e2d9a493b
+- sympy/printing/tests/test_ccode.py
+  Tool: Edit action #39
+  old_text_sha256: f5d36c23766d3116ea889509bf94e0f71f8d2fb971d9cb62da4f034a94ae55e2
+  new_text_sha256: c7f5a73c0d31103d9799742f701717fcf8465a1255000a06b2229ad11a6f53b9
+- sympy/printing/tests/test_ccode.py
+  Tool: Edit action #40
+  old_text_sha256: 093c8a5ae0854cfd3307c1384ade9cac381de91260c6b84b66b81dddb9b0298e
+  new_text_sha256: 9bfc727ad72569f2425b2225026c4ae1cd4c22e75b3d6071aeb211d29de05414
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

@@ -1,0 +1,251 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 40974ff0-fcc0-4912-a86f-7d70ceeec5ae
+- repo: django/django
+- instance_id: django__django-14672
+- base_commit: 00ea883ef56fb5e092cbe4a6f7ff2e7470886ac4
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Missing call `make_hashable` on `through_fields` in `ManyToManyRel`
+Description
+
+In 3.2 identity property has been added to all ForeignObjectRel to make it possible to compare them. A hash is derived from said identity and it's possible because identity is a tuple. To make limit_choices_to hashable (one of this tuple elements), ​there's a call to make_hashable.
+It happens that through_fields can be a list. In such case, this make_hashable call is missing in ​ManyToManyRel.
+For some reason it only fails on checking proxy model. I think proxy models have 29 checks and normal ones 24, hence the issue, but that's just a guess.
+Minimal repro:
+class Parent(models.Model):
+    name = models.CharField(max_length=256)
+class ProxyParent(Parent):
+    class Meta:
+        proxy = True
+class Child(models.Model):
+    parent = models.ForeignKey(Parent, on_delete=models.CASCADE)
+    many_to_many_field = models.ManyToManyField(
+        to=Parent,
+        through="ManyToManyModel",
+        through_fields=['child', 'parent'],
+        related_name="something"
+    )
+class ManyToManyModel(models.Model):
+    parent = models.ForeignKey(Parent, on_delete=models.CASCADE, related_name='+')
+    child = models.ForeignKey(Child, on_delete=models.CASCADE, related_name='+')
+    second_child = models.ForeignKey(Child, on_delete=models.CASCADE, null=True, default=None)
+Which will result in
+ File "manage.py", line 23, in <module>
+    main()
+ File "manage.py", line 19, in main
+    execute_from_command_line(sys.argv)
+ File "/home/tom/PycharmProjects/broken_m2m_project/venv/lib/python3.8/site-packages/django/core/management/__init__.py", line 419, in execute_from_command_line
+    utility.execute()
+ File "/home/tom/PycharmProjects/broken_m2m_project/venv/lib/python3.8/site-packages/django/core/management/__init__.py", line 413, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+ File "/home/tom/PycharmProjects/broken_m2m_project/venv/lib/python3.8/site-packages/django/core/management/base.py", line 354, in run_from_argv
+    self.execute(*args, **cmd_options)
+ File "/home/tom/PycharmProjects/broken_m2m_project/venv/lib/python3.8/site-packages/django/core/management/base.py", line 393, in execute
+    self.check()
+ File "/home/tom/PycharmProjects/broken_m2m_project/venv/lib/python3.8/site-packages/django/core/management/base.py", line 419, in check
+    all_issues = checks.run_checks(
+ File "/home/tom/PycharmProjects/broken_m2m_project/venv/lib/python3.8/site-packages/django/core/checks/registry.py", line 76, in run_checks
+    new_errors = check(app_configs=app_configs, databases=databases)
+ File "/home/tom/PycharmProjects/broken_m2m_project/venv/lib/python3.8/site-packages/django/core/checks/model_checks.py", line 34, in check_all_models
+    errors.extend(model.check(**kwargs))
+ File "/home/tom/PycharmProjects/broken_m2m_project/venv/lib/python3.8/site-packages/django/db/models/base.py", line 1277, in check
+    *cls._check_field_name_clashes(),
+ File "/home/tom/PycharmProjects/djangbroken_m2m_projectProject/venv/lib/python3.8/site-packages/django/db/models/base.py", line 1465, in _check_field_name_clashes
+    if f not in used_fields:
+ File "/home/tom/PycharmProjects/broken_m2m_project/venv/lib/python3.8/site-packages/django/db/models/fields/reverse_related.py", line 140, in __hash__
+    return hash(self.identity)
+TypeError: unhashable type: 'list'
+Solution: Add missing make_hashable call on self.through_fields in ManyToManyRel.
+Missing call `make_hashable` on `through_fields` in `ManyToManyRel`
+Description
+
+In 3.2 identity property has been added to all ForeignObjectRel to make it possible to compare them. A hash is derived from said identity and it's possible because identity is a tuple. To make limit_choices_to hashable (one of this tuple elements), ​there's a call to make_hashable.
+It happens that through_fields can be a list. In such case, this make_hashable call is missing in ​ManyToManyRel.
+For some reason it only fails on checking proxy model.
+[... truncated ...]
+
+FILES INSPECTED
+---------------
+- swebench_9_15/django/db/models/fields/reverse_related.py [Read: 1]
+- django/db/models/fields/reverse_related.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Grep pattern='class ManyToManyRel'
+- [2] Grep pattern='def make_hashable'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15 -name "reverse_related.py" -type f 2>/dev/null | head -5
+- [diagnostic] find testbed -name "reverse_related.py" -type f
+- [diagnostic] find . -name "reverse_related.py" -type f
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [other/reproduction] python --version
+- [test] python3 test_issue.py
+- [test] python3 test_hashable.py
+- [test] cd testbed && python3 tests/runtests.py --settings=test_sqlite many_to_many -v 2 2>&1 | head -50
+- [test] python3 tests/runtests.py --settings=test_sqlite many_to_many -v 2 2>&1 | head -100
+- [test] python3 tests/runtests.py --settings=test_sqlite m2m_through -v 2 2>&1 | tail -30
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #5]
+  ./django/db/models/fields/reverse_related.py
+- [Read Result after action #8]
+       1→"""
+       2→"Rel objects" for related fields.
+       3→
+       4→"Rel objects" (for lack of a better name) carry information about the relation
+       5→modeled by a related field and provide some utility functions. They're stored
+       6→in the ``remote_field`` attribute of the field.
+       7→
+       8→They also act as reverse fields for the purposes of the Meta API because
+       9→they're the closest concept currently available.
+      10→"""
+      11→
+      12→from django.core import exceptions
+      13→from django.utils.functional import cached_property
+      14→from django.utils.hashable import make_hashable
+      15→
+      16→from . import BLANK_CHOICE_DASH
+      17→from .mixins import FieldCacheMixin
+      18→
+      19→
+      20→class ForeignObjectRel(FieldCacheMixin):
+      21→    """
+      22→    Used by ForeignObject to store information about the relation.
+      23→
+      24→    ``_meta.get_fields()`` returns this class to provide access to the field
+      25→    flags for the reverse relation.
+      26→    """
+      27→
+      28→    # Field flags
+      29→    auto_created = True
+      30→    concrete = False
+      31→    editable = False
+      32→    is_relation = True
+      33→
+      34→    # Reverse relations are always nu
+  [... truncated ...]
+- [Test Output after action #11]
+  Exit code 1
+    File "test_issue.py", line 76
+  SyntaxError: Non-ASCII character '\xe2' in file test_issue.py on line 76, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+- [Test Output after action #13]
+  Exit code 1
+    File "test_issue.py", line 82
+      print(f"[FAIL] Test failed with the original error: {e}")
+                                                             ^
+  SyntaxError: invalid syntax
+- [Test Output after action #17]
+  Testing the fix for through_fields hashing issue...
+  [PASS] Model checks passed successfully!
+
+  Test completed successfully - the fix works!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #20]
+  Testing ManyToManyRel.identity hashing with through_fields...
+  through_fields type: <class 'list'>
+  through_fields value: ['child', 'parent']
+  Identity obtained successfully: <class 'tuple'>
+  Hash computed successfully: 5396427358378542560
+  ManyToManyRel hash computed successfully: 5396427358378542560
+  ManyToManyRel added to set successfully
+  Containment check works correctly
+
+  [PASS] All hashing tests passed successfully!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #23]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Importing application many_to_many
+  Found 30 test(s).
+  Skipping setup of unused database(s): other.
+  Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+  Operations to perform:
+    Synchronize unmigrated apps: auth, contenttypes, many_to_many, messages, sessions, staticfiles
+    Apply all migrations: admin, sites
+  Synchronizing apps without migrations:
+    Creating tables...
+      Creating table django_content_type
+      Creating table auth_permission
+      Creating table auth_group
+      Creating table auth_user
+      Creating table django_session
+      Creating table many_to_many_publication
+      Creating table many_to_many_tag
+      Creating table many_to_many_article
+      Creati
+  [... truncated ...]
+- [Test Output after action #25]
+  test_get_or_create_on_m2m_with_intermediate_model_value_required_fails (m2m_through.tests.M2mThroughTests) ... ok
+  test_order_by_relational_field_through_model (m2m_through.tests.M2mThroughTests) ... ok
+  test_query_first_model_by_intermediate_model_attribute (m2m_through.tests.M2mThroughTests) ... ok
+  test_query_model_by_attribute_name_of_related_model (m2m_through.tests.M2mThroughTests) ... ok
+  test_query_model_by_custom_related_name (m2m_through.tests.M2mThroughTests) ... ok
+  test_query_model_by_intermediate_can_return_non_unique_queryset (m2m_through.tests.M2mThroughTests) ... ok
+  test_query_model_by_related_model_name (m2m_through.tests.M2mThroughTests) ... ok
+  test_query_second_model_by_intermediate_model_attribute (m2m_through.tests.M2mThroughTests) ... ok
+  test_remove_on_m2m_with_intermediate_model (m2m_through.tests.M2mThroughTests) ... ok
+  test_remove_on_m2m_with_intermediate_model_multiple (m2m_through.tests.M2mThroughTests) ... ok
+  test_remove_on_reverse_m2m_with_intermediate_model (m2m_through.tests.M2mThroughTests) ... ok
+  test_retrieve_intermediate_items (m2m_through.tests.M2mThroughTests) ... ok
+  test_retrieve_reverse_intermediate_items (m2m_through.tests.M2mThroughTests) ... ok
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/models/fields/reverse_related.py
+  Tool: Edit action #10
+  old_text_sha256: d031231038e14bc9efc2f824eee4bb2d63d99b2d8edaa3d539fea9b86bad7bcc
+  new_text_sha256: 046cdc4f237e0f94e1ddc736ccd33fd29f1b6b8619a5d689e1b7d44291fe5753
+- test_hashable.py
+  Tool: Write action #19
+  new_text_sha256: 247413d2a2f0dea4b902fec868c6d8d9ea5dcdc4431e958599d8f6dd4bf68519
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

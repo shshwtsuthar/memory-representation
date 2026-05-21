@@ -1,0 +1,316 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: cf6f4b38-d477-486c-ab63-da4b3238f74a
+- repo: psf/requests
+- instance_id: psf__requests-2674
+- base_commit: 0be38a0c37c59c4b66ce908731da15b401655113
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+urllib3 exceptions passing through requests API
+I don't know if it's a design goal of requests to hide urllib3's exceptions and wrap them around requests.exceptions types.
+
+(If it's not IMHO it should be, but that's another discussion)
+
+If it is, I have at least two of them passing through that I have to catch in addition to requests' exceptions. They are requests.packages.urllib3.exceptions.DecodeError and requests.packages.urllib3.exceptions.TimeoutError (this one I get when a proxy timeouts)
+
+Thanks!
+
+FILES INSPECTED
+---------------
+- requests/exceptions.py [Read: 1]
+- requests/packages/urllib3/exceptions.py [Read: 1]
+- requests/adapters.py [Read: 1]
+- requests/models.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Glob path='swebench_9_15/testbed' glob='**/*.py'
+- [3] Glob path='swebench_9_15/testbed' glob='**/*.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [test] python test_issue.py
+- [diagnostic] python -c "import sys; print(sys.version)"
+- [test] python test_issue.py
+- [test] cd testbed && python ../test_issue.py
+- [test] python test_issue.py
+- [test] python test_issue.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: cannot import name mock
+- ImportError: No module named mock
+- ImportError: No module named requests.packages.urllib3.exceptions
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #1]
+  <tool_use_error>Directory does not exist: ./swebench_9_15/testbed</tool_use_error>
+- [Glob Result after action #3]
+  ./swebench_9_15/testbed/docs/_themes/flask_theme_support.py
+  ./swebench_9_15/testbed/docs/conf.py
+  ./swebench_9_15/testbed/requests/__init__.py
+  ./swebench_9_15/testbed/requests/adapters.py
+  ./swebench_9_15/testbed/requests/api.py
+  ./swebench_9_15/testbed/requests/auth.py
+  ./swebench_9_15/testbed/requests/certs.py
+  ./swebench_9_15/testbed/requests/compat.py
+  ./swebench_9_15/testbed/requests/cookies.py
+  ./swebench_9_15/testbed/requests/exceptions.py
+  ./swebench_9_15/testbed/requests/hooks.py
+  ./swebench_9_15/testbed/requests/models.py
+  ./swebench_9_15/testbed/requests/packages/__init__.py
+  ./swebench_9_15/testbed/requests/packages/chardet/__init__.py
+  ./swebench_9_15/testbed/requests/packages/chardet/big5freq.py
+  ./swebench_9_15/testbed/requests/packages/chardet/big5prober.py
+  ./swebench_9_15/testbed/requests/packages/chardet/chardetect.py
+  ./swebench_9_15/testbed/requests/packages/chardet/chardistribution.py
+  ./swebench_9_15/testbed/requests/packages/chardet/charsetgroupprober.py
+  ./swebench_9_15/testbed/requests/packages/chardet/charsetprober.py
+  ./swebench_9_15/testbed/requests/packages/chardet/codingstatemachine.py
+  ./swebench_9_15/testbed/requests/packages/chardet/compat.py
+  ./swebench_9_15/testbed/
+  [... truncated ...]
+- [Read Result after action #5]
+       1→# -*- coding: utf-8 -*-
+       2→
+       3→"""
+       4→requests.exceptions
+       5→~~~~~~~~~~~~~~~~~~~
+       6→
+       7→This module contains the set of Requests' exceptions.
+       8→
+       9→"""
+      10→from .packages.urllib3.exceptions import HTTPError as BaseHTTPError
+      11→
+      12→
+      13→class RequestException(IOError):
+      14→    """There was an ambiguous exception that occurred while handling your
+      15→    request."""
+      16→
+      17→    def __init__(self, *args, **kwargs):
+      18→        """
+      19→        Initialize RequestException with `request` and `response` objects.
+      20→        """
+      21→        response = kwargs.pop('response', None)
+      22→        self.response = response
+      23→        self.request = kwargs.pop('request', None)
+      24→        if (response is not None and not self.request and
+      25→                hasattr(response, 'request')):
+      26→            self.request = self.response.request
+      27→        super(RequestException, self).__init__(*args, **kwargs)
+      28→
+      29→
+      30→class HTTPError(RequestException):
+      31→    """An HTTP error occurred."""
+      32→
+      33→
+      34→class ConnectionError(RequestException):
+      35→    """A Connection error oc
+  [... truncated ...]
+- [Read Result after action #7]
+       1→
+       2→## Base Exceptions
+       3→
+       4→class HTTPError(Exception):
+       5→    "Base exception used by this module."
+       6→    pass
+       7→
+       8→class HTTPWarning(Warning):
+       9→    "Base warning used by this module."
+      10→    pass
+      11→
+      12→
+      13→
+      14→class PoolError(HTTPError):
+      15→    "Base exception for errors caused within a pool."
+      16→    def __init__(self, pool, message):
+      17→        self.pool = pool
+      18→        HTTPError.__init__(self, "%s: %s" % (pool, message))
+      19→
+      20→    def __reduce__(self):
+      21→        # For pickling purposes.
+      22→        return self.__class__, (None, None)
+      23→
+      24→
+      25→class RequestError(PoolError):
+      26→    "Base exception for PoolErrors that have associated URLs."
+      27→    def __init__(self, pool, url, message):
+      28→        self.url = url
+      29→        PoolError.__init__(self, pool, message)
+      30→
+      31→    def __reduce__(self):
+      32→        # For pickling purposes.
+      33→        return self.__class__, (None, self.url, None)
+      34→
+      35→
+      36→class SSLError(HTTPError):
+      37→    "Raised when SSL certificate fails in an HTTPS connection."
+      38→    pass
+      39→
+      40→
+  [... truncated ...]
+- [Read Result after action #9]
+       1→# -*- coding: utf-8 -*-
+       2→
+       3→"""
+       4→requests.adapters
+       5→~~~~~~~~~~~~~~~~~
+       6→
+       7→This module contains the transport adapters that Requests uses to define
+       8→and maintain connections.
+       9→"""
+      10→
+      11→import socket
+      12→
+      13→from .models import Response
+      14→from .packages.urllib3.poolmanager import PoolManager, proxy_from_url
+      15→from .packages.urllib3.response import HTTPResponse
+      16→from .packages.urllib3.util import Timeout as TimeoutSauce
+      17→from .packages.urllib3.util.retry import Retry
+      18→from .compat import urlparse, basestring
+      19→from .utils import (DEFAULT_CA_BUNDLE_PATH, get_encoding_from_headers,
+      20→                    prepend_scheme_if_needed, get_auth_from_url, urldefragauth)
+      21→from .structures import CaseInsensitiveDict
+      22→from .packages.urllib3.exceptions import ConnectTimeoutError
+      23→from .packages.urllib3.exceptions import HTTPError as _HTTPError
+      24→from .packages.urllib3.exceptions import MaxRetryError
+      25→from .packages.urllib3.exceptions import ProxyError as _ProxyError
+      26→from .packages.urllib3.exceptions import ProtocolError
+      27→from .packages.urllib3.excepti
+  [... truncated ...]
+- [Read Result after action #11]
+       1→# -*- coding: utf-8 -*-
+       2→
+       3→"""
+       4→requests.models
+       5→~~~~~~~~~~~~~~~
+       6→
+       7→This module contains the primary objects that power Requests.
+       8→"""
+       9→
+      10→import collections
+      11→import datetime
+      12→
+      13→from io import BytesIO, UnsupportedOperation
+      14→from .hooks import default_hooks
+      15→from .structures import CaseInsensitiveDict
+      16→
+      17→from .auth import HTTPBasicAuth
+      18→from .cookies import cookiejar_from_dict, get_cookie_header, _copy_cookie_jar
+      19→from .packages.urllib3.fields import RequestField
+      20→from .packages.urllib3.filepost import encode_multipart_formdata
+      21→from .packages.urllib3.util import parse_url
+      22→from .packages.urllib3.exceptions import (
+      23→    DecodeError, ReadTimeoutError, ProtocolError, LocationParseError)
+      24→from .exceptions import (
+      25→    HTTPError, MissingSchema, InvalidURL, ChunkedEncodingError,
+      26→    ContentDecodingError, ConnectionError, StreamConsumedError)
+      27→from .utils import (
+      28→    guess_filename, get_auth_from_url, requote_uri,
+      29→    stream_decode_response_unicode, to_key_val_list, parse_header_links,
+      30→    iter_slices, gu
+  [... truncated ...]
+- [Test Output after action #16]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 7, in <module>
+      from unittest import mock
+  ImportError: cannot import name mock
+- [Diagnostic Output after action #18]
+  2.7.3 (default, Sep 19 2012, 16:14:36)
+  [GCC 4.2.1 (Apple Inc. build 5666) (dot 3)]
+- [Test Output after action #20]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 10, in <module>
+      import mock
+  ImportError: No module named mock
+- [Test Output after action #22]
+  Exit code 1
+  Traceback (most recent call last):
+    File "../test_issue.py", line 91, in main
+      test_imports()
+    File "../test_issue.py", line 12, in test_imports
+      from requests.packages.urllib3.exceptions import DecodeError, TimeoutError
+  ImportError: No module named requests.packages.urllib3.exceptions
+
+  ============================================================
+  Testing urllib3 exception wrapping fix
+  ============================================================
+  Testing imports...
+
+  ============================================================
+  ✗ Unexpected error: No module named requests.packages.urllib3.exceptions
+  ============================================================
+- [Test Output after action #24]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 91, in main
+      test_imports()
+    File "test_issue.py", line 12, in test_imports
+      from requests.packages.urllib3.exceptions import DecodeError, TimeoutError
+  ImportError: No module named requests.packages.urllib3.exceptions
+
+  ============================================================
+  Testing urllib3 exception wrapping fix
+  ============================================================
+  Testing imports...
+
+  ============================================================
+  ✗ Unexpected error: No module named requests.packages.urllib3.exceptions
+  ============================================================
+- [Test Output after action #26]
+  ============================================================
+  Testing urllib3 exception wrapping fix
+  ============================================================
+  Testing imports...
+  ✓ urllib3 DecodeError and TimeoutError can be imported
+  ✓ requests ContentDecodingError and Timeout can be imported
+  ✓ DecodeError is imported in adapters.py
+  ✓ TimeoutError is imported in adapters.py
+  ✓ ContentDecodingError is used in adapters.py
+  ✓ DecodeError exception handling is present
+  ✓ DecodeError is wrapped in ContentDecodingError
+  ✓ TimeoutError exception handling is present
+  ✓ TimeoutError is wrapped in Timeout
+
+  Testing exception hierarchy...
+  ✓ urllib3.DecodeError inherits from urllib3.HTTPError
+  ✓ urllib3.TimeoutError inherits from urllib3.HTTPError
+  ✓ requests.ContentDecodingError inherits from RequestException
+  ✓ requests.Timeout inherits from RequestException
+
+  ============================================================
+  ✓ All tests passed!
+  ============================================================
+
+SOURCE EDIT EVIDENCE
+--------------------
+- requests/adapters.py
+  Tool: Edit action #13
+  old_text_sha256: 129ffcd629a327f4488b21b5176f9cb6c1532f78fa5c5abd91f966d8d3961a98
+  new_text_sha256: 48102cd9bfd3f05a38a621d548c032e2664d69cee72670b0966daa9404da57d2
+- requests/adapters.py
+  Tool: Edit action #14
+  old_text_sha256: af8eb82219068d56e639f438890e9d92cdb0f54735804cadea5c2c911c7166f9
+  new_text_sha256: 31fcc5d6a265fd951b8068ea997f9363f76c6a44290dacfd8188082c60750668
+- requests/adapters.py
+  Tool: Edit action #15
+  old_text_sha256: 10fd6960bfbc89e58aed637e159008dbe3bd88897d6812d7755c83fc6110ad74
+  new_text_sha256: 04a146355dafdaa23074a73e28bae2ac7ef5a40bf2ad332514797a67197270d3
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

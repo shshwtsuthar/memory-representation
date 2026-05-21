@@ -1,0 +1,561 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: b3f4d7b3-6cae-426e-8084-bed02006fb62
+- repo: django/django
+- instance_id: django__django-15213
+- base_commit: 03cadb912c78b769d6bf4a943a2a35fc1d952960
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+ExpressionWrapper for ~Q(pk__in=[]) crashes.
+Description
+
+        (last modified by Stefan Brand)
+
+Problem Description
+I'm reducing some Q objects (similar to what is described in ticket:32554. Everything is fine for the case where the result is ExpressionWrapper(Q(pk__in=[])). However, when I reduce to ExpressionWrapper(~Q(pk__in=[])) the query breaks.
+Symptoms
+Working for ExpressionWrapper(Q(pk__in=[]))
+print(queryset.annotate(foo=ExpressionWrapper(Q(pk__in=[]), output_field=BooleanField())).values("foo").query)
+SELECT 0 AS "foo" FROM "table"
+Not working for ExpressionWrapper(~Q(pk__in=[]))
+print(queryset.annotate(foo=ExpressionWrapper(~Q(pk__in=[]), output_field=BooleanField())).values("foo").query)
+SELECT AS "foo" FROM "table"
+
+FILES INSPECTED
+---------------
+- django/db/models/expressions.py [Read: 2]
+- django/db/models/query_utils.py [Read: 1]
+- django/db/models/sql/where.py [Read: 2]
+- django/db/models/sql/compiler.py [Read: 3, Grep: 2]
+
+SEARCH ANCHORS
+--------------
+- [3] Grep pattern='class ExpressionWrapper'
+- [5] Grep pattern='ExpressionWrapper' glob='**/expressions.py'
+- [9] Grep pattern='class Q'
+- [20] Grep pattern='EmptyResultSet'
+- [26] Grep pattern='def compile' path='django/db/models/sql/compiler.py'
+- [30] Grep pattern='def get_select' path='django/db/models/sql/compiler.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] cd testbed && find . -name "*.py" -type f | grep -E "(expression|query)" | grep -v __pycache__ | head -20
+- [diagnostic] cd testbed && cat > test_issue.py << 'EOF'
+import django
+from django.conf import settings
+
+# Configure Django settings
+if not settings.configured:
+    settings.configure(
+        DEBUG=True,
+        DATABASES={
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': ':memory:',
+            }
+        },
+        INSTALLED_APPS=[
+            'django.contrib.contenttypes',
+            'django.contrib.auth',
+        ],
+    )
+    django.setup()
+
+from dj
+  [... truncated ...]
+- [diagnostic] cat > test_issue.py << 'EOF'
+import django
+from django.conf import settings
+
+# Configure Django settings
+if not settings.configured:
+    settings.configure(
+        DEBUG=True,
+        DATABASES={
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': ':memory:',
+            }
+        },
+        INSTALLED_APPS=[
+            'django.contrib.contenttypes',
+            'django.contrib.auth',
+        ],
+    )
+    django.setup()
+
+from django.db import
+  [... truncated ...]
+- [other/reproduction] python --version
+- [test] python3 test_issue.py
+- [test] python3 test_issue.py
+- [test] python3 test_issue.py
+- [test] python3 tests/runtests.py expressions -v 2 2>&1 | head -100
+- [test] python3 tests/runtests.py expressions -v 0
+- [test] python3 tests/runtests.py queries.test_q -v 0
+- [diagnostic] cat > test_comprehensive.py << 'EOF'
+import django
+from django.conf import settings
+
+# Configure Django settings
+if not settings.configured:
+    settings.configure(
+        DEBUG=True,
+        DATABASES={
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': ':memory:',
+            }
+        },
+        INSTALLED_APPS=[
+            'django.contrib.contenttypes',
+            'django.contrib.auth',
+        ],
+    )
+    django.setup()
+
+from django.d
+  [... truncated ...]
+- [other/reproduction] git reset test_issue.py test_comprehensive.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- Traceback (most recent call last):
+- TypeError: Error when calling the metaclass bases
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #1]
+  ./tests/expressions_case/models.py
+  ./tests/expressions_case/__init__.py
+  ./tests/expressions_case/tests.py
+  ./tests/raw_query/models.py
+  ./tests/raw_query/__init__.py
+  ./tests/raw_query/tests.py
+  ./tests/queries/test_query.py
+  ./tests/expressions_window/models.py
+  ./tests/expressions_window/__init__.py
+  ./tests/expressions_window/tests.py
+  ./tests/expressions/test_queryset_values.py
+  ./tests/expressions/models.py
+  ./tests/expressions/__init__.py
+  ./tests/expressions/tests.py
+  ./tests/queryset_pickle/models.py
+  ./tests/queryset_pickle/__init__.py
+  ./tests/queryset_pickle/tests.py
+  ./tests/gis_tests/geoapp/test_expressions.py
+  ./django/contrib/postgres/expressions.py
+  ./django/db/models/query.py
+- [Grep Result after action #3]
+  Found 2 files
+  tests/expressions/tests.py
+  django/db/models/expressions.py
+- [Grep Result after action #5]
+  Found 1 file
+  django/db/models/expressions.py
+- [Read Result after action #7]
+       1→import copy
+       2→import datetime
+       3→import functools
+       4→import inspect
+       5→from decimal import Decimal
+       6→from uuid import UUID
+       7→
+       8→from django.core.exceptions import EmptyResultSet, FieldError
+       9→from django.db import DatabaseError, NotSupportedError, connection
+      10→from django.db.models import fields
+      11→from django.db.models.constants import LOOKUP_SEP
+      12→from django.db.models.query_utils import Q
+      13→from django.utils.deconstruct import deconstructible
+      14→from django.utils.functional import cached_property
+      15→from django.utils.hashable import make_hashable
+      16→
+      17→
+      18→class SQLiteNumericMixin:
+      19→    """
+      20→    Some expressions with output_field=DecimalField() must be cast to
+      21→    numeric to be properly filtered.
+      22→    """
+      23→    def as_sqlite(self, compiler, connection, **extra_context):
+      24→        sql, params = self.as_sql(compiler, connection, **extra_context)
+      25→        try:
+      26→            if self.output_field.get_internal_type() == 'DecimalField':
+      27→                sql = 'CAST(%s AS NUMERIC)' % sql
+      28→        except FieldError:
+      29→            pass
+      30→
+  [... truncated ...]
+- [Grep Result after action #9]
+  Found 34 files
+  tests/test_client_regress/tests.py
+  tests/staticfiles_tests/storage.py
+  tests/queries/tests.py
+  tests/queries/test_qs_combinators.py
+  tests/queries/test_q.py
+  tests/queries/test_iterator.py
+  tests/prefetch_related/models.py
+  tests/order_with_respect_to/models.py
+  tests/multiple_database/tests.py
+  tests/model_inheritance_regress/models.py
+  tests/model_indexes/tests.py
+  tests/migrations/test_questioner.py
+  tests/invalid_models_tests/test_models.py
+  tests/httpwrappers/tests.py
+  tests/forms_tests/tests/test_forms.py
+  tests/file_uploads/uploadhandler.py
+  tests/contenttypes_tests/models.py
+  tests/admin_views/models.py
+  tests/admin_views/admin.py
+  tests/admin_inlines/models.py
+  tests/admin_inlines/admin.py
+  tests/admin_changelist/models.py
+  tests/admin_changelist/admin.py
+  docs/topics/db/instrumentation.txt
+  docs/ref/models/options.txt
+  docs/ref/contrib/admin/index.txt
+  docs/intro/tutorial07.txt
+  docs/intro/tutorial05.txt
+  docs/intro/tutorial02.txt
+  django/test/testcases.py
+  django/http/request.py
+  django/db/models/sql/query.py
+  django/db/models/query_utils.py
+  django/db/models/query.py
+- [Read Result after action #11]
+       1→"""
+       2→Various data structures used in query construction.
+       3→
+       4→Factored out from django.db.models.query to avoid making the main module very
+       5→large and/or so that they can be used by other modules without getting into
+       6→circular import difficulties.
+       7→"""
+       8→import copy
+       9→import functools
+      10→import inspect
+      11→from collections import namedtuple
+      12→
+      13→from django.core.exceptions import FieldError
+      14→from django.db.models.constants import LOOKUP_SEP
+      15→from django.utils import tree
+      16→
+      17→# PathInfo is used when converting lookups (fk__somecol). The contents
+      18→# describe the relation in Model terms (model Options and Fields for both
+      19→# sides of the relation. The join_field is the field backing the relation.
+      20→PathInfo = namedtuple('PathInfo', 'from_opts to_opts target_fields join_field m2m direct filtered_relation')
+      21→
+      22→
+      23→def subclasses(cls):
+      24→    yield cls
+      25→    for subclass in cls.__subclasses__():
+      26→        yield from subclasses(subclass)
+      27→
+      28→
+      29→class Q(tree.Node):
+      30→    """
+      31→    Encapsulate filters as objects that can then be c
+  [... truncated ...]
+- [Diagnostic Output after action #14]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 1, in <module>
+      import django
+    File "./swebench_9_15/testbed/django/__init__.py", line 1, in <module>
+      from django.utils.version import get_version
+    File "./swebench_9_15/testbed/django/utils/version.py", line 7, in <module>
+      from django.utils.regex_helper import _lazy_re_compile
+    File "./swebench_9_15/testbed/django/utils/regex_helper.py", line 10, in <module>
+      from django.utils.functional import SimpleLazyObject
+    File "./swebench_9_15/testbed/django/utils/functional.py", line 372, in <module>
+      class SimpleLazyObject(LazyObject):
+  TypeError: Error when calling the metaclass bases
+      'property' object is not callable
+- [Test Output after action #18]
+  Testing ExpressionWrapper with Q(pk__in=[])
+  Query 1: SELECT 0 AS "foo" FROM "test_app_testmodel"
+
+  Testing ExpressionWrapper with ~Q(pk__in=[])
+  Query 2: SELECT  AS "foo" FROM "test_app_testmodel"
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Grep Result after action #20]
+  Found 9 files
+  tests/queries/tests.py
+  docs/releases/3.1.txt
+  docs/ref/exceptions.txt
+  django/db/models/sql/where.py
+  django/db/models/sql/compiler.py
+  django/db/models/lookups.py
+  django/db/models/expressions.py
+  django/core/exceptions.py
+  docs/releases/1.11.4.txt
+- [Read Result after action #22]
+       1→"""
+       2→Code to manage the creation and SQL rendering of 'where' constraints.
+       3→"""
+       4→
+       5→from django.core.exceptions import EmptyResultSet
+       6→from django.utils import tree
+       7→from django.utils.functional import cached_property
+       8→
+       9→# Connection types
+      10→AND = 'AND'
+      11→OR = 'OR'
+      12→
+      13→
+      14→class WhereNode(tree.Node):
+      15→    """
+      16→    An SQL WHERE clause.
+      17→
+      18→    The class is tied to the Query class that created it (in order to create
+      19→    the correct SQL).
+      20→
+      21→    A child is usually an expression producing boolean values. Most likely the
+      22→    expression is a Lookup instance.
+      23→
+      24→    However, a child could also be any class with as_sql() and either
+      25→    relabeled_clone() method or relabel_aliases() and clone() methods and
+      26→    contains_aggregate attribute.
+      27→    """
+      28→    default = AND
+      29→    resolved = False
+      30→    conditional = True
+      31→
+      32→    def split_having(self, negated=False):
+      33→        """
+      34→        Return two possibly None nodes: one for those parts of self that
+      35→        should be included in the WHERE clau
+  [... truncated ...]
+- [Read Result after action #24]
+       1→import collections
+       2→import json
+       3→import re
+       4→from functools import partial
+       5→from itertools import chain
+       6→
+       7→from django.core.exceptions import EmptyResultSet, FieldError
+       8→from django.db import DatabaseError, NotSupportedError
+       9→from django.db.models.constants import LOOKUP_SEP
+      10→from django.db.models.expressions import F, OrderBy, RawSQL, Ref, Value
+      11→from django.db.models.functions import Cast, Random
+      12→from django.db.models.query_utils import select_related_descend
+      13→from django.db.models.sql.constants import (
+      14→    CURSOR, GET_ITERATOR_CHUNK_SIZE, MULTI, NO_RESULTS, ORDER_DIR, SINGLE,
+      15→)
+      16→from django.db.models.sql.query import Query, get_order_dir
+      17→from django.db.transaction import TransactionManagementError
+      18→from django.utils.functional import cached_property
+      19→from django.utils.hashable import make_hashable
+      20→from django.utils.regex_helper import _lazy_re_compile
+      21→
+      22→
+      23→class SQLCompiler:
+      24→    # Multiline ordering SQL clause may appear from RawSQL.
+      25→    ordering_parts = _lazy_re_compile(
+      26→        r'^(.*)\s(?:ASC|DESC).*',
+      27→
+  [... truncated ...]
+- [Grep Result after action #26]
+  465:    def compile(self, node):
+- [Read Result after action #28]
+     465→    def compile(self, node):
+     466→        vendor_impl = getattr(node, 'as_' + self.connection.vendor, None)
+     467→        if vendor_impl:
+     468→            sql, params = vendor_impl(self, self.connection)
+     469→        else:
+     470→            sql, params = node.as_sql(self, self.connection)
+     471→        return sql, params
+     472→
+     473→    def get_combinator_sql(self, combinator, all):
+     474→        features = self.connection.features
+     475→        compilers = [
+     476→            query.get_compiler(self.using, self.connection, self.elide_empty)
+     477→            for query in self.query.combined_queries if not query.is_empty()
+     478→        ]
+     479→        if not features.supports_slicing_ordering_in_compound:
+     480→            for query, compiler in zip(self.query.combined_queries, compilers):
+     481→                if query.low_mark or query.high_mark:
+     482→                    raise DatabaseError('LIMIT/OFFSET not allowed in subqueries of compound statements.')
+     483→                if compiler.get_order_by():
+     484→                    raise DatabaseError('ORDER BY not allowed in subqueries of compound statements.')
+     485→        parts = ()
+     486→
+  [... truncated ...]
+- [Grep Result after action #30]
+  211:    def get_select(self):
+  263:            def get_select_from_parent(klass_info):
+  1028:    def get_select_for_update_of_arguments(self):
+- [Read Result after action #32]
+     211→    def get_select(self):
+     212→        """
+     213→        Return three values:
+     214→        - a list of 3-tuples of (expression, (sql, params), alias)
+     215→        - a klass_info structure,
+     216→        - a dictionary of annotations
+     217→
+     218→        The (sql, params) is what the expression will produce, and alias is the
+     219→        "AS alias" for the column (possibly None).
+     220→
+     221→        The klass_info structure contains the following information:
+     222→        - The base model of the query.
+     223→        - Which columns for that model are present in the query (by
+     224→          position of the select clause).
+     225→        - related_klass_infos: [f, klass_info] to descent into
+     226→
+     227→        The annotations is a dictionary of {'attname': column position} values.
+     228→        """
+     229→        select = []
+     230→        klass_info = None
+     231→        annotations = {}
+     232→        select_idx = 0
+     233→        for alias, (sql, params) in self.query.extra_select.items():
+     234→            annotations[alias] = select_idx
+     235→            select.append((RawSQL(sql, params), alias))
+     236→            select_idx += 1
+     237→
+  [... truncated ...]
+- [Test Output after action #36]
+  Testing ExpressionWrapper with Q(pk__in=[])
+  Query 1: SELECT 0 AS "foo" FROM "test_app_testmodel"
+
+  Testing ExpressionWrapper with ~Q(pk__in=[])
+  Query 2: SELECT  AS "foo" FROM "test_app_testmodel"
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Read Result after action #38]
+     956→class ExpressionWrapper(SQLiteNumericMixin, Expression):
+     957→    """
+     958→    An expression that can wrap another expression so that it can provide
+     959→    extra context to the inner expression, such as the output_field.
+     960→    """
+     961→
+     962→    def __init__(self, expression, output_field):
+     963→        super().__init__(output_field=output_field)
+     964→        self.expression = expression
+     965→
+     966→    def set_source_expressions(self, exprs):
+     967→        self.expression = exprs[0]
+     968→
+     969→    def get_source_expressions(self):
+     970→        return [self.expression]
+     971→
+     972→    def get_group_by_cols(self, alias=None):
+     973→        if isinstance(self.expression, Expression):
+     974→            expression = self.expression.copy()
+     975→            expression.output_field = self.output_field
+     976→            return expression.get_group_by_cols(alias=alias)
+     977→        # For non-expressions e.g. an SQL WHERE clause, the entire
+     978→        # `expression` must be included in the GROUP BY clause.
+     979→        return super().get_group_by_cols()
+     980→
+     981→    def as_sql(self, compiler, connection):
+     982→        return compi
+  [... truncated ...]
+- [Test Output after action #42]
+  Testing ExpressionWrapper with Q(pk__in=[])
+  Query 1: SELECT 0 AS "foo" FROM "test_app_testmodel"
+
+  Testing ExpressionWrapper with ~Q(pk__in=[])
+  Query 2: SELECT 1 AS "foo" FROM "test_app_testmodel"
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #44]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Importing application expressions
+  Found 165 test(s).
+  Skipping setup of unused database(s): other.
+  Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+  Operations to perform:
+    Synchronize unmigrated apps: auth, contenttypes, expressions, messages, sessions, staticfiles
+    Apply all migrations: admin, sites
+  Synchronizing apps without migrations:
+    Creating tables...
+      Creating table django_content_type
+      Creating table auth_permission
+      Creating table auth_group
+      Creating table auth_user
+      Creating table django_session
+      Creating table expressions_manager
+      Creating table expressions_employee
+      Creating table expressions_remoteemployee
+      Cr
+  [... truncated ...]
+- [Test Output after action #46]
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ----------------------------------------------------------------------
+  Ran 165 tests in 0.161s
+
+  OK (skipped=1, expected failures=1)
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/models/sql/where.py
+  Tool: Edit action #35
+  old_text_sha256: 0468d44719fa1c00b304d3bbecab539abeaaaaae23f841c727d317894fa84f3f
+  new_text_sha256: 833ac036372082831c39e4cb87eaace89a3b597cf82998c074d3506f64cd263d
+- django/db/models/sql/where.py
+  Tool: Edit action #40
+  old_text_sha256: 833ac036372082831c39e4cb87eaace89a3b597cf82998c074d3506f64cd263d
+  new_text_sha256: 0468d44719fa1c00b304d3bbecab539abeaaaaae23f841c727d317894fa84f3f
+- django/db/models/expressions.py
+  Tool: Edit action #41
+  old_text_sha256: 064286edc9050f5a0a3535ac3a29498f873feaa08c94493d3d114224c2bcfbba
+  new_text_sha256: 3bb2ce777017bcf4ce12ca8d05bc9497f84c81f696986960074d94219664042b
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

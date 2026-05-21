@@ -1,0 +1,393 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 42d6db46-d5bc-45b8-9294-ae410945cacf
+- repo: pallets/flask
+- instance_id: pallets__flask-5063
+- base_commit: 182ce3dd15dfa3537391c3efaf9c3ff407d134d4
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Flask routes to return domain/sub-domains information
+Currently when checking **flask routes** it provides all routes but **it is no way to see which routes are assigned to which subdomain**.
+
+**Default server name:**
+SERVER_NAME: 'test.local'
+
+**Domains (sub-domains):**
+test.test.local
+admin.test.local
+test.local
+
+**Adding blueprints:**
+app.register_blueprint(admin_blueprint,url_prefix='',subdomain='admin')
+app.register_blueprint(test_subdomain_blueprint,url_prefix='',subdomain='test')
+
+
+```
+$ flask routes
+ * Tip: There are .env or .flaskenv files present. Do "pip install python-dotenv" to use them.
+Endpoint                                                 Methods    Rule
+-------------------------------------------------------  ---------  ------------------------------------------------
+admin_blueprint.home                                      GET        /home
+test_subdomain_blueprint.home                             GET        /home
+static                                                    GET        /static/<path:filename>
+...
+```
+
+
+**Feature request**
+It will be good to see something like below (that will make more clear which route for which subdomain, because now need to go and check configuration).
+**If it is not possible to fix routes**, can you add or tell which method(s) should be used to get below information from flask?
+
+```
+$ flask routes
+ * Tip: There are .env or .flaskenv files present. Do "pip install python-dotenv" to use them.
+Domain                Endpoint                                             Methods    Rule
+-----------------   ----------------------------------------------------  ----------  ------------------------------------------------
+admin.test.local     admin_blueprint.home                                  GET        /home
+test.test.local      test_subdomain_blueprint.home                         GET        /home
+test.local           static                                                GET        /static/<path:filename>
+...
+```
+
+FILES INSPECTED
+---------------
+- src/flask/cli.py [Read: 3]
+- tests/test_cli.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [3] Glob glob='**/cli.py'
+- [5] Glob glob='testbed/**/cli.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [other/reproduction] cd testbed && FLASK_APP=test_app.py python -m flask routes
+- [test] cd testbed && python3 -m flask --app test_app.py routes
+- [test] cd testbed && python3 -m flask --app test_app.py routes
+- [test] python3 -m flask --app test_app.py routes
+- [test] python3 -m flask --app test_app_no_subdomain.py routes
+- [test] python3 -m flask --app test_app.py routes --sort domain
+- [test] python3 -m flask --app test_app_host.py routes
+- [test] python3 -m flask --app test_app_host.py routes 2>&1 | grep -v "Error processing line"
+- [test] python3 -m flask --app test_app_host.py routes 2>&1 | head -10
+- [diagnostic] find . -name "*test*.py" -type f | grep -E "test.*cli" | head -5
+- [diagnostic] grep -n "def test.*routes" tests/test_cli.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- AssertionError: Invalid static_host/host_matching combination
+- TypeError: unsupported format string passed to NoneType.__format__
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #5]
+  ./swebench_9_15/testbed/src/flask/cli.py
+- [Read Result after action #7]
+       1→from __future__ import annotations
+       2→
+       3→import ast
+       4→import inspect
+       5→import os
+       6→import platform
+       7→import re
+       8→import sys
+       9→import traceback
+      10→import typing as t
+      11→from functools import update_wrapper
+      12→from operator import attrgetter
+      13→
+      14→import click
+      15→from click.core import ParameterSource
+      16→from werkzeug import run_simple
+      17→from werkzeug.serving import is_running_from_reloader
+      18→from werkzeug.utils import import_string
+      19→
+      20→from .globals import current_app
+      21→from .helpers import get_debug_flag
+      22→from .helpers import get_load_dotenv
+      23→
+      24→if t.TYPE_CHECKING:
+      25→    from .app import Flask
+      26→
+      27→
+      28→class NoAppException(click.UsageError):
+      29→    """Raised if an application cannot be found or loaded."""
+      30→
+      31→
+      32→def find_best_app(module):
+      33→    """Given a module instance this tries to find the best possible
+      34→    application in the module or raises an exception.
+      35→    """
+      36→    from . import Flask
+      37→
+      38→    # Search for the most common names first.
+      39→    for attr_name in ("app", "application"):
+  [... truncated ...]
+- [Test Output after action #14]
+  {0[0]:<34}  {0[1]:<7}  {0[2]:<16}  {0[3]:<23}
+  {0[0]:<34}  {0[1]:<7}  {0[2]:<16}  {0[3]:<23}
+  {0[0]:<34}  {0[1]:<7}  {0[2]:<16}  {0[3]:<23}
+  {0[0]:<34}  {0[1]:<7}  {0[2]:<16}  {0[3]:<23}
+  {0[0]:<34}  {0[1]:<7}  {0[2]:<16}  {0[3]:<23}
+  {0[0]:<34}  {0[1]:<7}  {0[2]:<16}  {0[3]:<23}
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #19]
+  Endpoint                            Methods  Subdomain         Rule
+  ----------------------------------  -------  ----------------  -----------------------
+  admin_blueprint.admin_home          GET      admin.test.local  /home
+  static                              GET      test.local        /static/<path:filename>
+  static_file                         GET      test.local        /static/<path:filename>
+  test_subdomain_blueprint.test_home  GET      test.test.local   /home
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #22]
+  Endpoint      Methods  Rule
+  ------------  -------  -----------------------
+  about         GET      /about
+  index         GET      /
+  static        GET      /static/<path:filename>
+  user_profile  GET      /user/<username>
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #24]
+  Endpoint                            Methods  Subdomain         Rule
+  ----------------------------------  -------  ----------------  -----------------------
+  admin_blueprint.admin_home          GET      admin.test.local  /home
+  static                              GET      test.local        /static/<path:filename>
+  static_file                         GET      test.local        /static/<path:filename>
+  test_subdomain_blueprint.test_home  GET      test.test.local   /home
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #27]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+      return _run_code(code, main_globals, None,
+    File "/opt/anaconda3/lib/python3.8/runpy.py", line 87, in _run_code
+      exec(code, run_globals)
+    File "./swebench_9_15/testbed/src/flask/__main__.py", line 3, in <module>
+      main()
+    File "./swebench_9_15/testbed/src/flask/cli.py", line 1082, in main
+      cli.main()
+    File "/opt/anaconda3/lib/python3.8/site-packages/click/core.py", line 1082, in main
+      rv = self.invoke(ctx)
+    File "/opt/anaconda3/lib/python3.8/site-packages/click/core.py", line 1697, in invoke
+      return _process_result(sub_ctx.command.invoke(sub_ctx))
+    File "/opt/anaconda3/lib/python3.8/site-packages/click/core.py", line 1
+  [... truncated ...]
+- [Test Output after action #30]
+  Endpoint  Methods  Host               Rule
+  --------  -------  -----------------  -----------------------
+  admin     GET      admin.example.com  /admin
+  api       GET      api.example.com    /api/<path:path>
+  index     GET      www.example.com    /
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+      return _run_code(code, main_globals, None,
+    File "/opt/anaconda3/lib/python3.8/runpy.py", line 87, in _run_code
+      exec(code, run_globals)
+    File "./swebench_9_15/testbed/src/flask/__main__.py", line 3, in <module>
+      main()
+    File "./swebench_9_15/testbed/src/flask/cli.py", line 1082, in main
+      cli.main()
+    File "/opt/anaconda3/lib/python3.8/site-packages/click/core.py", line 1082, in main
+      rv = self.invoke(ctx)
+    File "/opt/anaconda3/lib/python3.8/site-packages/click/core.py", line 1697, in
+  [... truncated ...]
+- [Read Result after action #32]
+    1018→    # Prepare rows of data
+    1019→    rows = []
+    1020→    for rule in rules:
+    1021→        methods = ", ".join(sorted(rule.methods - ignored_methods))  # type: ignore
+    1022→
+    1023→        if has_domain:
+    1024→            domain = rule.host if host_matching else rule.subdomain or ""
+    1025→            # If subdomain is present and SERVER_NAME is configured, build full domain
+    1026→            if domain and not host_matching and current_app.config.get("SERVER_NAME"):
+    1027→                domain = f"{domain}.{current_app.config['SERVER_NAME']}"
+    1028→            elif not domain and not host_matching and current_app.config.get("SERVER_NAME"):
+    1029→                domain = current_app.config["SERVER_NAME"]
+    1030→
+    1031→            row = [rule.endpoint, methods, domain, rule.rule]
+    1032→        else:
+    1033→            row = [rule.endpoint, methods, rule.rule]
+    1034→
+    1035→        rows.append(row)
+    1036→
+    1037→    # Sort the rows
+
+- [Test Output after action #35]
+  Endpoint  Methods  Host               Rule
+  --------  -------  -----------------  -----------------------
+  admin     GET      admin.example.com  /admin
+  api       GET      api.example.com    /api/<path:path>
+  index     GET      www.example.com    /
+  static    GET                         /static/<path:filename>
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+- [Diagnostic Output after action #37]
+  ./tests/test_cli.py
+- [Diagnostic Output after action #39]
+  496:    def test_no_routes(self, invoke_no_routes):
+- [Read Result after action #41]
+     490→    def test_all_methods(self, invoke):
+     491→        output = invoke(["routes"]).output
+     492→        assert "GET, HEAD, OPTIONS, POST" not in output
+     493→        output = invoke(["routes", "--all-methods"]).output
+     494→        assert "GET, HEAD, OPTIONS, POST" in output
+     495→
+     496→    def test_no_routes(self, invoke_no_routes):
+     497→        result = invoke_no_routes(["routes"])
+     498→        assert result.exit_code == 0
+     499→        assert "No routes were registered." in result.output
+     500→
+     501→
+     502→def dotenv_not_available():
+     503→    try:
+     504→        import dotenv  # noqa: F401
+     505→    except ImportError:
+     506→        return True
+     507→
+     508→    return False
+     509→
+     510→
+     511→need_dotenv = pytest.mark.skipif(
+     512→    dotenv_not_available(), reason="dotenv is not installed"
+     513→)
+     514→
+     515→
+     516→@need_dotenv
+     517→def test_load_dotenv(monkeypatch):
+     518→    # can't use monkeypatch.delitem since the keys don't exist yet
+     519→    for item in ("FOO", "BAR", "SPAM", "HAM"):
+     520→        monkeypatch._setitem.append((os.environ, item, notset))
+     521→
+     522→    monkeypatch.setenv("EGGS", "3")
+     523→    monkeypatch.c
+  [... truncated ...]
+- [Test Output after action #43]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  rootdir: ./swebench_9_15/testbed
+  configfile: pyproject.toml
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 4 items
+
+  tests/test_cli.py::TestRoutes::test_simple PASSED                        [ 25%]
+  tests/test_cli.py::TestRoutes::test_sort PASSED                          [ 50%]
+  tests/test_cli.py::TestRoutes::test_all_methods PASSED                   [ 75%]
+  tests/test_cli.py::TestRoutes::test_no_routes PASSED                     [100%]
+
+  ============================== 4 passed in 0.44s ===============================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_fr
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- src/flask/cli.py
+  Tool: Edit action #9
+  old_text_sha256: 0a70f054186e9ad2562224504af208352f21cde28227b76952b53b20ff471525
+  new_text_sha256: 643afeb151b0041780cbbe8b480c3ec8c35083dd54dd149017b8a393ca054c62
+- src/flask/cli.py
+  Tool: Edit action #10
+  old_text_sha256: 5582f2362e7315d4910c217ae9165c604bf87cf10c0b91ff7d48ae4a8a44ce4e
+  new_text_sha256: bd2b5eec59e6d9622250b4e16fadc03fb4cf164c10e7882a6192ba4a433dcb58
+- src/flask/cli.py
+  Tool: Edit action #17
+  old_text_sha256: 6a99504e20a24d8b2d439d1292656e066b4e1a9607d79698c097c54c98f62d3e
+  new_text_sha256: 4ca8440b09b762f51f96fcb6ea62793908b87ad96904788dfa7fece2dacbc11f
+- src/flask/cli.py
+  Tool: Edit action #34
+  old_text_sha256: 823d74f0876ca43f673c1163ca22c13e9e6fcd2613994690cc7e00b4304a69f0
+  new_text_sha256: 7a766323c45a98be0cba88d3b4c906a1258586f2fe4c97eae83a2776aba28d95
+- test_app.py
+  Tool: Write action #11
+  new_text_sha256: f9d9a8ac9ba3ad629701616549c9e67fb8252784dbb8fc277a691982669e09a7
+- test_app_no_subdomain.py
+  Tool: Write action #21
+  new_text_sha256: 8bf5d27a5279f57672206eccdf0eca7768c3fe6f10fce0be83633522715f44ca
+- test_app_host.py
+  Tool: Write action #26
+  new_text_sha256: 26f3b64a8e1335b585a543f6879ce4d05d3ce0726e88a7226c56b87ca58810ee
+- test_app_host.py
+  Tool: Edit action #29
+  old_text_sha256: 1fcd4d1917a9e975de05c133489790dd3797a559422187773c549733e641256c
+  new_text_sha256: 41de77826d019d48c24d97a454c97f7f072481f38a782fec26fc45b9b47b866e
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

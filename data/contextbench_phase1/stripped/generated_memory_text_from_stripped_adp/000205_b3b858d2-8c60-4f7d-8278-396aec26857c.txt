@@ -1,0 +1,273 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: b3b858d2-8c60-4f7d-8278-396aec26857c
+- repo: psf/requests
+- instance_id: psf__requests-2148
+- base_commit: fe693c492242ae532211e0c173324f09ca8cf227
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+socket.error exception not caught/wrapped in a requests exception (ConnectionError perhaps?)
+I just noticed a case where I had a socket reset on me, and was raised to me as a raw socket error as opposed to something like a requests.exceptions.ConnectionError:
+
+```
+  File "/home/rtdean/***/***/***/***/***/***.py", line 67, in dir_parse
+    root = ElementTree.fromstring(response.text)
+  File "/home/rtdean/.pyenv/versions/2.7.6/lib/python2.7/site-packages/requests-2.3.0-py2.7.egg/requests/models.py", line 721, in text
+    if not self.content:
+  File "/home/rtdean/.pyenv/versions/2.7.6/lib/python2.7/site-packages/requests-2.3.0-py2.7.egg/requests/models.py", line 694, in content
+    self._content = bytes().join(self.iter_content(CONTENT_CHUNK_SIZE)) or bytes()
+  File "/home/rtdean/.pyenv/versions/2.7.6/lib/python2.7/site-packages/requests-2.3.0-py2.7.egg/requests/models.py", line 627, in generate
+    for chunk in self.raw.stream(chunk_size, decode_content=True):
+  File "/home/rtdean/.pyenv/versions/2.7.6/lib/python2.7/site-packages/requests-2.3.0-py2.7.egg/requests/packages/urllib3/response.py", line 240, in stream
+    data = self.read(amt=amt, decode_content=decode_content)
+  File "/home/rtdean/.pyenv/versions/2.7.6/lib/python2.7/site-packages/requests-2.3.0-py2.7.egg/requests/packages/urllib3/response.py", line 187, in read
+    data = self._fp.read(amt)
+  File "/home/rtdean/.pyenv/versions/2.7.6/lib/python2.7/httplib.py", line 543, in read
+    return self._read_chunked(amt)
+  File "/home/rtdean/.pyenv/versions/2.7.6/lib/python2.7/httplib.py", line 612, in _read_chunked
+    value.append(self._safe_read(chunk_left))
+  File "/home/rtdean/.pyenv/versions/2.7.6/lib/python2.7/httplib.py", line 658, in _safe_read
+    chunk = self.fp.read(min(amt, MAXAMOUNT))
+  File "/home/rtdean/.pyenv/versions/2.7.6/lib/python2.7/socket.py", line 380, in read
+    data = self._sock.recv(left)
+  File "/home/rtdean/.pyenv/versions/2.7.6/lib/python2.7/site-packages/gevent-1.0.1-py2.7-linux-x86_64.egg/gevent/socket.py", line 385, in recv
+    return sock.recv(*args)
+socket.error: [Errno 104] Connection reset by peer
+```
+
+Not sure if this is by accident or design... in general, I guess I'd expect a requests exception when using requests, but I can start looking for socket errors and the like as well.
+
+FILES INSPECTED
+---------------
+- requests/models.py [Read: 3, Grep: 1]
+- requests/exceptions.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [9] Grep pattern='ConnectionError' path='requests/models.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find . -name "*.yaml" -type f | head -20
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [diagnostic] find testbed -type f -name "test*.py" | head -10
+- [test] cd testbed && python -m pytest --version 2>&1 || python -m unittest --version 2>&1 || echo "No test runner found"
+- [diagnostic] cd testbed && head -50 test_requests.py
+- [diagnostic] ls -la ./swebench_9_15/testbed/test_requests.py | head -5
+- [diagnostic] python -c "import sys; sys.path.insert(0, './swebench_9_15/testbed'); import requests; print('Import successful')"
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Exception type: ConnectionError
+- Exception message: [Errno 104] Connection reset by peer
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #3]
+     600→        try:
+     601→            self.raise_for_status()
+     602→        except RequestException:
+     603→            return False
+     604→        return True
+     605→
+     606→    @property
+     607→    def is_redirect(self):
+     608→        """True if this Response is a well-formed HTTP redirect that could have
+     609→        been processed automatically (by :meth:`Session.resolve_redirects`).
+     610→        """
+     611→        return ('location' in self.headers and self.status_code in REDIRECT_STATI)
+     612→
+     613→    @property
+     614→    def is_permanent_redirect(self):
+     615→        """True if this Response one of the permanant versions of redirect"""
+     616→        return ('location' in self.headers and self.status_code in (codes.moved_permanently, codes.permanent_redirect))
+     617→
+     618→    @property
+     619→    def apparent_encoding(self):
+     620→        """The apparent encoding, provided by the chardet library"""
+     621→        return chardet.detect(self.content)['encoding']
+     622→
+     623→    def iter_content(self, chunk_size=1, decode_unicode=False):
+     624→        """Iterates over the response data.  When stream=True is set on the
+     625→        request, this avoids read
+  [... truncated ...]
+- [Read Result after action #5]
+       0→# -*- coding: utf-8 -*-
+       1→
+       2→"""
+       3→requests.models
+       4→~~~~~~~~~~~~~~~
+       5→
+       6→This module contains the primary objects that power Requests.
+       7→"""
+       8→
+       9→import collections
+      10→import datetime
+      11→
+      12→from io import BytesIO, UnsupportedOperation
+      13→from .hooks import default_hooks
+      14→from .structures import CaseInsensitiveDict
+      15→
+      16→from .auth import HTTPBasicAuth
+      17→from .cookies import cookiejar_from_dict, get_cookie_header
+      18→from .packages.urllib3.fields import RequestField
+      19→from .packages.urllib3.filepost import encode_multipart_formdata
+      20→from .packages.urllib3.util import parse_url
+      21→from .packages.urllib3.exceptions import DecodeError
+      22→from .exceptions import (
+      23→    HTTPError, RequestException, MissingSchema, InvalidURL,
+      24→    ChunkedEncodingError, ContentDecodingError)
+      25→from .utils import (
+      26→    guess_filename, get_auth_from_url, requote_uri,
+      27→    stream_decode_response_unicode, to_key_val_list, parse_header_links,
+      28→    iter_slices, guess_json_utf, super_len, to_native_string)
+      29→from .compat import (
+      30→    cookielib, urlunparse,
+  [... truncated ...]
+- [Read Result after action #7]
+       1→# -*- coding: utf-8 -*-
+       2→
+       3→"""
+       4→requests.exceptions
+       5→~~~~~~~~~~~~~~~~~~~
+       6→
+       7→This module contains the set of Requests' exceptions.
+       8→
+       9→"""
+      10→from .packages.urllib3.exceptions import HTTPError as BaseHTTPError
+      11→
+      12→
+      13→class RequestException(IOError):
+      14→    """There was an ambiguous exception that occurred while handling your
+      15→    request."""
+      16→
+      17→    def __init__(self, *args, **kwargs):
+      18→        """
+      19→        Initialize RequestException with `request` and `response` objects.
+      20→        """
+      21→        response = kwargs.pop('response', None)
+      22→        self.response = response
+      23→        self.request = kwargs.pop('request', None)
+      24→        if (response is not None and not self.request and
+      25→                hasattr(response, 'request')):
+      26→            self.request = self.response.request
+      27→        super(RequestException, self).__init__(*args, **kwargs)
+      28→
+      29→
+      30→class HTTPError(RequestException):
+      31→    """An HTTP error occurred."""
+      32→
+      33→
+      34→class ConnectionError(RequestException):
+      35→    """A Connection error oc
+  [... truncated ...]
+- [Grep Result after action #9]
+  No matches found
+- [Read Result after action #11]
+     620→        """The apparent encoding, provided by the chardet library"""
+     621→        return chardet.detect(self.content)['encoding']
+     622→
+     623→    def iter_content(self, chunk_size=1, decode_unicode=False):
+     624→        """Iterates over the response data.  When stream=True is set on the
+     625→        request, this avoids reading the content at once into memory for
+     626→        large responses.  The chunk size is the number of bytes it should
+     627→        read into memory.  This is not necessarily the length of each item
+     628→        returned as decoding can take place.
+     629→
+     630→        If decode_unicode is True, content will be decoded using the best
+     631→        available encoding based on the response.
+     632→        """
+     633→        def generate():
+     634→            try:
+     635→                # Special case for urllib3.
+     636→                try:
+     637→                    for chunk in self.raw.stream(chunk_size, decode_content=True):
+     638→                        yield chunk
+     639→                except IncompleteRead as e:
+     640→                    raise ChunkedEncodingError(e)
+     641→                except DecodeError as e:
+     642→
+  [... truncated ...]
+- [Test Output after action #16]
+  Exit code 1
+    File "test_issue.py", line 54
+      print(f"Exception type: {type(e).__name__}")
+                                                ^
+  SyntaxError: invalid syntax
+- [Test Output after action #18]
+  Testing socket.error wrapping...
+  SUCCESS: socket.error was wrapped in ConnectionError
+  Exception type: ConnectionError
+  Exception message: [Errno 104] Connection reset by peer
+  Original exception type: error
+  VERIFIED: Original socket.error is preserved
+- [Diagnostic Output after action #20]
+  testbed/test_requests.py
+- [Test Output after action #22]
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+  option --version not recognized
+  Usage: python -m unittest [options] [tests]
+
+  Options:
+    -h, --help       Show this message
+    -v, --verbose    Verbose output
+    -q, --quiet      Minimal output
+    -f, --failfast   Stop on first failure
+    -c, --catch      Catch control-C and display results
+    -b, --buffer     Buffer stdout and stderr during test runs
+
+  Examples:
+    python -m unittest test_module               - run tests from test_module
+    python -m unittest module.TestClass          - run tests from module.TestClass
+    python -m unittest module.Class.test_method  - run specified test method
+
+  [tests] can be a list of any number of test modules, classes and test
+  methods.
+
+  Alternative Usage: python -m unittest discover [options]
+
+  Options:
+    -v, --verbose    Verbose output
+    -f, --failfast   Stop on first failure
+    -c, --catch      Catch control-C and display results
+    -b, --buffer     Buffer stdout and stderr during test runs
+    -s directory     Directory to start discovery ('.' default)
+    -p pattern       Pattern to match test files ('test*.py' default)
+    -t directory     Top level directory of project (default to
+
+  [... truncated ...]
+- [Diagnostic Output after action #25]
+  -rwxr-xr-x@ 1 user  staff  48316 29 Nov 19:30 ./swebench_9_15/testbed/test_requests.py
+- [Diagnostic Output after action #27]
+  Import successful
+
+SOURCE EDIT EVIDENCE
+--------------------
+- requests/models.py
+  Tool: Edit action #13
+  old_text_sha256: 0e2a2eff6e53b53968c73cceb9ab257f10d65902a3d89db40959877e4ee403ba
+  new_text_sha256: 36edaf8d8a97cd97e5ad30a1994ba9dfe53fef80d7bb9004f1a03be5da7d5ce9
+- requests/models.py
+  Tool: Edit action #14
+  old_text_sha256: c54983ce9ddbaa2757f78463500966ef938c1c77d136b6476d2e55c90bb592c5
+  new_text_sha256: 13685f133142fa8697ee5180ecfe76ba32b33291fb45947ada69df51f82cc2b9
+- requests/models.py
+  Tool: Edit action #15
+  old_text_sha256: e9bd49002ef2966c76a8bc16a64ec8b90d457c26cd08c4224cb2c1f3d8539085
+  new_text_sha256: 5e462dbc6829879b35f2901ea90af3b01d0a0926e84624b9c10cf9680a99ca85
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

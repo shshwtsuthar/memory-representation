@@ -1,0 +1,425 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 412dfc16-c855-4ef1-b9e1-533b648825e5
+- repo: django/django
+- instance_id: django__django-10914
+- base_commit: e7fd69d051eaa67cb17f172a39b57253e9cb831a
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Set default FILE_UPLOAD_PERMISSION to 0o644.
+Description
+
+Hello,
+As far as I can see, the ​File Uploads documentation page does not mention any permission issues.
+What I would like to see is a warning that in absence of explicitly configured FILE_UPLOAD_PERMISSIONS, the permissions for a file uploaded to FileSystemStorage might not be consistent depending on whether a MemoryUploadedFile or a TemporaryUploadedFile was used for temporary storage of the uploaded data (which, with the default FILE_UPLOAD_HANDLERS, in turn depends on the uploaded data size).
+The tempfile.NamedTemporaryFile + os.rename sequence causes the resulting file permissions to be 0o0600 on some systems (I experience it here on CentOS 7.4.1708 and Python 3.6.5). In all probability, the implementation of Python's built-in tempfile module explicitly sets such permissions for temporary files due to security considerations.
+I found mentions of this issue ​on GitHub, but did not manage to find any existing bug report in Django's bug tracker.
+
+FILES INSPECTED
+---------------
+- django/conf/global_settings.py [Grep: 1, Read: 1]
+- django/core/files/storage.py [Grep: 1, Read: 1]
+- django/core/files/move.py [Read: 1]
+- tests/file_storage/tests.py [Read: 1, Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='**/settings.py'
+- [4] Grep pattern='FILE_UPLOAD_PERMISSION'
+- [6] Grep pattern='FILE_UPLOAD_PERMISSION' path='django/conf/global_settings.py'
+- [8] Grep pattern='FILE_UPLOAD_PERMISSION' path='django/core/files/storage.py'
+- [19] Grep pattern='file.*permission' path='tests/file_storage/tests.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [diagnostic] find . -name "*.py" -type f | grep -E "(django|setup)" | head -20
+- [diagnostic] python -c "from django.conf import settings; settings.configure(); from django.conf import global_settings; print('FILE_UPLOAD_PERMISSIONS:', global_settings.FILE_UPLOAD_PERMISSIONS)"
+- [other/reproduction] python3 -c "from django.conf import global_settings; print('FILE_UPLOAD_PERMISSIONS:', global_settings.FILE_UPLOAD_PERMISSIONS)"
+- [test] python3 -m pytest tests/file_storage/tests.py::FileStoragePermissions -xvs
+- [test] python3 tests/runtests.py file_storage.FileStoragePermissions --verbosity=2
+- [test] python3 tests/runtests.py file_storage.tests.FileStoragePermissions --verbosity=2
+- [diagnostic] cat > /tmp/test_issue.py << 'EOF'
+"""
+Test to verify that FILE_UPLOAD_PERMISSIONS default is 0o644
+and that both MemoryUploadedFile and TemporaryUploadedFile
+result in consistent permissions.
+"""
+import os
+import tempfile
+import shutil
+from io import BytesIO
+
+# Setup Django
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'django.conf.global_settings')
+
+import django
+from django.conf import settings
+
+# Configure settings if not already configured
+if not settings.configured:
+    settings.configure
+  [... truncated ...]
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ERROR: found no collectors for ./swebench_9_15/testbed/tests/file_storage/tests.py::FileStoragePermissions
+- E   django.core.exceptions.ImproperlyConfigured: Requested setting INSTALLED_APPS, but settings are not configured. You must either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing settings.
+- ERROR tests/file_storage/tests.py - django.core.exceptions.ImproperlyConfigur...
+- ERROR: FileStoragePermissions (unittest.loader._FailedTest)
+- ImportError: Failed to import test module: FileStoragePermissions
+- ModuleNotFoundError: No module named 'file_storage.FileStoragePermissions'
+- FAILED (errors=1)
+- Traceback (most recent call last):
+- Exception ignored in: <function _TemporaryFileCloser.__del__ at 0x7fb9181b9d30>
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #4]
+  Found 12 files
+  tests/test_utils/tests.py
+  tests/staticfiles_tests/test_storage.py
+  tests/file_storage/tests.py
+  docs/releases/1.7.txt
+  docs/releases/1.5.txt
+  docs/releases/1.11.txt
+  docs/ref/settings.txt
+  docs/ref/files/storage.txt
+  docs/ref/contrib/staticfiles.txt
+  docs/howto/deployment/checklist.txt
+  django/core/files/storage.py
+  django/conf/global_settings.py
+- [Grep Result after action #6]
+  305-# The numeric mode to set newly-uploaded files to. The value should be a mode
+  306-# you'd pass directly to os.chmod; see https://docs.python.org/library/os.html#files-and-directories.
+  307:FILE_UPLOAD_PERMISSIONS = None
+  308-
+  309-# The numeric mode to assign to newly-created directories, when uploading files.
+- [Grep Result after action #8]
+  188-        if setting == 'MEDIA_ROOT':
+  189-            self.__dict__.pop('base_location', None)
+  190-            self.__dict__.pop('location', None)
+  191-        elif setting == 'MEDIA_URL':
+  192-            self.__dict__.pop('base_url', None)
+  193:        elif setting == 'FILE_UPLOAD_PERMISSIONS':
+  194-            self.__dict__.pop('file_permissions_mode', None)
+  195-        elif setting == 'FILE_UPLOAD_DIRECTORY_PERMISSIONS':
+  196-            self.__dict__.pop('directory_permissions_mode', None)
+  197-
+  198-    def _value_or_setting(self, value, setting):
+  --
+  212-            self._base_url += '/'
+  213-        return self._value_or_setting(self._base_url, settings.MEDIA_URL)
+  214-
+  215-    @cached_property
+  216-    def file_permissions_mode(self):
+  217:        return self._value_or_setting(self._file_permissions_mode, settings.FILE_UPLOAD_PERMISSIONS)
+  218-
+  219-    @cached_property
+  220-    def directory_permissions_mode(self):
+  221-        return self._value_or_setting(self._directory_permissions_mode, settings.FILE_UPLOAD_DIRECTORY_PERMISSIONS)
+  222-
+- [Read Result after action #10]
+       1→import os
+       2→from datetime import datetime
+       3→from urllib.parse import urljoin
+       4→
+       5→from django.conf import settings
+       6→from django.core.exceptions import SuspiciousFileOperation
+       7→from django.core.files import File, locks
+       8→from django.core.files.move import file_move_safe
+       9→from django.core.signals import setting_changed
+      10→from django.utils import timezone
+      11→from django.utils._os import safe_join
+      12→from django.utils.crypto import get_random_string
+      13→from django.utils.deconstruct import deconstructible
+      14→from django.utils.encoding import filepath_to_uri
+      15→from django.utils.functional import LazyObject, cached_property
+      16→from django.utils.module_loading import import_string
+      17→from django.utils.text import get_valid_filename
+      18→
+      19→__all__ = (
+      20→    'Storage', 'FileSystemStorage', 'DefaultStorage', 'default_storage',
+      21→    'get_storage_class',
+      22→)
+      23→
+      24→
+      25→class Storage:
+      26→    """
+      27→    A base storage class, providing some default behaviors that all other
+      28→    storage systems can inherit or override, as necessary.
+      29→    """
+      30→
+      31→
+  [... truncated ...]
+- [Read Result after action #12]
+       1→"""
+       2→Move a file in the safest way possible::
+       3→
+       4→    >>> from django.core.files.move import file_move_safe
+       5→    >>> file_move_safe("/tmp/old_file", "/tmp/new_file")
+       6→"""
+       7→
+       8→import errno
+       9→import os
+      10→from shutil import copystat
+      11→
+      12→from django.core.files import locks
+      13→
+      14→__all__ = ['file_move_safe']
+      15→
+      16→
+      17→def _samefile(src, dst):
+      18→    # Macintosh, Unix.
+      19→    if hasattr(os.path, 'samefile'):
+      20→        try:
+      21→            return os.path.samefile(src, dst)
+      22→        except OSError:
+      23→            return False
+      24→
+      25→    # All other platforms: check for same pathname.
+      26→    return (os.path.normcase(os.path.abspath(src)) ==
+      27→            os.path.normcase(os.path.abspath(dst)))
+      28→
+      29→
+      30→def file_move_safe(old_file_name, new_file_name, chunk_size=1024 * 64, allow_overwrite=False):
+      31→    """
+      32→    Move a file from one location to another in the safest way possible.
+      33→
+      34→    First, try ``os.rename``, which is simple but will break across filesystems.
+      35→    If that fails, stream manually from one file to anoth
+  [... truncated ...]
+- [Read Result after action #14]
+     300→# Directory in which upload streamed files will be temporarily saved. A value of
+     301→# `None` will make Django use the operating system's default temporary directory
+     302→# (i.e. "/tmp" on *nix systems).
+     303→FILE_UPLOAD_TEMP_DIR = None
+     304→
+     305→# The numeric mode to set newly-uploaded files to. The value should be a mode
+     306→# you'd pass directly to os.chmod; see https://docs.python.org/library/os.html#files-and-directories.
+     307→FILE_UPLOAD_PERMISSIONS = None
+     308→
+     309→# The numeric mode to assign to newly-created directories, when uploading files.
+     310→# The value should be a mode as you'd pass to os.chmod;
+     311→# see https://docs.python.org/library/os.html#files-and-directories.
+     312→FILE_UPLOAD_DIRECTORY_PERMISSIONS = None
+     313→
+     314→# Python module path where user will place custom format definition.
+     315→# The directory where this setting is pointing should contain subdirectories
+     316→# named as the locales, containing a formats.py file
+     317→# (i.e. "myproject.locale" for myproject/locale/en/formats.py etc. use)
+     318→FORMAT_MODULE_PATH = None
+     319→
+
+- [Read Result after action #17]
+       0→import os
+       1→import shutil
+       2→import sys
+       3→import tempfile
+       4→import threading
+       5→import time
+       6→import unittest
+       7→from datetime import datetime, timedelta
+       8→from io import StringIO
+       9→from urllib.request import urlopen
+      10→
+      11→from django.core.cache import cache
+      12→from django.core.exceptions import SuspiciousFileOperation
+      13→from django.core.files.base import ContentFile, File
+      14→from django.core.files.storage import FileSystemStorage, get_storage_class
+      15→from django.core.files.uploadedfile import (
+      16→    InMemoryUploadedFile, SimpleUploadedFile, TemporaryUploadedFile,
+      17→)
+      18→from django.db.models.fields.files import FileDescriptor
+      19→from django.test import (
+      20→    LiveServerTestCase, SimpleTestCase, TestCase, override_settings,
+      21→)
+      22→from django.test.utils import requires_tz_support
+      23→from django.urls import NoReverseMatch, reverse_lazy
+      24→from django.utils import timezone
+      25→
+      26→from .models import Storage, temp_storage, temp_storage_location
+      27→
+      28→FILE_SUFFIX_REGEX = '[A-Za-z0-9]{7}'
+      29→
+      30→
+      31→class GetStorageClassTests(SimpleTestCase):
+  [... truncated ...]
+- [Grep Result after action #19]
+  504-    @override_settings(
+  505-        MEDIA_ROOT='media_root',
+  506-        MEDIA_URL='media_url/',
+  507:        FILE_UPLOAD_PERMISSIONS=0o777,
+  508:        FILE_UPLOAD_DIRECTORY_PERMISSIONS=0o777,
+  509-    )
+  510-    def test_setting_changed(self):
+  511-        """
+  512-        Properties using settings values as defaults should be updated on
+  513-        referenced settings change while specified values should be unchanged.
+  514-        """
+  515-        storage = self.storage_class(
+  516-            location='explicit_location',
+  517-            base_url='explicit_base_url/',
+  518:            file_permissions_mode=0o666,
+  519-            directory_permissions_mode=0o666,
+  520-        )
+  521-        defaults_storage = self.storage_class()
+  522-        settings = {
+  523-            'MEDIA_ROOT': 'overriden_media_root',
+  524-            'MEDIA_URL': 'overriden_media_url/',
+  525:            'FILE_UPLOAD_PERMISSIONS': 0o333,
+  526:            'FILE_UPLOAD_DIRECTORY_PERMISSIONS': 0o333,
+  527-        }
+  528-        with self.settings(**settings):
+  529-            self.assertEqual(storage.base_location, 'explicit_location')
+  530-            self.assertIn('explicit_location', storage.location)
+  531-            se
+  [... truncated ...]
+- [Diagnostic Output after action #21]
+  Exit code 1
+  Traceback (most recent call last):
+    File "<string>", line 1, in <module>
+    File "django/__init__.py", line 1, in <module>
+      from django.utils.version import get_version
+    File "django/utils/version.py", line 71, in <module>
+      @functools.lru_cache()
+  AttributeError: 'module' object has no attribute 'lru_cache'
+- [Test Output after action #25]
+  Exit code 4
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ERROR: found no collectors for ./swebench_9_15/testbed/tests/file_storage/tests.py::FileStoragePermissions
+
+
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 0 items / 1 error
+
+  ==================================== ERRORS ====================================
+  _________________ ERROR collecting tests/file_storage/tests.py _________________
+  tests/file_storage/tests.py:27: in <mod
+  [... truncated ...]
+- [Test Output after action #27]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  FileStoragePermissions (unittest.loader._FailedTest) ... ERROR
+
+  ======================================================================
+  ERROR: FileStoragePermissions (unittest.loader._FailedTest)
+  ----------------------------------------------------------------------
+  ImportError: Failed to import test module: FileStoragePermissions
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/unittest/loader.py", line 154, in loadTestsFromName
+      module = __import__(module_name)
+  ModuleNotFoundError: No module named 'file_storage.FileStoragePermissions'
+
+
+  ----------------------------------------------------------------------
+  Ran 1 test in 0.000s
+
+  FAILED (errors=1)
+
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Importing appli
+  [... truncated ...]
+- [Test Output after action #29]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Importing application file_storage
+  Skipping setup of unused database(s): default, other.
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  test_file_upload_default_permissions (file_storage.tests.FileStoragePermissions) ... ok
+  test_file_upload_directory_default_permissions (file_storage.tests.FileStoragePermissions) ... ok
+  test_file_upload_directory_permissions (file_storage.tests.FileStoragePermissions) ... ok
+  test_file_upload_permissions (file_storage.tests.FileStoragePermissions) ... ok
+
+  ----------------------------------------------------------------------
+  Ran 4 tests in 0.003s
+
+  OK
+- [Diagnostic Output after action #31]
+  ============================================================
+  Testing django__django-10914 fix
+  ============================================================
+  Default FILE_UPLOAD_PERMISSIONS: 0o644
+  ✓ Default FILE_UPLOAD_PERMISSIONS is 0o644
+
+  Testing ContentFile (similar to MemoryUploadedFile)...
+    Permissions: 0o644
+
+  Testing TemporaryUploadedFile...
+    Permissions: 0o644
+
+  ✓ Both file types have consistent permissions (0o644)
+
+  ============================================================
+  All tests passed! ✓
+  ============================================================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Exception ignored in: <function _TemporaryFileCloser.__del__ at 0x7fb9181b9d30>
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/tempfile.py", line 440, in __del__
+      self.close()
+    File
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/conf/global_settings.py
+  Tool: Edit action #16
+  old_text_sha256: ed36c1aae9c1c189a14106d077707b17cfddaf977a6095708bacb433e70cca46
+  new_text_sha256: addeae9cc58421b1e1e9369e5fe9654e00bda3cad7c8dc9dbf34a35f75b81bc9
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

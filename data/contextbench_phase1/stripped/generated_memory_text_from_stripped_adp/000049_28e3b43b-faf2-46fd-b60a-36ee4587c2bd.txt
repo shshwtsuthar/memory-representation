@@ -1,0 +1,261 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 28e3b43b-faf2-46fd-b60a-36ee4587c2bd
+- repo: pylint-dev/pylint
+- instance_id: pylint-dev__pylint-7114
+- base_commit: 397c1703e8ae6349d33f7b99f45b2ccaf581e666
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Linting fails if module contains module of the same name
+### Steps to reproduce
+
+Given multiple files:
+```
+.
+`-- a/
+    |-- a.py
+    `-- b.py
+```
+Which are all empty, running `pylint a` fails:
+
+```
+$ pylint a
+************* Module a
+a/__init__.py:1:0: F0010: error while code parsing: Unable to load file a/__init__.py:
+[Errno 2] No such file or directory: 'a/__init__.py' (parse-error)
+$
+```
+
+However, if I rename `a.py`, `pylint a` succeeds:
+
+```
+$ mv a/a.py a/c.py
+$ pylint a
+$
+```
+Alternatively, I can also `touch a/__init__.py`, but that shouldn't be necessary anymore.
+
+### Current behavior
+
+Running `pylint a` if `a/a.py` is present fails while searching for an `__init__.py` file.
+
+### Expected behavior
+
+Running `pylint a` if `a/a.py` is present should succeed.
+
+### pylint --version output
+
+Result of `pylint --version` output:
+
+```
+pylint 3.0.0a3
+astroid 2.5.6
+Python 3.8.5 (default, Jan 27 2021, 15:41:15)
+[GCC 9.3.0]
+```
+
+### Additional info
+
+This also has some side-effects in module resolution. For example, if I create another file `r.py`:
+
+```
+.
+|-- a
+|   |-- a.py
+|   `-- b.py
+`-- r.py
+```
+
+With the content:
+
+```
+from a import b
+```
+
+Running `pylint -E r` will run fine, but `pylint -E r a` will fail. Not just for module a, but for module r as well.
+
+```
+************* Module r
+r.py:1:0: E0611: No name 'b' in module 'a' (no-name-in-module)
+************* Module a
+a/__init__.py:1:0: F0010: error while code parsing: Unable to load file a/__init__.py:
+[Errno 2] No such file or directory: 'a/__init__.py' (parse-error)
+```
+
+Again, if I rename `a.py` to `c.py`, `pylint -E r a` will work perfectly.
+
+FILES INSPECTED
+---------------
+- pylint-dev__pylint-7114/pylint/lint/expand_modules.py [Read: 1]
+- pylint/lint/expand_modules.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+(none)
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15 -name "expand_modules.py" -type f 2>/dev/null | head -5
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [other/reproduction] cd testbed && python -m pylint a
+- [other/reproduction] cd testbed && python3 -m pylint a
+- [other/reproduction] cd testbed && mv a/a.py a/c.py && python3 -m pylint a
+- [other/reproduction] cd testbed && mv a/c.py a/a.py
+- [other/reproduction] mv ./swebench_9_15/testbed/a/c.py ./swebench_9_15/testbed/a/a.py
+- [other/reproduction] python3 -c "
+from astroid import modutils
+import sys
+sys.path.insert(0, '.')
+try:
+    result = modutils.modpath_from_file('a')
+    print('modpath_from_file(\"a\"):', result)
+except Exception as e:
+    print('Error:', e)
+
+try:
+    spec = modutils.file_info_from_modpath(['a'])
+    print('file_info_from_modpath([\"a\"]):', spec)
+    print('is_namespace:', modutils.is_namespace(spec))
+    print('is_directory:', modutils.is_directory(spec))
+except Exception as e:
+    print('Error:', e)
+"
+- [other/reproduction] python3 -c "
+from astroid import modutils
+import sys
+sys.path.insert(0, '.')
+try:
+    result = modutils.modpath_from_file('a')
+    print('modpath_from_file(\"a\"):', result)
+except Exception as e:
+    print('Error:', type(e).__name__, e)
+
+try:
+    spec = modutils.file_info_from_modpath(['a'])
+    print('file_info_from_modpath([\"a\"]):', spec)
+    print('is_namespace:', modutils.is_namespace(spec))
+    print('is_directory:', modutils.is_directory(spec))
+except Exception as e:
+    print('Error:',
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+from astroid import modutils
+import os
+
+files = list(modutils.get_module_files('a', [], list_all=True))
+print('get_module_files(\"a\", [], list_all=True):')
+for f in files:
+    print('  -', f)
+
+files2 = list(modutils.get_module_files('a', [], list_all=False))
+print('get_module_files(\"a\", [], list_all=False):')
+for f in files2:
+    print('  -', f)
+"
+- [other/reproduction] python3 -c "
+from astroid import modutils
+import sys
+
+def _modpath_from_file(filename, is_namespace, path):
+    def _is_package_cb(inner_path, parts):
+        return modutils.check_modpath_has_init(inner_path, parts) or is_namespace
+
+    return modutils.modpath_from_file_with_callback(
+        filename, path=path, is_package_cb=_is_package_cb
+    )
+
+additional_search_path = ['.', './swebench_9_15/testbed'] + sys.path
+
+result1 = _modpath_from_file('a/a.py', True, additional_search_path)
+print('_m
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, 'testbed')
+from pylint.lint.expand_modules import expand_modules
+
+result, errors = expand_modules(['a'], [], [], [])
+print('Result:')
+for r in result:
+    print('  ', r)
+print('Errors:')
+for e in errors:
+    print('  ', e)
+"
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #19]
+       1→# Licensed under the GPL: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+       2→# For details: https://github.com/PyCQA/pylint/blob/main/LICENSE
+       3→# Copyright (c) https://github.com/PyCQA/pylint/blob/main/CONTRIBUTORS.txt
+       4→
+       5→from __future__ import annotations
+       6→
+       7→import os
+       8→import sys
+       9→from collections.abc import Sequence
+      10→from re import Pattern
+      11→
+      12→from astroid import modutils
+      13→
+      14→from pylint.typing import ErrorDescriptionDict, ModuleDescriptionDict
+      15→
+      16→
+      17→def _modpath_from_file(filename: str, is_namespace: bool, path: list[str]) -> list[str]:
+      18→    def _is_package_cb(inner_path: str, parts: list[str]) -> bool:
+      19→        return modutils.check_modpath_has_init(inner_path, parts) or is_namespace
+      20→
+      21→    return modutils.modpath_from_file_with_callback(
+      22→        filename, path=path, is_package_cb=_is_package_cb
+      23→    )
+      24→
+      25→
+      26→def get_python_path(filepath: str) -> str:
+      27→    """TODO This get the python path with the (bad) assumption that there is always
+      28→    an __init__.py.
+      29→
+      30→    This is not true since python 3.3 and
+  [... truncated ...]
+- [Test Output after action #46]
+  /opt/anaconda3/bin/python3: No module named pytest
+- [Test Output after action #49]
+  /opt/anaconda3/bin/python3: No module named pytest
+- [Diagnostic Output after action #51]
+  Testing fix for pylint issue #7114
+  ============================================================
+  PASS: Directory 'a' with file 'a/a.py' (no __init__.py)
+  PASS: Directory 'a' with __init__.py
+  PASS: Directory 'a' with modules but no name conflict
+  ============================================================
+  Results: 3/3 passed
+- [Diagnostic Output after action #53]
+  Test: Directory 'a' with file 'a/a.py' (no __init__.py)
+  ------------------------------------------------------------
+  PASSED: No parse error!
+  The fix successfully resolves issue #7114
+
+SOURCE EDIT EVIDENCE
+--------------------
+- pylint/lint/expand_modules.py
+  Tool: Edit action #33
+  old_text_sha256: ff92fdcf9102d16733d6b9b0e6249a094e1d930a72160d66add40b36c6634959
+  new_text_sha256: 68cb1f1d5753554eee483d2f5c3a2eeee54e8e78b2c15d3bd82b7ff6193d3dc0
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

@@ -1,0 +1,1065 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 61f7d4de-2abe-46ee-85c8-5b689786fe10
+- repo: django/django
+- instance_id: django__django-13033
+- base_commit: a59de6e89e8dc1f3e71c9a5a5bbceb373ea5247e
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-13033
+base_commit: a59de6e89e8dc1f3e71c9a5a5bbceb373ea5247e
+problem_statement:
+Self referencing foreign key doesn't correctly order by a relation "_id" field.
+Description
+
+Initially discovered on 2.2.10 but verified still happens on 3.0.6. Given the following models:
+class OneModel(models.Model):
+    class Meta:
+        ordering = ("-id",)
+    id = models.BigAutoField(primary_key=True)
+    root = models.ForeignKey("OneModel", on_delete=models.CASCADE, null=True)
+    oneval = models.BigIntegerField(null=True)
+class TwoModel(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    record = models.ForeignKey(OneModel, on_delete=models.CASCADE)
+    twoval = models.BigIntegerField(null=True)
+The following queryset gives unexpected results and appears to be an incorrect SQL query:
+qs = TwoModel.objects.filter(record__oneval__in=[1,2,3])
+qs = qs.order_by("record__root_id")
+print(qs.query)
+SELECT "orion_twomodel"."id", "orion_twomodel"."record_id", "orion_twomodel"."twoval" FROM "orion_twomodel" INNER JOIN "orion_onemodel" ON ("orion_twomodel"."record_id" = "orion_onemodel"."id") LEFT OUTER JOIN "orion_onemodel" T3 ON ("orion_onemodel"."root_id" = T3."id") WHERE "orion_onemodel"."oneval" IN (1, 2, 3) ORDER BY T3."id" DESC
+The query has an unexpected DESCENDING sort. That appears to come from the default sort order on the OneModel class, but I would expect the order_by() to take prececence. The the query has two JOINS, which is unnecessary. It appears that, since OneModel.root is a foreign key to itself, that is causing it to do the unnecessary extra join. In fact, testing a model where root is a foreign key to a third model doesn't show the problem behavior.
+Note also that the queryset with order_by("record__root") gives the exact same SQL.
+This queryset gives correct results and what looks like a pretty optimal SQL:
+qs = TwoModel.objects.filter(record__oneval__in=[1,2,3])
+qs = qs.order_by("record
+sha256: 21a7ff049aa108368fa99aa59bf269965c0833c525a97e564b1659cec667b91d
+truncated: true
+
+[ADP ACTION current=1 original=3: code_action bash]
+payload:
+find . -name "*.md" -type f | grep -E "(README|manual)" | head -5
+sha256: aada3d8406b36810c2621a44f5e460054b327bedf6487b9bd92104a576f4c2bd
+truncated: false
+
+[ADP OBSERVATION current=2 original=4 source=environment]
+name: Bash:toolu_019DK9BSknCUWUPYFuHReWmV
+excerpt:
+./.pytest_cache/README.md
+sha256: 0aa4055d17d61cd7b22be06cd03d3f635dc50f8e013d4ba0036db0e275b774f6
+truncated: false
+
+[ADP ACTION current=3 original=5: code_action bash]
+payload:
+ls -la testbed 2>&1 | head -5
+sha256: 4d1d3a53bbdd3ff1970d1f40cfe83365459f0d9be753cef83755c30b6c1f525f
+truncated: false
+
+[ADP ACTION current=4 original=15: code_action bash]
+payload:
+python test_issue.py
+sha256: 7267809d9d113adf86c703585de93a37ab062fac2065f3aca7cbeced21480ca6
+truncated: false
+
+[ADP OBSERVATION current=5 original=16 source=environment]
+name: Bash:toolu_01HKa8ptWLqZoF4igZtQatpV:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 71
+SyntaxError: Non-ASCII character '\xe2' in file test_issue.py on line 71, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+sha256: 6e25df61d3ce4fbf1c71287e71b447008739f4e77dac1cea1477619bc131d769
+truncated: false
+
+[ADP ACTION current=6 original=19: code_action bash]
+payload:
+python test_issue.py
+sha256: 14958eeeeea30fd2620177322b45a1f6216b0fe889039a3e42e72538a52f2b59
+truncated: false
+
+[ADP OBSERVATION current=7 original=20 source=environment]
+name: Bash:toolu_019jHTh57mnaz553Xr6MhqWX:error
+excerpt:
+Exit code 1
+Traceback (most recent call last):
+  File "test_issue.py", line 7, in <module>
+    import django
+ImportError: No module named django
+sha256: 395735bc09c349d6afdbf0b0cc39eef9e6bd12dc346a62773bd9d927f9b0df06
+truncated: false
+
+[ADP ACTION current=8 original=21: code_action bash]
+payload:
+python3 test_issue.py
+sha256: c53e16249cd9e839b2c10562b49fe17bacbe2a2afc149d5723c510a32098ad07
+truncated: false
+
+[ADP OBSERVATION current=9 original=22 source=environment]
+name: Bash:toolu_01DJNe7DbEvgbwiz9iBjLGxK
+excerpt:
+================================================================================
+Test 1: order_by('record__root_id') - PROBLEMATIC
+================================================================================
+SELECT "test_app_twomodel"."id", "test_app_twomodel"."record_id", "test_app_twomodel"."twoval" FROM "test_app_twomodel" INNER JOIN "test_app_onemodel" ON ("test_app_twomodel"."record_id" = "test_app_onemodel"."id") LEFT OUTER JOIN "test_app_onemodel" T3 ON ("test_app_onemodel"."root_id" = T3."id") WHERE "test_app_onemodel"."oneval" IN (1, 2, 3) ORDER BY T3."id" DESC
+
+❌ ISSUE: Unnecessary LEFT OUTER JOIN found!
+❌ ISSUE: Unexpected DESC ordering found!
+❌ ISSUE: Multiple joins to OneModel found!
+
+================================================================================
+Test 2: order_by('record__root__id') - WORKAROUND (should work)
+================================================================================
+SELECT "test_app_twomodel"."id", "test_app_twomodel"."record_id", "test_app_twomodel"."twoval" FROM "test_app_twomodel" INNER JOIN "test_app_onemodel" ON ("test_app_twomodel"."record_id" = "test_app_onemodel"."id") WHERE "test_app_onemodel"."oneval" IN (1, 2, 3) ORDER BY "test_app_onemodel"."root_id" ASC
+
+✓ No unnecessary joins
+✓ Correct ASC ordering
+
+================================================================================
+Test 3: order_by('-record__root_id') - Should be DESC
+================================================================================
+SELECT "test_app_twomodel"."id", "test_app_twomodel"."record_id", "test_app_twomodel"."twoval" FROM "test_app_twomodel" INNER JOIN "test_app_onemodel" ON ("test_app_twomodel"."record_id" = "test_app_onemodel"."id") LEFT OUTER JOIN "test_app_onemodel" T3 ON ("test_app_onemodel"."root_id" = T3."id") WHERE "test_app_onemodel"."oneval" IN (1, 2, 3) ORDER BY T3."id" ASC
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call la
+sha256: c4746e44679d1852e02033d04a939eeb730558f98e11eb3221b0758a58c9840b
+truncated: true
+
+[ADP ACTION current=10 original=25: code_action bash]
+payload:
+find testbed/django/db/models -name "*.py" -type f | grep -E "(query|sql)" | head -20
+sha256: f9ba410dec9b161f5e7f6ce62e81b068183d30808020c75ea6deba77dd47d559
+truncated: false
+
+[ADP OBSERVATION current=11 original=26 source=environment]
+name: Bash:toolu_015E4wwASNnKYCEJwKSM3LsT
+excerpt:
+testbed/django/db/models/query.py
+testbed/django/db/models/query_utils.py
+testbed/django/db/models/sql/compiler.py
+testbed/django/db/models/sql/query.py
+testbed/django/db/models/sql/subqueries.py
+testbed/django/db/models/sql/where.py
+testbed/django/db/models/sql/constants.py
+testbed/django/db/models/sql/__init__.py
+testbed/django/db/models/sql/datastructures.py
+sha256: fed2cd836c6f0cc5dbe3bb1ea7bfe14635fd6da2150b2dbf8d5c741360811791
+truncated: false
+
+[ADP ACTION current=12 original=27: api_action Grep]
+path: django/db/models/sql
+payload:
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed/django/db/models/sql",
+  "pattern": "order_by"
+}
+sha256: bb12f97cc4da422cd8fd0f0e9751f156ecb9354805c14aac84831aebf4a88d7b
+truncated: false
+
+[ADP OBSERVATION current=13 original=28 source=environment]
+name: Grep:toolu_01JbY52KwRyia77JVGY6FKuU
+excerpt:
+Found 2 files
+testbed/django/db/models/sql/query.py
+testbed/django/db/models/sql/compiler.py
+sha256: a7f1aa831d3e25638887ba1064ee2be79633963650a4dc6f3ce020e44d708cc8
+truncated: false
+
+[ADP ACTION current=14 original=29: api_action Grep]
+path: django/db/models/sql
+payload:
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed/django/db/models/sql",
+  "pattern": "_id.*order"
+}
+sha256: afde4803d4390d3f992098f50b93b2fe7246668cf9a1d283ad34ca2a64ed0af4
+truncated: false
+
+[ADP ACTION current=15 original=31: api_action Grep]
+path: django/db/models/sql/query.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql/query.py",
+  "pattern": "def.*order_by"
+}
+sha256: 9633990c7fd21ac231ac113772a3a04c2a2a01c29ca48afbc38b5a749dfca683
+truncated: false
+
+[ADP OBSERVATION current=16 original=32 source=environment]
+name: Grep:toolu_01CainSK89NbgzEetxVhrDen
+excerpt:
+2002:    def add_extra(self, select, select_params, where, params, tables, order_by):
+sha256: 523fb6ff16d653f636dc9ed5b1b040bba0d0268601caf9121c234068a2acd1fb
+truncated: false
+
+[ADP ACTION current=17 original=33: api_action Grep]
+path: django/db/models/sql
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql",
+  "pattern": "class.*Order"
+}
+sha256: f56f8a63066e14cf15258c742d652f1c587951c6d450b89c99c2df27cb44c9b7
+truncated: false
+
+[ADP OBSERVATION current=18 original=34 source=environment]
+name: Grep:toolu_016E6uwpgU2Jf2y8LpF6GgtV
+excerpt:
+No matches found
+sha256: 4b4d7ac22cee34f92cd16fbe4193b0eb106e185100ea38f72b0190e1affaf933
+truncated: false
+
+[ADP ACTION current=19 original=35: api_action Grep]
+path: django/db/models/sql/query.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql/query.py",
+  "pattern": "def add_ordering"
+}
+sha256: 7b74a0529aee9847eb9fb12304dc155267e487345fb29cccfff3720294052074
+truncated: false
+
+[ADP OBSERVATION current=20 original=36 source=environment]
+name: Grep:toolu_01FKK61c8Cc1Ntkz5DkGJRH6
+excerpt:
+1889:    def add_ordering(self, *ordering):
+sha256: 9c017fde1b6be62901c6ed7c9ea434ba4b8b4235a219af1eca83cdb5108d6815
+truncated: false
+
+[ADP ACTION current=21 original=37: api_action Read]
+path: django/db/models/sql/query.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/sql/query.py",
+  "limit": 100,
+  "offset": 1889
+}
+sha256: 8fc4170da00a72cdeffe9076fb26a442cc09744e6f43bcc4123bec16e2cd0a09
+truncated: false
+
+[ADP OBSERVATION current=22 original=38 source=environment]
+name: Read:toolu_01VuozUUPdc9P9T56KqQjyA7
+excerpt:
+  1889→    def add_ordering(self, *ordering):
+  1890→        """
+  1891→        Add items from the 'ordering' sequence to the query's "order by"
+  1892→        clause. These items are either field names (not column names) --
+  1893→        possibly with a direction prefix ('-' or '?') -- or OrderBy
+  1894→        expressions.
+  1895→
+  1896→        If 'ordering' is empty, clear all ordering from the query.
+  1897→        """
+  1898→        errors = []
+  1899→        for item in ordering:
+  1900→            if isinstance(item, str):
+  1901→                if '.' in item:
+  1902→                    warnings.warn(
+  1903→                        'Passing column raw column aliases to order_by() is '
+  1904→                        'deprecated. Wrap %r in a RawSQL expression before '
+  1905→                        'passing it to order_by().' % item,
+  1906→                        category=RemovedInDjango40Warning,
+  1907→                        stacklevel=3,
+  1908→                    )
+  1909→                    continue
+  1910→                if item == '?':
+  1911→                    continue
+  1912→                if item.startswith('-'):
+  1913→                    item = item[1:]
+  1914→                if item in self.annotations:
+  1915→                    continue
+  1916→                if self.extra and item in self.extra:
+  1917→                    continue
+  1918→                # names_to_path() validates the lookup. A descriptive
+  1919→                # FieldError will be raise if it's not.
+  1920→                self.names_to_path(item.split(LOOKUP_SEP), self.model._meta)
+  1921→            elif not hasattr(item, 'resolve_expression'):
+  1922→                errors.append(item)
+  1923→            if getattr(item, 'contains_aggregate', False):
+  1924→                raise FieldError(
+  1925→                    'Using an aggregate in order_by() without also including '
+  1926→                    'it in annotate() is not allowed: %s' % item
+  1927→
+sha256: 30c3d75d2556d53fb0c2227a8954e6740cac56443c7c2911a42c3a246ab9d7a3
+truncated: true
+
+[ADP ACTION current=23 original=39: api_action Grep]
+path: django/db/models/sql
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql",
+  "pattern": "def.*get_order_by"
+}
+sha256: fd1503213d0962acfe9e651f028f50011fafc056c83e7e26787ea8f64fed160c
+truncated: false
+
+[ADP OBSERVATION current=24 original=40 source=environment]
+name: Grep:toolu_01DMtE5fDnuVEygbmP1dwNoM
+excerpt:
+testbed/django/db/models/sql/compiler.py:271:    def get_order_by(self):
+sha256: 54b6b13972d40e1c5c848aef27b5bf2a64c0471e06225edba524edad9ce2a4b8
+truncated: false
+
+[ADP ACTION current=25 original=41: api_action Read]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/sql/compiler.py",
+  "limit": 200,
+  "offset": 271
+}
+sha256: 0cf19c7225d15c5b121e85864d31ff01b2a4a1ac07713186381a0c57e632c884
+truncated: false
+
+[ADP OBSERVATION current=26 original=42 source=environment]
+name: Read:toolu_01XYZVShkwSibK39FEbE8JGY
+excerpt:
+   271→    def get_order_by(self):
+   272→        """
+   273→        Return a list of 2-tuples of form (expr, (sql, params, is_ref)) for the
+   274→        ORDER BY clause.
+   275→
+   276→        The order_by clause can alter the select clause (for example it
+   277→        can add aliases to clauses that do not yet have one, or it can
+   278→        add totally new select clauses).
+   279→        """
+   280→        if self.query.extra_order_by:
+   281→            ordering = self.query.extra_order_by
+   282→        elif not self.query.default_ordering:
+   283→            ordering = self.query.order_by
+   284→        elif self.query.order_by:
+   285→            ordering = self.query.order_by
+   286→        elif self.query.get_meta().ordering:
+   287→            ordering = self.query.get_meta().ordering
+   288→            self._meta_ordering = ordering
+   289→        else:
+   290→            ordering = []
+   291→        if self.query.standard_ordering:
+   292→            asc, desc = ORDER_DIR['ASC']
+   293→        else:
+   294→            asc, desc = ORDER_DIR['DESC']
+   295→
+   296→        order_by = []
+   297→        for field in ordering:
+   298→            if hasattr(field, 'resolve_expression'):
+   299→                if isinstance(field, Value):
+   300→                    # output_field must be resolved for constants.
+   301→                    field = Cast(field, field.output_field)
+   302→                if not isinstance(field, OrderBy):
+   303→                    field = field.asc()
+   304→                if not self.query.standard_ordering:
+   305→                    field = field.copy()
+   306→                    field.reverse_ordering()
+   307→                order_by.append((field, False))
+   308→                continue
+   309→            if field == '?':  # random
+   310→                order_by.append((OrderBy(Random()), False))
+   311→                continue
+   312→
+   313→            col, order = get_order_dir(field, asc)
+   314→            descend
+sha256: 251513c9ba1f6b7eacb94fe7e651596907584afbd57dcc94ca8c2e39670174dd
+truncated: true
+
+[ADP ACTION current=27 original=43: api_action Grep]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql/compiler.py",
+  "pattern": "def find_ordering_name"
+}
+sha256: 9e72fcbf424845297ce9f2fd12bc66b6f787c891dcedf6ce8611cb0638ee74ec
+truncated: false
+
+[ADP OBSERVATION current=28 original=44 source=environment]
+name: Grep:toolu_014KQi2k8RkDG6ggqyNNMfKq
+excerpt:
+715:    def find_ordering_name(self, name, opts, alias=None, default_order='ASC',
+sha256: 51cad9c1f957085f5b3d2a485cae40e95bb9e00a8cd406fd75fe8fcbf262307d
+truncated: false
+
+[ADP ACTION current=29 original=45: api_action Read]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/sql/compiler.py",
+  "limit": 150,
+  "offset": 715
+}
+sha256: 8ffada7153a90d1f86495bbd61ca45f5fe6c75dbc91f23b9a7e83739ec380102
+truncated: false
+
+[ADP OBSERVATION current=30 original=46 source=environment]
+name: Read:toolu_01W5hazQzNtudR1nbU21GyPX
+excerpt:
+   715→    def find_ordering_name(self, name, opts, alias=None, default_order='ASC',
+   716→                           already_seen=None):
+   717→        """
+   718→        Return the table alias (the name might be ambiguous, the alias will
+   719→        not be) and column name for ordering by the given 'name' parameter.
+   720→        The 'name' is of the form 'field1__field2__...__fieldN'.
+   721→        """
+   722→        name, order = get_order_dir(name, default_order)
+   723→        descending = order == 'DESC'
+   724→        pieces = name.split(LOOKUP_SEP)
+   725→        field, targets, alias, joins, path, opts, transform_function = self._setup_joins(pieces, opts, alias)
+   726→
+   727→        # If we get to this point and the field is a relation to another model,
+   728→        # append the default ordering for that model unless it is the pk
+   729→        # shortcut or the attribute name of the field that is specified.
+   730→        if field.is_relation and opts.ordering and getattr(field, 'attname', None) != name and name != 'pk':
+   731→            # Firstly, avoid infinite loops.
+   732→            already_seen = already_seen or set()
+   733→            join_tuple = tuple(getattr(self.query.alias_map[j], 'join_cols', None) for j in joins)
+   734→            if join_tuple in already_seen:
+   735→                raise FieldError('Infinite loop caused by ordering.')
+   736→            already_seen.add(join_tuple)
+   737→
+   738→            results = []
+   739→            for item in opts.ordering:
+   740→                if hasattr(item, 'resolve_expression') and not isinstance(item, OrderBy):
+   741→                    item = item.desc() if descending else item.asc()
+   742→                if isinstance(item, OrderBy):
+   743→                    results.append((item, False))
+   744→                    continue
+   745→                results.extend(self.find_ordering_name(item, opts, alias,
+   746→                                                       order
+sha256: fd48448d470186d7faaa88850ef6a0b3ef8b16767918bc8be91b29637f78fd08
+truncated: true
+
+[ADP ACTION current=31 original=47: api_action Grep]
+path: django/db/models/sql/query.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql/query.py",
+  "pattern": "def setup_joins"
+}
+sha256: 0e0f154cd3f8a022f48de2f8a9472d373de47af7ff0f60aea12607dd10dad62d
+truncated: false
+
+[ADP OBSERVATION current=32 original=48 source=environment]
+name: Grep:toolu_014ghPFJwqT4vKQg5GPZXEEV
+excerpt:
+1520:    def setup_joins(self, names, opts, alias, can_reuse=None, allow_many=True,
+sha256: 7b4e7e6e0d84c82a3b1a4892670e51db610f2b2b86872ca2bad2a9fbe70e0362
+truncated: false
+
+[ADP ACTION current=33 original=49: api_action Read]
+path: django/db/models/sql/query.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/sql/query.py",
+  "limit": 200,
+  "offset": 1520
+}
+sha256: 85e64379c7369ccbc4774872aae12f7b51b0c6e680c870e5e383f48ce0d7d0ce
+truncated: false
+
+[ADP OBSERVATION current=34 original=50 source=environment]
+name: Read:toolu_01JnxREtKLGLhwpCAuHafycq
+excerpt:
+  1520→    def setup_joins(self, names, opts, alias, can_reuse=None, allow_many=True,
+  1521→                    reuse_with_filtered_relation=False):
+  1522→        """
+  1523→        Compute the necessary table joins for the passage through the fields
+  1524→        given in 'names'. 'opts' is the Options class for the current model
+  1525→        (which gives the table we are starting from), 'alias' is the alias for
+  1526→        the table to start the joining from.
+  1527→
+  1528→        The 'can_reuse' defines the reverse foreign key joins we can reuse. It
+  1529→        can be None in which case all joins are reusable or a set of aliases
+  1530→        that can be reused. Note that non-reverse foreign keys are always
+  1531→        reusable when using setup_joins().
+  1532→
+  1533→        The 'reuse_with_filtered_relation' can be used to force 'can_reuse'
+  1534→        parameter and force the relation on the given connections.
+  1535→
+  1536→        If 'allow_many' is False, then any reverse foreign key seen will
+  1537→        generate a MultiJoin exception.
+  1538→
+  1539→        Return the final field involved in the joins, the target field (used
+  1540→        for any 'where' constraint), the final 'opts' value, the joins, the
+  1541→        field path traveled to generate the joins, and a transform function
+  1542→        that takes a field and alias and is equivalent to `field.get_col(alias)`
+  1543→        in the simple case but wraps field transforms if they were included in
+  1544→        names.
+  1545→
+  1546→        The target field is the field containing the concrete value. Final
+  1547→        field can be something different, for example foreign key pointing to
+  1548→        that value. Final field is needed for example in some value
+  1549→        conversions (convert 'obj' in fk__id=obj to pk val using the foreign
+  1550→        key field for example).
+  1551→        """
+  1552→        joins = [alias]
+  1553→        # The transform can't be
+sha256: 88b7f8d32ad612eb9bcc05b0b112b52e9ce94bc7719502011a765fb4c670252f
+truncated: true
+
+[ADP ACTION current=35 original=51: api_action Grep]
+path: django/db/models/sql/query.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql/query.py",
+  "pattern": "def names_to_path"
+}
+sha256: ef2f14d1b3be8fe9dd77af50bef7a243d0d95fc2a94e616db0fc48f29b8e533a
+truncated: false
+
+[ADP OBSERVATION current=36 original=52 source=environment]
+name: Grep:toolu_01Hg5i7e1khCWsfxZFiSMkbE
+excerpt:
+1424:    def names_to_path(self, names, opts, allow_many=True, fail_on_missing=False):
+sha256: 98428c44cb65a6ed778b3ff38581f051a2e9706c0c43d71c832de9890b16811e
+truncated: false
+
+[ADP ACTION current=37 original=53: api_action Read]
+path: django/db/models/sql/query.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/sql/query.py",
+  "limit": 90,
+  "offset": 1424
+}
+sha256: ef53b848c284545c24546e344d1823ebc34e6d48ceb608ab4d17de8312de2047
+truncated: false
+
+[ADP OBSERVATION current=38 original=54 source=environment]
+name: Read:toolu_01Y93geFQPotBQA52iCFDcRc
+excerpt:
+  1424→    def names_to_path(self, names, opts, allow_many=True, fail_on_missing=False):
+  1425→        """
+  1426→        Walk the list of names and turns them into PathInfo tuples. A single
+  1427→        name in 'names' can generate multiple PathInfos (m2m, for example).
+  1428→
+  1429→        'names' is the path of names to travel, 'opts' is the model Options we
+  1430→        start the name resolving from, 'allow_many' is as for setup_joins().
+  1431→        If fail_on_missing is set to True, then a name that can't be resolved
+  1432→        will generate a FieldError.
+  1433→
+  1434→        Return a list of PathInfo tuples. In addition return the final field
+  1435→        (the last used join field) and target (which is a field guaranteed to
+  1436→        contain the same value as the final field). Finally, return those names
+  1437→        that weren't found (which are likely transforms and the final lookup).
+  1438→        """
+  1439→        path, names_with_path = [], []
+  1440→        for pos, name in enumerate(names):
+  1441→            cur_names_with_path = (name, [])
+  1442→            if name == 'pk':
+  1443→                name = opts.pk.name
+  1444→
+  1445→            field = None
+  1446→            filtered_relation = None
+  1447→            try:
+  1448→                field = opts.get_field(name)
+  1449→            except FieldDoesNotExist:
+  1450→                if name in self.annotation_select:
+  1451→                    field = self.annotation_select[name].output_field
+  1452→                elif name in self._filtered_relations and pos == 0:
+  1453→                    filtered_relation = self._filtered_relations[name]
+  1454→                    field = opts.get_field(filtered_relation.relation_name)
+  1455→            if field is not None:
+  1456→                # Fields that contain one-to-many relations with a generic
+  1457→                # model (like a GenericForeignKey) cannot generate reverse
+  1458→                # relations and the
+sha256: c83840995a136494f06436da848af11761a1f668c9f6b9f250509b0c5fb2de4e
+truncated: true
+
+[ADP ACTION current=39 original=55: api_action Grep]
+path: django/db/models
+payload:
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed/django/db/models",
+  "pattern": "_id.*foreign|attname",
+  "type": "py"
+}
+sha256: 894a90b444a4880d17d0984b8c0752205334f07f4595cb7863816b3c2fc18289
+truncated: false
+
+[ADP OBSERVATION current=40 original=56 source=environment]
+name: Grep:toolu_01SY2jSMbr68PgxKc9NkzfNk
+excerpt:
+Found 14 files
+testbed/django/db/models/sql/subqueries.py
+testbed/django/db/models/sql/query.py
+testbed/django/db/models/sql/compiler.py
+testbed/django/db/models/query_utils.py
+testbed/django/db/models/query.py
+testbed/django/db/models/options.py
+testbed/django/db/models/fields/related_lookups.py
+testbed/django/db/models/fields/related_descriptors.py
+testbed/django/db/models/fields/related.py
+testbed/django/db/models/fields/files.py
+testbed/django/db/models/fields/__init__.py
+testbed/django/db/models/expressions.py
+testbed/django/db/models/deletion.py
+testbed/django/db/models/base.py
+sha256: a8910443c0657cedf5f90bf7d0bb08039cab310f9f480a0e5cd5743a525190aa
+truncated: false
+
+[ADP ACTION current=41 original=57: api_action Grep]
+path: django/db/models/options.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/options.py",
+  "pattern": "def get_field"
+}
+sha256: 9f17742d68d84f6895587ac10fac6d8d2d4cbf7487533cd41c1db966fc1d4ddd
+truncated: false
+
+[ADP OBSERVATION current=42 original=58 source=environment]
+name: Grep:toolu_01WeWBXo4UcSWNAruCdwhRnd
+excerpt:
+554:    def get_field(self, field_name):
+733:    def get_fields(self, include_parents=True, include_hidden=False):
+sha256: ef7e3b9665818a300ea52e15c968ac2321367f2fd3b5af79da294d1a2d740209
+truncated: false
+
+[ADP ACTION current=43 original=59: api_action Read]
+path: django/db/models/options.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/options.py",
+  "limit": 40,
+  "offset": 554
+}
+sha256: 9cfd421220b425c5920375445d74a4bc7a16303c8ee5cd8ed906642554c53328
+truncated: false
+
+[ADP OBSERVATION current=44 original=60 source=environment]
+name: Read:toolu_01WbA1SH22rWeiFNL9uL6iVj
+excerpt:
+   554→    def get_field(self, field_name):
+   555→        """
+   556→        Return a field instance given the name of a forward or reverse field.
+   557→        """
+   558→        try:
+   559→            # In order to avoid premature loading of the relation tree
+   560→            # (expensive) we prefer checking if the field is a forward field.
+   561→            return self._forward_fields_map[field_name]
+   562→        except KeyError:
+   563→            # If the app registry is not ready, reverse fields are
+   564→            # unavailable, therefore we throw a FieldDoesNotExist exception.
+   565→            if not self.apps.models_ready:
+   566→                raise FieldDoesNotExist(
+   567→                    "%s has no field named '%s'. The app cache isn't ready yet, "
+   568→                    "so if this is an auto-created related field, it won't "
+   569→                    "be available yet." % (self.object_name, field_name)
+   570→                )
+   571→
+   572→        try:
+   573→            # Retrieve field instance by name from cached or just-computed
+   574→            # field map.
+   575→            return self.fields_map[field_name]
+   576→        except KeyError:
+   577→            raise FieldDoesNotExist("%s has no field named '%s'" % (self.object_name, field_name))
+   578→
+   579→    def get_base_chain(self, model):
+   580→        """
+   581→        Return a list of parent classes leading to `model` (ordered from
+   582→        closest to most distant ancestor). This has to handle the case where
+   583→        `model` is a grandparent or even more distant relation.
+   584→        """
+   585→        if not self.parents:
+   586→            return []
+   587→        if model in self.parents:
+   588→            return [model]
+   589→        for parent in self.parents:
+   590→            res = parent._meta.get_base_chain(model)
+   591→            if res:
+   592→                res.insert(0, parent)
+   593→                return res
+
+sha256: 26c27cf2a11acfedaac16112e4f9cf50e323327ffffc53c3c9cb9a5b1d883eb6
+truncated: false
+
+[ADP ACTION current=45 original=61: api_action Read]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/sql/compiler.py",
+  "limit": 35,
+  "offset": 715
+}
+sha256: ded6d59afe1d4c93e317694fcbc67ec608995f984a553c21a0a9d7fe0e6c812a
+truncated: false
+
+[ADP OBSERVATION current=46 original=62 source=environment]
+name: Read:toolu_01Sq6oAvgconLvMh3Rd1mUxV
+excerpt:
+   715→    def find_ordering_name(self, name, opts, alias=None, default_order='ASC',
+   716→                           already_seen=None):
+   717→        """
+   718→        Return the table alias (the name might be ambiguous, the alias will
+   719→        not be) and column name for ordering by the given 'name' parameter.
+   720→        The 'name' is of the form 'field1__field2__...__fieldN'.
+   721→        """
+   722→        name, order = get_order_dir(name, default_order)
+   723→        descending = order == 'DESC'
+   724→        pieces = name.split(LOOKUP_SEP)
+   725→        field, targets, alias, joins, path, opts, transform_function = self._setup_joins(pieces, opts, alias)
+   726→
+   727→        # If we get to this point and the field is a relation to another model,
+   728→        # append the default ordering for that model unless it is the pk
+   729→        # shortcut or the attribute name of the field that is specified.
+   730→        if field.is_relation and opts.ordering and getattr(field, 'attname', None) != name and name != 'pk':
+   731→            # Firstly, avoid infinite loops.
+   732→            already_seen = already_seen or set()
+   733→            join_tuple = tuple(getattr(self.query.alias_map[j], 'join_cols', None) for j in joins)
+   734→            if join_tuple in already_seen:
+   735→                raise FieldError('Infinite loop caused by ordering.')
+   736→            already_seen.add(join_tuple)
+   737→
+   738→            results = []
+   739→            for item in opts.ordering:
+   740→                if hasattr(item, 'resolve_expression') and not isinstance(item, OrderBy):
+   741→                    item = item.desc() if descending else item.asc()
+   742→                if isinstance(item, OrderBy):
+   743→                    results.append((item, False))
+   744→                    continue
+   745→                results.extend(self.find_ordering_name(item, opts, alias,
+   746→                                                       order
+sha256: c3b7f05d080f99b224d7e53220c2eeff356df2d067c288a23020a0734c87d849
+truncated: true
+
+[ADP ACTION current=47 original=65: api_action Edit]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/sql/compiler.py",
+  "new_text_sha256": "93e796ab8fb416b11f5a213fa7e2a8bc5b995a981dbedb6a4ac9a1da2edd9672",
+  "old_text_sha256": "c9396627b91a57b2d6d758b270bc682ed73057984c8543d1ed1d4dcc753a6f2d"
+}
+sha256: 4202bc5a0dab2e08d6fc4ff8f4d35679e6a6199420df647b63768b4247a3329d
+truncated: false
+
+[ADP ACTION current=48 original=69: code_action bash]
+payload:
+python3 test_issue.py
+sha256: 3b9c2c5d0a946e72739b3c4d82e01013d9dd9a6ab7c8c108391264c197a8d603
+truncated: false
+
+[ADP OBSERVATION current=49 original=70 source=environment]
+name: Bash:toolu_01UeCM2aj5QsK3fydr1EVrkA
+excerpt:
+================================================================================
+Test 1: order_by('record__root_id') - PROBLEMATIC
+================================================================================
+SELECT "test_app_twomodel"."id", "test_app_twomodel"."record_id", "test_app_twomodel"."twoval" FROM "test_app_twomodel" INNER JOIN "test_app_onemodel" ON ("test_app_twomodel"."record_id" = "test_app_onemodel"."id") WHERE "test_app_onemodel"."oneval" IN (1, 2, 3) ORDER BY "test_app_onemodel"."root_id" ASC
+
+❌ ISSUE: Multiple joins to OneModel found!
+
+================================================================================
+Test 2: order_by('record__root__id') - WORKAROUND (should work)
+================================================================================
+SELECT "test_app_twomodel"."id", "test_app_twomodel"."record_id", "test_app_twomodel"."twoval" FROM "test_app_twomodel" INNER JOIN "test_app_onemodel" ON ("test_app_twomodel"."record_id" = "test_app_onemodel"."id") WHERE "test_app_onemodel"."oneval" IN (1, 2, 3) ORDER BY "test_app_onemodel"."root_id" ASC
+
+✓ No unnecessary joins
+✓ Correct ASC ordering
+
+================================================================================
+Test 3: order_by('-record__root_id') - Should be DESC
+================================================================================
+SELECT "test_app_twomodel"."id", "test_app_twomodel"."record_id", "test_app_twomodel"."twoval" FROM "test_app_twomodel" INNER JOIN "test_app_onemodel" ON ("test_app_twomodel"."record_id" = "test_app_onemodel"."id") WHERE "test_app_onemodel"."oneval" IN (1, 2, 3) ORDER BY "test_app_onemodel"."root_id" DESC
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+
+sha256: e6671db61969e237d18c5dae90a0820e43252765a9eb92f903c168b3005ef1c9
+truncated: true
+
+[ADP ACTION current=50 original=75: code_action bash]
+payload:
+python3 test_issue.py
+sha256: ceab3ddd9448ebbd99ad87beb7b7be2eca67009ed98a7570a57a8a0aca6e87fd
+truncated: false
+
+[ADP OBSERVATION current=51 original=76 source=environment]
+name: Bash:toolu_01WBurCC9ozjMxSdZg1WXgP3
+excerpt:
+================================================================================
+Test 1: order_by('record__root_id') - PROBLEMATIC
+================================================================================
+SELECT "test_app_twomodel"."id", "test_app_twomodel"."record_id", "test_app_twomodel"."twoval" FROM "test_app_twomodel" INNER JOIN "test_app_onemodel" ON ("test_app_twomodel"."record_id" = "test_app_onemodel"."id") WHERE "test_app_onemodel"."oneval" IN (1, 2, 3) ORDER BY "test_app_onemodel"."root_id" ASC
+
+✓ All checks passed!
+
+================================================================================
+Test 2: order_by('record__root__id') - WORKAROUND (should work)
+================================================================================
+SELECT "test_app_twomodel"."id", "test_app_twomodel"."record_id", "test_app_twomodel"."twoval" FROM "test_app_twomodel" INNER JOIN "test_app_onemodel" ON ("test_app_twomodel"."record_id" = "test_app_onemodel"."id") WHERE "test_app_onemodel"."oneval" IN (1, 2, 3) ORDER BY "test_app_onemodel"."root_id" ASC
+
+✓ No unnecessary joins
+✓ Correct ASC ordering
+
+================================================================================
+Test 3: order_by('-record__root_id') - Should be DESC
+================================================================================
+SELECT "test_app_twomodel"."id", "test_app_twomodel"."record_id", "test_app_twomodel"."twoval" FROM "test_app_twomodel" INNER JOIN "test_app_onemodel" ON ("test_app_twomodel"."record_id" = "test_app_onemodel"."id") WHERE "test_app_onemodel"."oneval" IN (1, 2, 3) ORDER BY "test_app_onemodel"."root_id" DESC
+
+✓ All checks passed!
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+
+sha256: 28a717c8718b60bb06fd427d3a366259a1521079a9a9fef54278632a618fbb90
+truncated: true
+
+[ADP ACTION current=52 original=77: code_action bash]
+payload:
+cd testbed && python3 tests/runtests.py --settings=test_sqlite queries.test_ordering -v2 2>&1 | head -100
+sha256: 50b5c9d80529bbc83a22b767f579b1fac2e4391af21e0669476b15d9a78ac0e7
+truncated: false
+
+[ADP OBSERVATION current=53 original=78 source=environment]
+name: Bash:toolu_01FzFX9FGSD1u29yKqRY9uaM
+excerpt:
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+test_ordering (unittest.loader._FailedTest) ... ERROR
+
+======================================================================
+ERROR: test_ordering (unittest.loader._FailedTest)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_ordering
+Traceback (most recent call last):
+  File "/opt/anaconda3/lib/python3.8/unittest/loader.py", line 154, in loadTestsFromName
+    module = __import__(module_name)
+ModuleNotFoundError: No module named 'queries.test_ordering'
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (errors=1)
+Testing against Django installed in './swebench_9_15/testbed/django'
+Importing application queries
+Skipping setup of unused database(s): default, other.
+System check identified no issues (1 silenced).
+sha256: 59f1cf3ccf246735ad35f072a6ac6c8670335b41308ca34b2966a23b8e8e1f8b
+truncated: false
+
+[ADP ACTION current=54 original=79: code_action bash]
+payload:
+find testbed/tests -name "*order*" -type f | head -10
+sha256: d4395dafe8f924b62be7d5b1af9e3f6401c98bc40196525445cbeaf5a8474919
+truncated: false
+
+[ADP ACTION current=55 original=81: code_action bash]
+payload:
+find testbed -name "tests" -type d | head -5
+sha256: 7377aadd422c751e49311ac5c148be15200f810a0f94312cd313a79cdfe72588
+truncated: false
+
+[ADP ACTION current=56 original=87: code_action bash]
+payload:
+find tests -name "*order*" -type f | head -10
+sha256: e5fa9bbb0b7b7190c858e984e6a408c973d633f7c8f17f2e9d1675d32164bb1c
+truncated: false
+
+[ADP OBSERVATION current=57 original=88 source=environment]
+name: Bash:toolu_01PiPVG49dnjpuznBvvDy1a7
+excerpt:
+tests/foreign_object/test_agnostic_order_trimjoin.py
+tests/template_tests/filter_tests/test_unordered_list.py
+tests/contenttypes_tests/test_order_with_respect_to.py
+sha256: 710d687f69d0b24a92b3e929f546c2d229fa85e804e3c2d30c9c788c991380ec
+truncated: false
+
+[ADP ACTION current=58 original=89: code_action bash]
+payload:
+ls tests/queries/ | grep -i test
+sha256: 3082d4e42b0280a3ab346e0d7db1dd8de2126c093f1b601cfb45f1916ca468ca
+truncated: false
+
+[ADP OBSERVATION current=59 original=90 source=environment]
+name: Bash:toolu_013q1awUN1vAZBJQpLzPKi8o
+excerpt:
+test_bulk_update.py
+test_db_returning.py
+test_deprecation.py
+test_explain.py
+test_iterator.py
+test_q.py
+test_qs_combinators.py
+test_query.py
+tests.py
+sha256: f93bf264256594d01600bfc2ba96e55a5a19f6ca5feda1bf6dbe1c7761bbce93
+truncated: false
+
+[ADP ACTION current=60 original=91: code_action bash]
+payload:
+python3 tests/runtests.py queries --settings=test_sqlite -v2 2>&1 | tail -50
+sha256: 332131985df4a7922d722ed598a1f80fbee1dbe366aec1508b3ebad7fa20d4ba
+truncated: false
+
+[ADP OBSERVATION current=61 original=92 source=environment]
+name: Bash:toolu_011BDka4qg7oYSMmJPKwuSRj
+excerpt:
+    Creating table queries_modelb
+    Creating table queries_modela
+    Creating table queries_job
+    Creating table queries_jobresponsibilities
+    Creating table queries_responsibility
+    Creating table queries_fk1
+    Creating table queries_fk2
+    Creating table queries_fk3
+    Creating table queries_basea
+    Creating table queries_identifier
+    Creating table queries_program
+    Creating table queries_channel
+    Creating table queries_book
+    Creating table queries_chapter
+    Creating table queries_paragraph
+    Creating table queries_page
+    Creating table queries_myobject
+    Creating table queries_order
+    Creating table queries_orderitem
+    Creating table queries_baseuser
+    Creating table queries_task
+    Creating table queries_staff
+    Creating table queries_staffuser
+    Creating table queries_ticket21203parent
+    Creating table queries_ticket21203child
+    Creating table queries_person
+    Creating table queries_company
+    Creating table queries_employment
+    Creating table queries_school
+    Creating table queries_student
+    Creating table queries_classroom
+    Creating table queries_teacher
+    Creating table queries_ticket23605aparent
+    Creating table queries_ticket23605a
+    Creating table queries_ticket23605b
+    Creating table queries_ticket23605c
+    Creating table Individual
+    Creating table RelatedIndividual
+    Creating table queries_customdbcolumn
+    Creating table queries_returningmodel
+    Creating table queries_nonintegerpkreturningmodel
+    Creating table queries_jsonfieldnullable
+    Running deferred SQL...
+Running migrations:
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying sites.0001_initial... OK
+  Applying sites.0002_alter_domain_unique... OK
+System check identified no issues (1 silenced).
+sha256: 447f4c935245402a52a09ac23024e43d4727b3dcd96e54e6bd8d4e7b82c39441
+truncated: false
+
+[ADP ACTION current=62 original=93: code_action bash]
+payload:
+python3 tests/runtests.py queries --settings=test_sqlite -v1 2>&1 | grep -E "(OK|FAILED|ERROR|test_)" | tail -100
+sha256: f3b60e369edc7db3a0bca3b3552c13a0877b6b32ea4bb21a0aa2f7f8df589807
+truncated: false
+
+[ADP OBSERVATION current=63 original=94 source=environment]
+name: Bash:toolu_0147oaRXZeapzcB4jvg9kA2o
+excerpt:
+OK (skipped=13, expected failures=2)
+sha256: c55323ab150e6099006d5b608da6e973a0205571bd3398b7406aea26191db035
+truncated: false
+
+[ADP ACTION current=64 original=95: code_action bash]
+payload:
+python3 tests/runtests.py ordering --settings=test_sqlite -v1 2>&1 | grep -E "(OK|FAILED|ERROR)" | tail -20
+sha256: ca8873e9ab38b6f11916f64199f0e756f28432ad13d124265a3d9c8d66d55ed6
+truncated: false
+
+[ADP OBSERVATION current=65 original=96 source=environment]
+name: Bash:toolu_018a7jNzLQbLuvpncysMWYLe
+excerpt:
+OK
+sha256: 565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3
+truncated: false
+
+[ADP ACTION current=66 original=97: api_action Write]
+path: test_comprehensive.py
+payload:
+{
+  "content_sha256": "9a44a0bc10e97725c661067f3a11b0f157a1b3128c086958a5a050a123f0a6cc",
+  "file_path": "./swebench_9_15/testbed/test_comprehensive.py"
+}
+sha256: de1f3fa2ff046a06bd53d629b74604b71b8a092bb64560f33acdd528b8ff59ca
+truncated: false
+
+[ADP ACTION current=67 original=99: code_action bash]
+payload:
+python3 test_comprehensive.py
+sha256: 3415c63d6d24278ff661625874b30f1ce927d796ee69e18d4fa7d3cc91292616
+truncated: false
+
+[ADP OBSERVATION current=68 original=100 source=environment]
+name: Bash:toolu_01VbMNYSDqJQwsKzSVPERCuk
+excerpt:
+================================================================================
+Testing self-referencing foreign key ordering issue
+================================================================================
+
+Test 1: order_by('record__root_id')
+SQL: SELECT "test_app_twomodel"."id", "test_app_twomodel"."record_id", "test_app_twomodel"."twoval" FROM "test_app_twomodel" INNER JOIN "test_app_onemodel" ON ("test_app_twomodel"."record_id" = "test_app_onemodel"."id") WHERE "test_app_onemodel"."oneval" IN (1, 2, 3) ORDER BY "test_app_onemodel"."root_id" ASC
+Results: [(1, 1), (3, 1), (2, 2)]
+✓ Test 1 passed!
+
+Test 2: order_by('-record__root_id')
+SQL: SELECT "test_app_twomodel"."id", "test_app_twomodel"."record_id", "test_app_twomodel"."twoval" FROM "test_app_twomodel" INNER JOIN "test_app_onemodel" ON ("test_app_twomodel"."record_id" = "test_app_onemodel"."id") WHERE "test_app_onemodel"."oneval" IN (1, 2, 3) ORDER BY "test_app_onemodel"."root_id" DESC
+Results: [(2, 2), (3, 1), (1, 1)]
+✓ Test 2 passed!
+
+Test 3: order_by('record__root__id') - workaround
+SQL: SELECT "test_app_twomodel"."id", "test_app_twomodel"."record_id", "test_app_twomodel"."twoval" FROM "test_app_twomodel" INNER JOIN "test_app_onemodel" ON ("test_app_twomodel"."record_id" = "test_app_onemodel"."id") WHERE "test_app_onemodel"."oneval" IN (1, 2, 3) ORDER BY "test_app_onemodel"."root_id" ASC
+Results: [(1, 1), (3, 1), (2, 2)]
+✓ Test 3 passed!
+
+================================================================================
+All tests passed! Issue django__django-13033 is fixed!
+================================================================================
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'Non
+sha256: 02648103454549601b6d055a462a12ca94a6ffa4776d180fab9461c87ed27a97
+truncated: true

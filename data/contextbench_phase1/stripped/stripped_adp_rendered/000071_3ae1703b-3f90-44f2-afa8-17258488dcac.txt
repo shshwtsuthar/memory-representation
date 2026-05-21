@@ -1,0 +1,480 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 3ae1703b-3f90-44f2-afa8-17258488dcac
+- repo: django/django
+- instance_id: django__django-14752
+- base_commit: b64db05b9cedd96905d637a2d824cbbf428e40e7
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-14752
+base_commit: b64db05b9cedd96905d637a2d824cbbf428e40e7
+problem_statement:
+Refactor AutocompleteJsonView to support extra fields in autocomplete response
+Description
+
+        (last modified by mrts)
+
+Adding data attributes to items in ordinary non-autocomplete foreign key fields that use forms.widgets.Select-based widgets is relatively easy. This enables powerful and dynamic admin site customizations where fields from related models are updated immediately when users change the selected item.
+However, adding new attributes to autocomplete field results currently requires extending contrib.admin.views.autocomplete.AutocompleteJsonView and fully overriding the AutocompleteJsonView.get() method. Here's an example:
+class MyModelAdmin(admin.ModelAdmin):
+    def get_urls(self):
+        return [
+            path('autocomplete/', CustomAutocompleteJsonView.as_view(admin_site=self.admin_site))
+            if url.pattern.match('autocomplete/')
+            else url for url in super().get_urls()
+        ]
+class CustomAutocompleteJsonView(AutocompleteJsonView):
+    def get(self, request, *args, **kwargs):
+        self.term, self.model_admin, self.source_field, to_field_name = self.process_request(request)
+        if not self.has_perm(request):
+            raise PermissionDenied
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+        return JsonResponse({
+            'results': [
+                {'id': str(getattr(obj, to_field_name)), 'text': str(obj), 'notes': obj.notes} # <-- customization here
+                for obj in context['object_list']
+            ],
+            'pagination': {'more': context['page_obj'].has_next()},
+        })
+The problem with this is that as AutocompleteJsonView.get() keeps evolving, there's quite a lot of maintenance overhead required to catch up.
+The solutions is simple, side-effect- and risk-free: adding a result customization extensio
+sha256: cf9dcac8269f6961783c30594b1025e38f088269558514c1e31f920d020c5c72
+truncated: true
+
+[ADP ACTION current=1 original=5: api_action Glob]
+payload:
+{
+  "pattern": "**/autocomplete.py"
+}
+sha256: 946c77c8478ac7bd86252f9a83f2a4a6c8ec340e57314c3f785f463b941fc5b7
+truncated: false
+
+[ADP ACTION current=2 original=9: code_action bash]
+payload:
+find . -name "*14752*" -o -name "*.json" | head -20
+sha256: 4be43a62a8898748cc19881a2092c5513fcd77eb788f591ba9e70704c412672b
+truncated: false
+
+[ADP ACTION current=3 original=21: api_action Glob]
+payload:
+{
+  "pattern": "testbed/**/autocomplete.py"
+}
+sha256: d3e8de20f913c1a999043cdc3a64b3cc35b93081f28f2483f8ddbe028e801b3b
+truncated: false
+
+[ADP OBSERVATION current=4 original=22 source=environment]
+name: Glob:toolu_01E369ANLwEtPK7Zn6dap9p2
+excerpt:
+./swebench_9_15/testbed/django/contrib/admin/views/autocomplete.py
+sha256: 3c32d47e526d2ab07f760e27b2763a926e31f3a456e01d0b5c65c83f132c0c07
+truncated: false
+
+[ADP ACTION current=5 original=23: api_action Read]
+path: django/contrib/admin/views/autocomplete.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/contrib/admin/views/autocomplete.py"
+}
+sha256: 0dcb15b99ee3440eeb2be3f831c06d0448f750d9144fb258f548ce118c740ba0
+truncated: false
+
+[ADP OBSERVATION current=6 original=24 source=environment]
+name: Read:toolu_01PBZbkCau4pG18u3pAkAA3o
+excerpt:
+     1→from django.apps import apps
+     2→from django.core.exceptions import FieldDoesNotExist, PermissionDenied
+     3→from django.http import Http404, JsonResponse
+     4→from django.views.generic.list import BaseListView
+     5→
+     6→
+     7→class AutocompleteJsonView(BaseListView):
+     8→    """Handle AutocompleteWidget's AJAX requests for data."""
+     9→    paginate_by = 20
+    10→    admin_site = None
+    11→
+    12→    def get(self, request, *args, **kwargs):
+    13→        """
+    14→        Return a JsonResponse with search results of the form:
+    15→        {
+    16→            results: [{id: "123" text: "foo"}],
+    17→            pagination: {more: true}
+    18→        }
+    19→        """
+    20→        self.term, self.model_admin, self.source_field, to_field_name = self.process_request(request)
+    21→
+    22→        if not self.has_perm(request):
+    23→            raise PermissionDenied
+    24→
+    25→        self.object_list = self.get_queryset()
+    26→        context = self.get_context_data()
+    27→        return JsonResponse({
+    28→            'results': [
+    29→                {'id': str(getattr(obj, to_field_name)), 'text': str(obj)}
+    30→                for obj in context['object_list']
+    31→            ],
+    32→            'pagination': {'more': context['page_obj'].has_next()},
+    33→        })
+    34→
+    35→    def get_paginator(self, *args, **kwargs):
+    36→        """Use the ModelAdmin's paginator."""
+    37→        return self.model_admin.get_paginator(self.request, *args, **kwargs)
+    38→
+    39→    def get_queryset(self):
+    40→        """Return queryset based on ModelAdmin.get_search_results()."""
+    41→        qs = self.model_admin.get_queryset(self.request)
+    42→        qs = qs.complex_filter(self.source_field.get_limit_choices_to())
+    43→        qs, search_use_distinct = self.model_admin.get_search_results(self.request, qs, self.term)
+    44→        if search_use_distinct:
+    45→            qs = qs.distinct
+sha256: 4769f179cbc89c0c8acc131c1a374930ea26a859b845aa09fb64807534337795
+truncated: true
+
+[ADP ACTION current=7 original=27: api_action Edit]
+path: django/contrib/admin/views/autocomplete.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/contrib/admin/views/autocomplete.py",
+  "new_text_sha256": "a39282a2f61567bee90a4355542d1f5fc687e78c24c0e63c70e521b29587de34",
+  "old_text_sha256": "fe75bea5040c9d9f1caa6912061d85e935e991b45de97b4b79f2d2968bb15ff4"
+}
+sha256: 9df1c0546e294d018517d560e36304d2bc5792e0f6a21d299a8a297f46b71b1e
+truncated: false
+
+[ADP ACTION current=8 original=29: api_action Edit]
+path: django/contrib/admin/views/autocomplete.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/contrib/admin/views/autocomplete.py",
+  "new_text_sha256": "e7ec86ce704514ff591525547fe32838fe6b871941a2f3dc5abec113c61ce90e",
+  "old_text_sha256": "e2444bf4f93e3c304c321170e93a698807007ed98725417c140e875831a47fc3"
+}
+sha256: d6c2c5689fb6e19952300b66b3f966eb3c36c5d30116d11861253864e2b3457a
+truncated: false
+
+[ADP ACTION current=9 original=31: api_action Read]
+path: django/contrib/admin/views/autocomplete.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/contrib/admin/views/autocomplete.py"
+}
+sha256: 1574f8242e5aa2f9dacb994ee0026e22106931c04c2ddb15a400fbb24e0ab527
+truncated: false
+
+[ADP OBSERVATION current=10 original=32 source=environment]
+name: Read:toolu_01Gshs9sN3oVE5e4FtmXUTuY
+excerpt:
+     1→from django.apps import apps
+     2→from django.core.exceptions import FieldDoesNotExist, PermissionDenied
+     3→from django.http import Http404, JsonResponse
+     4→from django.views.generic.list import BaseListView
+     5→
+     6→
+     7→class AutocompleteJsonView(BaseListView):
+     8→    """Handle AutocompleteWidget's AJAX requests for data."""
+     9→    paginate_by = 20
+    10→    admin_site = None
+    11→
+    12→    def get(self, request, *args, **kwargs):
+    13→        """
+    14→        Return a JsonResponse with search results of the form:
+    15→        {
+    16→            results: [{id: "123" text: "foo"}],
+    17→            pagination: {more: true}
+    18→        }
+    19→        """
+    20→        self.term, self.model_admin, self.source_field, to_field_name = self.process_request(request)
+    21→
+    22→        if not self.has_perm(request):
+    23→            raise PermissionDenied
+    24→
+    25→        self.object_list = self.get_queryset()
+    26→        context = self.get_context_data()
+    27→        return JsonResponse({
+    28→            'results': [
+    29→                self.serialize_result(obj, to_field_name)
+    30→                for obj in context['object_list']
+    31→            ],
+    32→            'pagination': {'more': context['page_obj'].has_next()},
+    33→        })
+    34→
+    35→    def serialize_result(self, obj, to_field_name):
+    36→        """
+    37→        Convert the provided model object to a dictionary that is added to the
+    38→        results list.
+    39→        """
+    40→        return {'id': str(getattr(obj, to_field_name)), 'text': str(obj)}
+    41→
+    42→    def get_paginator(self, *args, **kwargs):
+    43→        """Use the ModelAdmin's paginator."""
+    44→        return self.model_admin.get_paginator(self.request, *args, **kwargs)
+    45→
+    46→    def get_queryset(self):
+    47→        """Return queryset based on ModelAdmin.get_search_results()."""
+    48→        qs = self.model_admin.get
+sha256: 464f010e8e50b792efba2b7cacf72084ecb5149b5179cc2d281966bdcb12ddda
+truncated: true
+
+[ADP ACTION current=11 original=35: code_action bash]
+payload:
+find testbed -name "*test*autocomplete*" -type f | head -10
+sha256: cf94ee6f0031ebcfd401b08c3f71920844f5313b4dff3d18e564a989a67ed663
+truncated: false
+
+[ADP OBSERVATION current=12 original=36 source=environment]
+name: Bash:toolu_014Aa8fC3KGL7vyUBFdc8Gkp
+excerpt:
+testbed/tests/admin_views/test_autocomplete_view.py
+testbed/tests/admin_widgets/test_autocomplete_widget.py
+sha256: 30624e72e4e96245322a6297f33b1ff00101cb1f56568ca486c6dd4fe7471f8f
+truncated: false
+
+[ADP ACTION current=13 original=37: api_action Read]
+path: tests/admin_views/test_autocomplete_view.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/tests/admin_views/test_autocomplete_view.py"
+}
+sha256: 3b762f9f450c6f2f5286016f32bd37fb853757269f88255bc4c018f0c6f4b78d
+truncated: false
+
+[ADP OBSERVATION current=14 original=38 source=environment]
+name: Read:toolu_019GAsXwAafwLLApMvm34xsm
+excerpt:
+     1→import json
+     2→from contextlib import contextmanager
+     3→
+     4→from django.contrib import admin
+     5→from django.contrib.admin.tests import AdminSeleniumTestCase
+     6→from django.contrib.admin.views.autocomplete import AutocompleteJsonView
+     7→from django.contrib.auth.models import Permission, User
+     8→from django.contrib.contenttypes.models import ContentType
+     9→from django.core.exceptions import PermissionDenied
+    10→from django.http import Http404
+    11→from django.test import RequestFactory, override_settings
+    12→from django.urls import reverse, reverse_lazy
+    13→
+    14→from .admin import AnswerAdmin, QuestionAdmin
+    15→from .models import (
+    16→    Answer, Author, Authorship, Bonus, Book, Employee, Manager, Parent,
+    17→    PKChild, Question, Toy, WorkHour,
+    18→)
+    19→from .tests import AdminViewBasicTestCase
+    20→
+    21→PAGINATOR_SIZE = AutocompleteJsonView.paginate_by
+    22→
+    23→
+    24→class AuthorAdmin(admin.ModelAdmin):
+    25→    ordering = ['id']
+    26→    search_fields = ['id']
+    27→
+    28→
+    29→class AuthorshipInline(admin.TabularInline):
+    30→    model = Authorship
+    31→    autocomplete_fields = ['author']
+    32→
+    33→
+    34→class BookAdmin(admin.ModelAdmin):
+    35→    inlines = [AuthorshipInline]
+    36→
+    37→
+    38→site = admin.AdminSite(name='autocomplete_admin')
+    39→site.register(Question, QuestionAdmin)
+    40→site.register(Answer, AnswerAdmin)
+    41→site.register(Author, AuthorAdmin)
+    42→site.register(Book, BookAdmin)
+    43→site.register(Employee, search_fields=['name'])
+    44→site.register(WorkHour, autocomplete_fields=['employee'])
+    45→site.register(Manager, search_fields=['name'])
+    46→site.register(Bonus, autocomplete_fields=['recipient'])
+    47→site.register(PKChild, search_fields=['name'])
+    48→site.register(Toy, autocomplete_fields=['child'])
+    49→
+    50→
+    51→@contextmanager
+    52→def model_admin(model, model_admin, admin_site=site):
+    53
+sha256: 2a695a2aba1a8112fddace1a0dbb8cea8bfd1a28985f47ae997a74d08b11b03a
+truncated: true
+
+[ADP ACTION current=15 original=39: code_action bash]
+payload:
+cd testbed && python -m pytest tests/admin_views/test_autocomplete_view.py::AutocompleteJsonViewTests -xvs
+sha256: 13bd004af768b4c91baa905bef38d180d47fd9d123c232f06b02ab28c382af1c
+truncated: false
+
+[ADP OBSERVATION current=16 original=40 source=environment]
+name: Bash:toolu_01Ef8tkYSpPZJeaRw89mr3Sb:error
+excerpt:
+Exit code 1
+/Applications/ADFRsuite-1.0/bin/python: No module named pytest
+sha256: 21eb35765ee9eb93cc09bda0d867ebc56b6f0517b5f6079049d0fd96870f323c
+truncated: false
+
+[ADP ACTION current=17 original=41: code_action bash]
+payload:
+cd testbed && python tests/runtests.py admin_views.test_autocomplete_view.AutocompleteJsonViewTests
+sha256: 396abb31381680f0c85f47f963c85a3aee1af074f96f4ea14b4ea32bb931c043
+truncated: false
+
+[ADP OBSERVATION current=18 original=42 source=environment]
+name: Bash:toolu_01GFTnY1bsPJiLEvkDxr95VN:error
+excerpt:
+Exit code 1
+  File "tests/runtests.py", line 20
+    ) from e
+         ^
+SyntaxError: invalid syntax
+sha256: d76df0289a6fe41ae6c4bfe5b506a361b39d4bcfe056aed7aed40cf4124f0942
+truncated: false
+
+[ADP ACTION current=19 original=43: code_action bash]
+payload:
+cd testbed && python3 tests/runtests.py admin_views.test_autocomplete_view.AutocompleteJsonViewTests
+sha256: 2ced04494c88fb487ab63e584012acf600601790cb04f4dcefaa01bc9814b6ae
+truncated: false
+
+[ADP OBSERVATION current=20 original=44 source=environment]
+name: Bash:toolu_01VBpUMcpVkpDhp3MyH1F1vZ
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django'
+Found 15 test(s).
+System check identified no issues (1 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Creating test database for alias 'default'...
+...............
+----------------------------------------------------------------------
+Ran 15 tests in 0.335s
+
+OK
+Destroying test database for alias 'default'...
+sha256: ce80225d3ddb7c5391af15f9465f465150fd08e0d6d2469eab5b94c6feec7957
+truncated: false
+
+[ADP ACTION current=21 original=47: code_action bash]
+payload:
+cd ./swebench_9_15 && python3 test_issue.py
+sha256: 0b5a2dcf048586fd0dda48aad6831bb864f31df7723c4b906246cd58c7065a5d
+truncated: false
+
+[ADP OBSERVATION current=22 original=48 source=environment]
+name: Bash:toolu_01Wnn4L28LjA7UbNRtKYinTh:error
+excerpt:
+Exit code 1
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+No sympy found
+Traceback (most recent call last):
+  File "test_issue.py", line 14, in <module>
+    django.setup()
+  File "./swebench_9_15/testbed/django/__init__.py", line 19, in setup
+    configure_logging(settings.LOGGING_CONFIG, settings.LOGGING)
+  File "./swebench_9_15/testbed/django/conf/__init__.py", line 69, in __getattr__
+    self._setup(name)
+  File "./swebench_9_15/testbed/django/conf/__init__.py", line 56, in _setup
+    self._wrapped = Settings(settings_module)
+  File "./swebench_9_15/testbed/django/conf/__init__.py", line 143, in __init__
+    mod = importlib.import_module(self.SETTINGS_MODULE)
+  File "/opt/anaconda3/lib/python3.8/importlib/__init__.py", line 127, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1014, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 991, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 961, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 219, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1014, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 991, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 975, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 671, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 783, in exec_module
+  File "<frozen importlib._bootstrap>", line 219, in _call_with_frames_removed
+  File "/opt/anaconda3/lib/python3.8/site-packages/tests/__init__.py", line 3,
+sha256: 90051edb609e854d932a1e0053791fa52f5ed774f0849fe1f74052909e998f63
+truncated: true
+
+[ADP ACTION current=23 original=49: api_action Write]
+path: test_serialize_result.py
+payload:
+{
+  "content_sha256": "3240ee07ebefe9e97cc9246c0acd2cfc3aedea510273223dac9c9cf3480c8abe",
+  "file_path": "./swebench_9_15/testbed/test_serialize_result.py"
+}
+sha256: e875b48baf70e7dae3f6b14f203738f462b5e4d15bdc33b11e9cc0f3a8afda49
+truncated: false
+
+[ADP ACTION current=24 original=51: code_action bash]
+payload:
+cd testbed && python3 test_serialize_result.py
+sha256: d5724bad92582194e2990d816c813549c5aab2685480d777f6857be1c5b86cca
+truncated: false
+
+[ADP ACTION current=25 original=53: code_action bash]
+payload:
+python3 ./swebench_9_15/testbed/test_serialize_result.py
+sha256: dc853df9da4355ccfa8b16f841a2fdb1d9a1cf8f379a31967e9922f072c031bb
+truncated: false
+
+[ADP OBSERVATION current=26 original=54 source=environment]
+name: Bash:toolu_01JtHTXDLSRgeQ7A1uAKhhdT:error
+excerpt:
+Exit code 1
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+No sympy found
+Traceback (most recent call last):
+  File "./swebench_9_15/testbed/test_serialize_result.py", line 16, in <module>
+    django.setup()
+  File "./swebench_9_15/testbed/django/__init__.py", line 19, in setup
+    configure_logging(settings.LOGGING_CONFIG, settings.LOGGING)
+  File "./swebench_9_15/testbed/django/conf/__init__.py", line 69, in __getattr__
+    self._setup(name)
+  File "./swebench_9_15/testbed/django/conf/__init__.py", line 56, in _setup
+    self._wrapped = Settings(settings_module)
+  File "./swebench_9_15/testbed/django/conf/__init__.py", line 143, in __init__
+    mod = importlib.import_module(self.SETTINGS_MODULE)
+  File "/opt/anaconda3/lib/python3.8/importlib/__init__.py", line 127, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1014, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 991, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 961, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 219, in _call_with_frames_removed
+  File "<frozen importlib._bootstrap>", line 1014, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 991, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 975, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 671, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 783, in exec_module
+  File "<frozen importlib._bootstrap>", line 219, in _call_with_frames_removed
+  File "/opt/anaconda3/lib/python3.8/site-pa
+sha256: 71d1abaaa6d2076704106c374b60a027febd17f116c79340044da9a6540b7250
+truncated: true

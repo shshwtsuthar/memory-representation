@@ -1,0 +1,514 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: e85f5ee0-5e26-4a4b-b727-c1289527fe3f
+- repo: sympy/sympy
+- instance_id: sympy__sympy-20049
+- base_commit: d57aaf064041fe52c0fa357639b069100f8b28e1
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Point.vel() should calculate the velocity if possible
+If you specify the orientation of two reference frames and then ask for the angular velocity between the two reference frames the angular velocity will be calculated. But if you try to do the same thing with velocities, this doesn't work. See below:
+
+```
+In [1]: import sympy as sm
+
+In [2]: import sympy.physics.mechanics as me
+
+In [3]: A = me.ReferenceFrame('A')
+
+In [5]: q = me.dynamicsymbols('q')
+
+In [6]: B = A.orientnew('B', 'Axis', (q, A.x))
+
+In [7]: B.ang_vel_in(A)
+Out[7]: q'*A.x
+
+In [9]: P = me.Point('P')
+
+In [10]: Q = me.Point('Q')
+
+In [11]: r = q*A.x + 2*q*A.y
+
+In [12]: Q.set_pos(P, r)
+
+In [13]: Q.vel(A)
+---------------------------------------------------------------------------
+ValueError                                Traceback (most recent call last)
+<ipython-input-13-0fc8041904cc> in <module>
+----> 1 Q.vel(A)
+
+~/miniconda3/lib/python3.6/site-packages/sympy/physics/vector/point.py in vel(self, frame)
+    453         if not (frame in self._vel_dict):
+    454             raise ValueError('Velocity of point ' + self.name + ' has not been'
+--> 455                              ' defined in ReferenceFrame ' + frame.name)
+    456         return self._vel_dict[frame]
+    457
+
+ValueError: Velocity of point Q has not been defined in ReferenceFrame A
+```
+
+The expected result of the `Q.vel(A)` should be:
+
+```
+In [14]: r.dt(A)
+Out[14]: q'*A.x + 2*q'*A.y
+```
+
+I think that this is possible. Maybe there is a reason it isn't implemented. But we should try to implement it because it is confusing why this works for orientations and not positions.
+
+FILES INSPECTED
+---------------
+- sympy/physics/vector/point.py [Read: 4]
+- sympy/physics/vector/frame.py [Read: 6, Grep: 4]
+- sympy/physics/vector/tests/test_point.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [7] Grep pattern='def ang_vel_in' path='sympy/physics/vector/frame.py'
+- [11] Grep pattern='def _dict_list' path='sympy/physics/vector/frame.py'
+- [15] Grep pattern='def orientnew' path='sympy/physics/vector/frame.py'
+- [19] Grep pattern='def orient\\(' path='sympy/physics/vector/frame.py'
+- [50] Glob path='swebench_9_15/testbed' glob='**/test*point*.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find . -type f -name "*.yaml" | grep -i manual
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [test] cd testbed && python test_issue.py
+- [test] python ./swebench_9_15/testbed/test_issue.py
+- [test] python ./swebench_9_15/testbed/test_issue.py
+- [test] python3 ./swebench_9_15/testbed/test_issue.py
+- [test] python3 ./swebench_9_15/testbed/test_issue.py
+- [test] python3 ./swebench_9_15/testbed/test_issue.py
+- [test] python3 ./swebench_9_15/testbed/test_debug.py
+- [test] python3 ./swebench_9_15/testbed/test_debug.py
+- [test] python3 ./swebench_9_15/testbed/test_debug.py
+- [test] python3 ./swebench_9_15/testbed/test_issue.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: Python version 3.5 or above is required for SymPy.
+- Exception: Velocity of point Q has not been defined in ReferenceFrame A
+- ValueError: Velocity of point Q has not been defined in ReferenceFrame A
+- E       Failed: DID NOT RAISE <class 'ValueError'>
+- FAILED sympy/physics/vector/tests/test_point.py::test_point_partial_velocity
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #3]
+       1→from __future__ import print_function, division
+       2→from .vector import Vector, _check_vector
+       3→from .frame import _check_frame
+       4→
+       5→__all__ = ['Point']
+       6→
+       7→
+       8→class Point(object):
+       9→    """This object represents a point in a dynamic system.
+      10→
+      11→    It stores the: position, velocity, and acceleration of a point.
+      12→    The position is a vector defined as the vector distance from a parent
+      13→    point to this point.
+      14→
+      15→    Parameters
+      16→    ==========
+      17→
+      18→    name : string
+      19→        The display name of the Point
+      20→
+      21→    Examples
+      22→    ========
+      23→
+      24→    >>> from sympy.physics.vector import Point, ReferenceFrame, dynamicsymbols
+      25→    >>> from sympy.physics.vector import init_vprinting
+      26→    >>> init_vprinting(pretty_print=False)
+      27→    >>> N = ReferenceFrame('N')
+      28→    >>> O = Point('O')
+      29→    >>> P = Point('P')
+      30→    >>> u1, u2, u3 = dynamicsymbols('u1 u2 u3')
+      31→    >>> O.set_vel(N, u1 * N.x + u2 * N.y + u3 * N.z)
+      32→    >>> O.acc(N)
+      33→    u1'*N.x + u2'*N.y + u3'*N.z
+      34→
+      35→    symbols() can be used to create mul
+  [... truncated ...]
+- [Read Result after action #5]
+       1→from sympy.core.backend import (diff, expand, sin, cos, sympify,
+       2→                   eye, symbols, ImmutableMatrix as Matrix, MatrixBase)
+       3→from sympy import (trigsimp, solve, Symbol, Dummy)
+       4→from sympy.physics.vector.vector import Vector, _check_vector
+       5→from sympy.utilities.misc import translate
+       6→
+       7→__all__ = ['CoordinateSym', 'ReferenceFrame']
+       8→
+       9→
+      10→class CoordinateSym(Symbol):
+      11→    """
+      12→    A coordinate symbol/base scalar associated wrt a Reference Frame.
+      13→
+      14→    Ideally, users should not instantiate this class. Instances of
+      15→    this class must only be accessed through the corresponding frame
+      16→    as 'frame[index]'.
+      17→
+      18→    CoordinateSyms having the same frame and index parameters are equal
+      19→    (even though they may be instantiated separately).
+      20→
+      21→    Parameters
+      22→    ==========
+      23→
+      24→    name : string
+      25→        The display name of the CoordinateSym
+      26→
+      27→    frame : ReferenceFrame
+      28→        The reference frame this base scalar belongs to
+      29→
+      30→    index : 0, 1 or 2
+      31→        The index of the dimension denoted
+  [... truncated ...]
+- [Grep Result after action #7]
+  360:    def ang_vel_in(self, otherframe):
+- [Read Result after action #9]
+     360→    def ang_vel_in(self, otherframe):
+     361→        """Returns the angular velocity Vector of the ReferenceFrame.
+     362→
+     363→        Effectively returns the Vector:
+     364→        ^N omega ^B
+     365→        which represent the angular velocity of B in N, where B is self, and
+     366→        N is otherframe.
+     367→
+     368→        Parameters
+     369→        ==========
+     370→
+     371→        otherframe : ReferenceFrame
+     372→            The ReferenceFrame which the angular velocity is returned in.
+     373→
+     374→        Examples
+     375→        ========
+     376→
+     377→        >>> from sympy.physics.vector import ReferenceFrame
+     378→        >>> N = ReferenceFrame('N')
+     379→        >>> A = ReferenceFrame('A')
+     380→        >>> V = 10 * N.x
+     381→        >>> A.set_ang_vel(N, V)
+     382→        >>> A.ang_vel_in(N)
+     383→        10*N.x
+     384→
+     385→        """
+     386→
+     387→        _check_frame(otherframe)
+     388→        flist = self._dict_list(otherframe, 1)
+     389→        outvec = Vector(0)
+     390→        for i in range(len(flist) - 1):
+     391→            outvec += flist[i]._ang_vel_dict[flist[i + 1]]
+     392→        return outvec
+     393→
+     394→    def dcm(self, other
+  [... truncated ...]
+- [Grep Result after action #11]
+  252:    def _dict_list(self, other, num):
+- [Read Result after action #13]
+     252→    def _dict_list(self, other, num):
+     253→        """Creates a list from self to other using _dcm_dict. """
+     254→        outlist = [[self]]
+     255→        oldlist = [[]]
+     256→        while outlist != oldlist:
+     257→            oldlist = outlist[:]
+     258→            for i, v in enumerate(outlist):
+     259→                templist = v[-1]._dlist[num].keys()
+     260→                for i2, v2 in enumerate(templist):
+     261→                    if not v.__contains__(v2):
+     262→                        littletemplist = v + [v2]
+     263→                        if not outlist.__contains__(littletemplist):
+     264→                            outlist.append(littletemplist)
+     265→        for i, v in enumerate(oldlist):
+     266→            if v[-1] != other:
+     267→                outlist.remove(v)
+     268→        outlist.sort(key=len)
+     269→        if len(outlist) != 0:
+     270→            return outlist[0]
+     271→        raise ValueError('No Connecting Path found between ' + self.name +
+     272→                         ' and ' + other.name)
+     273→
+     274→    def _w_diff_dcm(self, otherframe):
+     275→        """Angular velocity from time differentiating the DCM. """
+     276→
+  [... truncated ...]
+- [Grep Result after action #15]
+  839:    def orientnew(self, newname, rot_type, amounts, rot_order='',
+- [Read Result after action #17]
+     839→    def orientnew(self, newname, rot_type, amounts, rot_order='',
+     840→                  variables=None, indices=None, latexs=None):
+     841→        r"""Returns a new reference frame oriented with respect to this
+     842→        reference frame.
+     843→
+     844→        See ``ReferenceFrame.orient()`` for detailed examples of how to orient
+     845→        reference frames.
+     846→
+     847→        Parameters
+     848→        ==========
+     849→
+     850→        newname : str
+     851→            Name for the new reference frame.
+     852→        rot_type : str
+     853→            The method used to generate the direction cosine matrix. Supported
+     854→            methods are:
+     855→
+     856→            - ``'Axis'``: simple rotations about a single common axis
+     857→            - ``'DCM'``: for setting the direction cosine matrix directly
+     858→            - ``'Body'``: three successive rotations about new intermediate
+     859→              axes, also called "Euler and Tait-Bryan angles"
+     860→            - ``'Space'``: three successive rotations about the parent
+     861→              frames' unit vectors
+     862→            - ``'Quaternion'``: rotations defined by four parameters which
+
+  [... truncated ...]
+- [Grep Result after action #19]
+  479:    def orient(self, parent, rot_type, amounts, rot_order=''):
+- [Read Result after action #21]
+     479→    def orient(self, parent, rot_type, amounts, rot_order=''):
+     480→        """Sets the orientation of this reference frame relative to another
+     481→        (parent) reference frame.
+     482→
+     483→        Parameters
+     484→        ==========
+     485→
+     486→        parent : ReferenceFrame
+     487→            Reference frame that this reference frame will be rotated relative
+     488→            to.
+     489→        rot_type : str
+     490→            The method used to generate the direction cosine matrix. Supported
+     491→            methods are:
+     492→
+     493→            - ``'Axis'``: simple rotations about a single common axis
+     494→            - ``'DCM'``: for setting the direction cosine matrix directly
+     495→            - ``'Body'``: three successive rotations about new intermediate
+     496→              axes, also called "Euler and Tait-Bryan angles"
+     497→            - ``'Space'``: three successive rotations about the parent
+     498→              frames' unit vectors
+     499→            - ``'Quaternion'``: rotations defined by four parameters which
+     500→              result in a singularity free direction cosine matrix
+     501→
+     502→        amounts :
+     503→
+  [... truncated ...]
+- [Read Result after action #23]
+     728→        if rot_type == 'AXIS':
+     729→            if not rot_order == '':
+     730→                raise TypeError('Axis orientation takes no rotation order')
+     731→            if not (isinstance(amounts, (list, tuple)) & (len(amounts) == 2)):
+     732→                raise TypeError('Amounts are a list or tuple of length 2')
+     733→            theta = amounts[0]
+     734→            axis = amounts[1]
+     735→            axis = _check_vector(axis)
+     736→            if not axis.dt(parent) == 0:
+     737→                raise ValueError('Axis cannot be time-varying')
+     738→            axis = axis.express(parent).normalize()
+     739→            axis = axis.args[0][0]
+     740→            parent_orient = ((eye(3) - axis * axis.T) * cos(theta) +
+     741→                             Matrix([[0, -axis[2], axis[1]],
+     742→                                     [axis[2], 0, -axis[0]],
+     743→                                     [-axis[1], axis[0], 0]]) *
+     744→                             sin(theta) + axis * axis.T)
+     745→        elif rot_type == 'QUATERNION':
+     746→            if not rot_order == '':
+     747→                raise TypeError(
+     748→                    'Quaternion orientation
+  [... truncated ...]
+- [Test Output after action #26]
+  Exit code 1
+    File "./swebench_9_15/testbed/test_issue.py", line 10
+      print(f"B.ang_vel_in(A) = {B.ang_vel_in(A)}")
+                                                 ^
+  SyntaxError: invalid syntax
+- [Test Output after action #28]
+  Exit code 1
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_issue.py", line 2, in <module>
+      import sympy as sm
+    File "./swebench_9_15/testbed/sympy/__init__.py", line 17, in <module>
+      raise ImportError("Python version 3.5 or above is required for SymPy.")
+  ImportError: Python version 3.5 or above is required for SymPy.
+- [Test Output after action #30]
+  Testing angular velocity (should work):
+  B.ang_vel_in(A) = Derivative(q(t), t)*A.x
+
+  Testing point velocity (currently fails):
+  Error: Velocity of point Q has not been defined in ReferenceFrame A
+
+  Expected result (using r.dt(A)):
+  r.dt(A) = Derivative(q(t), t)*A.x + 2*Derivative(q(t), t)*A.y
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Read Result after action #32]
+     499→    def vel(self, frame):
+     500→        """The velocity Vector of this Point in the ReferenceFrame.
+     501→
+     502→        Parameters
+     503→        ==========
+     504→
+     505→        frame : ReferenceFrame
+     506→            The frame in which the returned velocity vector will be defined in
+     507→
+     508→        Examples
+     509→        ========
+     510→
+     511→        >>> from sympy.physics.vector import Point, ReferenceFrame
+     512→        >>> N = ReferenceFrame('N')
+     513→        >>> p1 = Point('p1')
+     514→        >>> p1.set_vel(N, 10 * N.x)
+     515→        >>> p1.vel(N)
+     516→        10*N.x
+     517→
+     518→        """
+     519→
+     520→        _check_frame(frame)
+     521→        if not (frame in self._vel_dict):
+     522→            raise ValueError('Velocity of point ' + self.name + ' has not been'
+     523→                             ' defined in ReferenceFrame ' + frame.name)
+     524→        return self._vel_dict[frame]
+     525→
+     526→    def partial_velocity(self, frame, *gen_speeds):
+     527→        """Returns the partial velocities of the linear velocity vector of this
+     528→        point in the given frame with respect to one or more provided
+
+- [Test Output after action #35]
+  Testing angular velocity (should work):
+  B.ang_vel_in(A) = Derivative(q(t), t)*A.x
+
+  Testing point velocity (currently fails):
+  Error: Velocity of point Q has not been defined in ReferenceFrame A
+
+  Expected result (using r.dt(A)):
+  r.dt(A) = Derivative(q(t), t)*A.x + 2*Derivative(q(t), t)*A.y
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #38]
+  Testing angular velocity (should work):
+  B.ang_vel_in(A) = Derivative(q(t), t)*A.x
+
+  Testing point velocity (currently fails):
+  Error: Velocity of point Q has not been defined in ReferenceFrame A
+
+  Expected result (using r.dt(A)):
+  r.dt(A) = Derivative(q(t), t)*A.x + 2*Derivative(q(t), t)*A.y
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #40]
+  P._pos_dict: {Q: - q(t)*A.x - 2*q(t)*A.y}
+  Q._pos_dict: {P: q(t)*A.x + 2*q(t)*A.y}
+  P._vel_dict: {}
+  Q._vel_dict: {}
+
+  Exception: Velocity of point Q has not been defined in ReferenceFrame A
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_debug.py", line 19, in <module>
+      vel_Q = Q.vel(A)
+    File "./swebench_9_15/testbed/sympy/physics/vector/point.py", line 525, in vel
+      return self._vel_from_pos_dict(frame, visited)
+    File "./swebench_9_15/testbed/sympy/physics/vector/point.py", line 557, in _vel_from_pos_dict
+      raise ValueError('Velocity of point ' + self.name + ' has not been'
+  ValueError: Velocity of point Q has not been defined in ReferenceFrame A
+- [Test Output after action #43]
+  P._pos_dict: {Q: - q(t)*A.x - 2*q(t)*A.y}
+  Q._pos_dict: {P: q(t)*A.x + 2*q(t)*A.y}
+  P._vel_dict: {}
+  Q._vel_dict: {}
+  Q.vel(A) = 0
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #46]
+  P._pos_dict: {Q: - q(t)*A.x - 2*q(t)*A.y}
+  Q._pos_dict: {P: q(t)*A.x + 2*q(t)*A.y}
+  P._vel_dict: {}
+  Q._vel_dict: {}
+  Q.vel(A) = Derivative(q(t), t)*A.x + 2*Derivative(q(t), t)*A.y
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/physics/vector/point.py
+  Tool: Edit action #34
+  old_text_sha256: f0b4f486d96dbfa8c3ea4a7df43da1810a95ee5b79f63c834bc4174c9d6d380f
+  new_text_sha256: bba69650183ec2219b13d3694239667763d7d02b513969539dad3a33feb8fc87
+- sympy/physics/vector/point.py
+  Tool: Edit action #37
+  old_text_sha256: bba69650183ec2219b13d3694239667763d7d02b513969539dad3a33feb8fc87
+  new_text_sha256: 7190d7bd73fa099db8677f2a99e22be2b5288379b35cdcc398b2bff736da1474
+- sympy/physics/vector/point.py
+  Tool: Edit action #42
+  old_text_sha256: 7190d7bd73fa099db8677f2a99e22be2b5288379b35cdcc398b2bff736da1474
+  new_text_sha256: 3fea6d55b802bc6d21abe68e67bac8d49e411423302abcb7f193f213bffb27fe
+- sympy/physics/vector/point.py
+  Tool: Edit action #45
+  old_text_sha256: 3fea6d55b802bc6d21abe68e67bac8d49e411423302abcb7f193f213bffb27fe
+  new_text_sha256: ce4343511ac851c800d9476cef7c4fd598213373a47fdd4870cb73de9494a32f
+- sympy/physics/vector/point.py
+  Tool: Edit action #60
+  old_text_sha256: ce4343511ac851c800d9476cef7c4fd598213373a47fdd4870cb73de9494a32f
+  new_text_sha256: 958c2a4b5adb1826e24c728d0727e6328e1bc4549c25b3e9fcf9294b2d0390cd
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

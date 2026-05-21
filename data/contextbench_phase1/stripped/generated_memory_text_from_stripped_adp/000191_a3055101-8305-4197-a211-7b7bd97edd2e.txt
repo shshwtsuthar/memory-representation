@@ -1,0 +1,371 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: a3055101-8305-4197-a211-7b7bd97edd2e
+- repo: django/django
+- instance_id: django__django-13448
+- base_commit: 7b9596b974fb0ad1868b10c8c2174e10b72be403
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Test runner setup_databases crashes with "TEST": {"MIGRATE": False}.
+Description
+
+I'm trying to upgrade a project from Django 3.0 to Django 3.1 and wanted to try out the new "TEST": {"MIGRATE": False} database setting.
+Sadly I'm running into an issue immediately when running ./manage.py test.
+Removing the "TEST": {"MIGRATE": False} line allows the tests to run. So this is not blocking the upgrade for us, but it would be nice if we were able to use the new feature to skip migrations during testing.
+For reference, this project was recently upgraded from Django 1.4 all the way to 3.0 so there might be some legacy cruft somewhere that triggers this.
+Here's the trackeback. I'll try to debug this some more.
+Traceback (most recent call last):
+ File "/usr/local/lib/python3.6/site-packages/django/db/backends/utils.py", line 84, in _execute
+    return self.cursor.execute(sql, params)
+psycopg2.errors.UndefinedTable: relation "django_admin_log" does not exist
+LINE 1: ...n_flag", "django_admin_log"."change_message" FROM "django_ad...
+                                                             ^
+The above exception was the direct cause of the following exception:
+Traceback (most recent call last):
+ File "/usr/local/lib/python3.6/site-packages/django/db/models/sql/compiler.py", line 1156, in execute_sql
+    cursor.execute(sql, params)
+ File "/usr/local/lib/python3.6/site-packages/django/db/backends/utils.py", line 66, in execute
+    return self._execute_with_wrappers(sql, params, many=False, executor=self._execute)
+ File "/usr/local/lib/python3.6/site-packages/django/db/backends/utils.py", line 75, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+ File "/usr/local/lib/python3.6/site-packages/django/db/backends/utils.py", line 84, in _execute
+    return self.cursor.execute(sql, params)
+ File "/usr/local/lib/python3.6/site-packages/django/db/utils.py", line 90, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+ File "/usr/local/lib/python3.6/site-packages/django/db/backends/utils.py", line 84, in _execute
+    return self.cursor.execute(sql, params)
+django.db.utils.ProgrammingError: relation "django_admin_log" does not exist
+LINE 1: ...n_flag", "django_admin_log"."change_message" FROM "django_ad...
+                                                             ^
+During handling of the above exception, another exception occurred:
+Traceback (most recent call last):
+ File "./manage.py", line 15, in <module>
+    main()
+ File "./manage.py", line 11, in main
+    execute_from_command_line(sys.argv)
+ File "/usr/local/lib/python3.6/site-packages/django/core/management/__init__.py", line 401, in execute_from_command_line
+    utility.execute()
+ File "/usr/local/lib/python3.6/site-packages/django/core/management/__init__.py", line 395, in execute
+    self.fetch_command(subcommand).run_from_argv(self.argv)
+ File "/usr/local/lib/python3.6/site-packages/django/core/management/commands/test.py", line 23, in run_from_argv
+    super().run_from_argv(argv)
+ File "/usr/local/lib/python3.6/site-packages/django/core/management/base.py", line 330, in run_from_argv
+    self.execute(*args, **cmd_options)
+ File "/usr/local/lib/python3.6/site-packages/django/core/management/base.py", line 371, in execute
+    output = self.handle(*args, **options)
+ File "/usr/local/lib/python3.6/site-packages/django/core/management/commands/test.py", line 53, in handle
+    failures = test_runner.run_tests(test_labels)
+ File "/usr/local/lib/python3.6/site-packages/django/test/runner.py", line 695, in run_tests
+    old_config = self.setup_databases(aliases=databases)
+ File "/usr/local/lib/python3.6/site-packages/django/test/runner.py", line 616, in setup_databases
+    self.parallel, **kwargs
+ File "/usr/local/lib/python3.6/site-packages/django/test/utils.py", line 174, in setup_databases
+    serialize=connection.settings_dict['TEST'].get('SERIALIZE', True),
+ File "/usr/local/lib/python3.6/site-packages/django/db/backends/base/creation.py", li
+[... truncated ...]
+
+FILES INSPECTED
+---------------
+- django/db/backends/base/creation.py [Read: 2]
+- django/test/utils.py [Read: 1]
+- tests [Grep: 1]
+- tests/backends/base/test_creation.py [Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [8] Grep pattern='MIGRATE.*False' path='tests'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find . -name "creation.py" -path "*/backends/base/*" 2>/dev/null | head -5
+- [test] cd testbed && python -m pytest tests/backends/base/test_creation.py::TestDbCreationTests::test_migrate_test_setting_false_with_serialize -xvs
+- [test] cd testbed && python tests/runtests.py backends.base.test_creation.TestDbCreationTests.test_migrate_test_setting_false_with_serialize --verbosity=2
+- [other/reproduction] which python && python --version && which python3 && python3 --version
+- [test] cd testbed && python3 tests/runtests.py backends.base.test_creation.TestDbCreationTests.test_migrate_test_setting_false_with_serialize --verbosity=2
+- [test] cd testbed && python3 tests/runtests.py backends.base.test_creation --verbosity=2
+- [test] python3 tests/runtests.py backends.base.test_creation --verbosity=2
+- [test] python3 test_issue.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #2]
+       1→import os
+       2→import sys
+       3→from io import StringIO
+       4→
+       5→from django.apps import apps
+       6→from django.conf import settings
+       7→from django.core import serializers
+       8→from django.db import router
+       9→from django.db.transaction import atomic
+      10→
+      11→# The prefix to put on the default database name when creating
+      12→# the test database.
+      13→TEST_DATABASE_PREFIX = 'test_'
+      14→
+      15→
+      16→class BaseDatabaseCreation:
+      17→    """
+      18→    Encapsulate backend-specific differences pertaining to creation and
+      19→    destruction of the test database.
+      20→    """
+      21→    def __init__(self, connection):
+      22→        self.connection = connection
+      23→
+      24→    def _nodb_cursor(self):
+      25→        return self.connection._nodb_cursor()
+      26→
+      27→    def log(self, msg):
+      28→        sys.stderr.write(msg + os.linesep)
+      29→
+      30→    def create_test_db(self, verbosity=1, autoclobber=False, serialize=True, keepdb=False):
+      31→        """
+      32→        Create a test database, prompting the user for confirmation if the
+      33→        database already exists. Return the name of the test database created.
+      34→
+  [... truncated ...]
+- [Read Result after action #4]
+       1→import asyncio
+       2→import collections
+       3→import logging
+       4→import os
+       5→import re
+       6→import sys
+       7→import time
+       8→import warnings
+       9→from contextlib import contextmanager
+      10→from functools import wraps
+      11→from io import StringIO
+      12→from itertools import chain
+      13→from types import SimpleNamespace
+      14→from unittest import TestCase, skipIf, skipUnless
+      15→from xml.dom.minidom import Node, parseString
+      16→
+      17→from django.apps import apps
+      18→from django.apps.registry import Apps
+      19→from django.conf import UserSettingsHolder, settings
+      20→from django.core import mail
+      21→from django.core.exceptions import ImproperlyConfigured
+      22→from django.core.signals import request_started
+      23→from django.db import DEFAULT_DB_ALIAS, connections, reset_queries
+      24→from django.db.models.options import Options
+      25→from django.template import Template
+      26→from django.test.signals import setting_changed, template_rendered
+      27→from django.urls import get_script_prefix, set_script_prefix
+      28→from django.utils.translation import deactivate
+      29→
+      30→try:
+      31→    import jinja2
+      32→except ImportErro
+  [... truncated ...]
+- [Read Result after action #6]
+      30→    def create_test_db(self, verbosity=1, autoclobber=False, serialize=True, keepdb=False):
+      31→        """
+      32→        Create a test database, prompting the user for confirmation if the
+      33→        database already exists. Return the name of the test database created.
+      34→        """
+      35→        # Don't import django.core.management if it isn't needed.
+      36→        from django.core.management import call_command
+      37→
+      38→        test_database_name = self._get_test_db_name()
+      39→
+      40→        if verbosity >= 1:
+      41→            action = 'Creating'
+      42→            if keepdb:
+      43→                action = "Using existing"
+      44→
+      45→            self.log('%s test database for alias %s...' % (
+      46→                action,
+      47→                self._get_database_display_str(verbosity, test_database_name),
+      48→            ))
+      49→
+      50→        # We could skip this call if keepdb is True, but we instead
+      51→        # give it the keepdb param. This is to handle the case
+      52→        # where the test DB doesn't exist, in which case we need to
+      53→        # create it, then just not destroy it. If we instead skip
+      54→
+  [... truncated ...]
+- [Grep Result after action #8]
+  Found 2 files
+  testbed/tests/migrate_signals/tests.py
+  testbed/tests/backends/base/test_creation.py
+- [Read Result after action #10]
+       1→import copy
+       2→from unittest import mock
+       3→
+       4→from django.db import DEFAULT_DB_ALIAS, connection, connections
+       5→from django.db.backends.base.creation import (
+       6→    TEST_DATABASE_PREFIX, BaseDatabaseCreation,
+       7→)
+       8→from django.test import SimpleTestCase, TransactionTestCase
+       9→
+      10→from ..models import (
+      11→    CircularA, CircularB, Object, ObjectReference, ObjectSelfReference,
+      12→)
+      13→
+      14→
+      15→def get_connection_copy():
+      16→    # Get a copy of the default connection. (Can't use django.db.connection
+      17→    # because it'll modify the default connection itself.)
+      18→    test_connection = copy.copy(connections[DEFAULT_DB_ALIAS])
+      19→    test_connection.settings_dict = copy.deepcopy(
+      20→        connections[DEFAULT_DB_ALIAS].settings_dict
+      21→    )
+      22→    return test_connection
+      23→
+      24→
+      25→class TestDbSignatureTests(SimpleTestCase):
+      26→    def test_default_name(self):
+      27→        # A test db name isn't set.
+      28→        prod_name = 'hodor'
+      29→        test_connection = get_connection_copy()
+      30→        test_connection.settings_dict['NAME'] = prod_name
+      31→        test_
+  [... truncated ...]
+- [Read Result after action #14]
+       1→import copy
+       2→from unittest import mock
+       3→
+       4→from django.db import DEFAULT_DB_ALIAS, connection, connections
+       5→from django.db.backends.base.creation import (
+       6→    TEST_DATABASE_PREFIX, BaseDatabaseCreation,
+       7→)
+       8→from django.test import SimpleTestCase, TransactionTestCase
+       9→
+      10→from ..models import (
+      11→    CircularA, CircularB, Object, ObjectReference, ObjectSelfReference,
+      12→)
+      13→
+      14→
+      15→def get_connection_copy():
+      16→    # Get a copy of the default connection. (Can't use django.db.connection
+      17→    # because it'll modify the default connection itself.)
+      18→    test_connection = copy.copy(connections[DEFAULT_DB_ALIAS])
+      19→    test_connection.settings_dict = copy.deepcopy(
+      20→        connections[DEFAULT_DB_ALIAS].settings_dict
+      21→    )
+      22→    return test_connection
+      23→
+      24→
+      25→class TestDbSignatureTests(SimpleTestCase):
+      26→    def test_default_name(self):
+      27→        # A test db name isn't set.
+      28→        prod_name = 'hodor'
+      29→        test_connection = get_connection_copy()
+      30→        test_connection.settings_dict['NAME'] = prod_name
+      31→        test_
+  [... truncated ...]
+- [Test Output after action #17]
+  Exit code 1
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #19]
+  Exit code 1
+    File "tests/runtests.py", line 18
+      ) from e
+           ^
+  SyntaxError: invalid syntax
+- [Test Output after action #23]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Importing application backends
+  Skipping setup of unused database(s): default, other.
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  test_migrate_test_setting_false_with_serialize (backends.base.test_creation.TestDbCreationTests)
+  Test that serialize=True works with MIGRATE=False (no crash). ... ok
+
+  ----------------------------------------------------------------------
+  Ran 1 test in 0.022s
+
+  OK
+- [Test Output after action #26]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Importing application backends
+  Skipping setup of unused database(s): other.
+  Operations to perform:
+    Synchronize unmigrated apps: auth, backends, contenttypes, messages, sessions, staticfiles
+    Apply all migrations: admin, sites
+  Synchronizing apps without migrations:
+    Creating tables...
+      Creating table django_content_type
+      Creating table auth_permission
+      Creating table auth_group
+      Creating table auth_user
+      Creating table django_session
+      Creating table backends_square
+      Creating table backends_person
+      Creating table backends_schoolclass
+      Creating table backends_verylongmodelnamezzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+      Creating table backends_tag
+      Creating table CaseSensitive_Post
+      Creating table backends_reporter
+      Creating table backends_article
+      Creating table backends_item
+      Creating table backends_object
+      Creating table backends_objectreference
+      Creating table backends_objectselfreference
+      Creating table backends_circulara
+      Creating table backends_circularb
+      Creating table backends_rawdata
+      Creating table backends_author
+      Creating table backends
+  [... truncated ...]
+- [Test Output after action #28]
+  Testing MIGRATE=False with serialize=True...
+  MIGRATE setting: False
+  SERIALIZE setting: True
+  ✓ Test passed! No crash occurred.
+  ✓ Serialized contents: ''
+  ✓ Serialized contents is empty string (expected when MIGRATE=False)
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Creating test database for alias 'default'...
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/backends/base/creation.py
+  Tool: Edit action #12
+  old_text_sha256: 8f2ab81a02493bcde3e0a3901fef43f5da6bb929e31b46d84b6b07a3420c1451
+  new_text_sha256: bb13b37f905b636af2fefcd8c4e936287e7c5b2fa60500063f0c551f68fad8ff
+- django/db/backends/base/creation.py
+  Tool: Edit action #13
+  old_text_sha256: bb13b37f905b636af2fefcd8c4e936287e7c5b2fa60500063f0c551f68fad8ff
+  new_text_sha256: dba1f41499ebe2eafb123c0b4fe7250d6e7d3d7568b9d53a04338dbcce7ec758
+- tests/backends/base/test_creation.py
+  Tool: Edit action #16
+  old_text_sha256: 05a2c9ba61d225760bf74a1363002f171b79cd7e61149eafa11362599ceb88b0
+  new_text_sha256: ef81bd8e4a218173619b1e558bc93eea0c5cad48c09a6a98710fc6229c697588
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

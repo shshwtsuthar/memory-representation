@@ -1,0 +1,183 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: fa94b8ef-611c-46bd-a02b-e60c01886151
+- repo: psf/requests
+- instance_id: psf__requests-1963
+- base_commit: 110048f9837f8441ea536804115e80b69f400277
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+`Session.resolve_redirects` copies the original request for all subsequent requests, can cause incorrect method selection
+Consider the following redirection chain:
+
+```
+POST /do_something HTTP/1.1
+Host: server.example.com
+...
+
+HTTP/1.1 303 See Other
+Location: /new_thing_1513
+
+GET /new_thing_1513
+Host: server.example.com
+...
+
+HTTP/1.1 307 Temporary Redirect
+Location: //failover.example.com/new_thing_1513
+```
+
+The intermediate 303 See Other has caused the POST to be converted to
+a GET.  The subsequent 307 should preserve the GET.  However, because
+`Session.resolve_redirects` starts each iteration by copying the _original_
+request object, Requests will issue a POST!
+
+FILES INSPECTED
+---------------
+- requests/sessions.py [Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [1] Grep pattern='def resolve_redirects' path='testbed'
+- [2] Grep pattern='def resolve_redirects' path='testbed'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [test] cd testbed && python test_issue.py
+- [test] cd testbed && python test_issue.py
+- [test] cd testbed && python -m pytest tests/ -xvs -k redirect 2>&1 | head -100
+- [test] python -m pytest testbed/tests/ -xvs -k redirect 2>&1 | head -100
+- [diagnostic] ls testbed/tests/ | grep -i session
+- [diagnostic] find testbed -name "*test*.py" -type f | head -10
+- [test] python test_requests.py 2>&1 | head -50
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named pytest
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #2]
+  Found 1 file
+  testbed/requests/sessions.py
+- [Read Result after action #4]
+       1→# -*- coding: utf-8 -*-
+       2→
+       3→"""
+       4→requests.session
+       5→~~~~~~~~~~~~~~~~
+       6→
+       7→This module provides a Session object to manage and persist settings across
+       8→requests (cookies, auth, proxies).
+       9→
+      10→"""
+      11→import os
+      12→from collections import Mapping
+      13→from datetime import datetime
+      14→
+      15→from .compat import cookielib, OrderedDict, urljoin, urlparse, builtin_str
+      16→from .cookies import (
+      17→    cookiejar_from_dict, extract_cookies_to_jar, RequestsCookieJar, merge_cookies)
+      18→from .models import Request, PreparedRequest, DEFAULT_REDIRECT_LIMIT
+      19→from .hooks import default_hooks, dispatch_hook
+      20→from .utils import to_key_val_list, default_headers, to_native_string
+      21→from .exceptions import TooManyRedirects, InvalidSchema
+      22→from .structures import CaseInsensitiveDict
+      23→
+      24→from .adapters import HTTPAdapter
+      25→
+      26→from .utils import requote_uri, get_environ_proxies, get_netrc_auth
+      27→
+      28→from .status_codes import codes
+      29→
+      30→# formerly defined here, reexposed here for backward compatibility
+      31→from .models import REDIRECT_STATI
+      32→
+      33→
+      34
+  [... truncated ...]
+- [Read Result after action #7]
+     103→            method = prepared_request.method
+     104→
+     105→            # Handle redirection without scheme (see: RFC 1808 Section 4)
+     106→            if url.startswith('//'):
+     107→                parsed_rurl = urlparse(resp.url)
+     108→                url = '%s:%s' % (parsed_rurl.scheme, url)
+     109→
+     110→            # The scheme should be lower case...
+     111→            parsed = urlparse(url)
+     112→            url = parsed.geturl()
+     113→
+     114→            # Facilitate non-RFC2616-compliant 'location' headers
+     115→            # (e.g. '/path/to/resource' instead of 'http://domain.tld/path/to/resource')
+     116→            # Compliant with RFC3986, we percent encode the url.
+     117→            if not urlparse(url).netloc:
+     118→                url = urljoin(resp.url, requote_uri(url))
+     119→            else:
+     120→                url = requote_uri(url)
+     121→
+     122→            prepared_request.url = to_native_string(url)
+     123→
+     124→            # http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.3.4
+     125→            if (resp.status_code == codes.see_other and
+     126→                    method != 'HEAD'):
+     127→                method = 'GET'
+
+  [... truncated ...]
+- [Test Output after action #9]
+  Exit code 1
+    File "test_issue.py", line 76
+      print(f"\n1. Initial request: {session.sent_requests[0]['method']} {session.sent_requests[0]['url']}")
+                                                                                                          ^
+  SyntaxError: invalid syntax
+- [Test Output after action #11]
+  Testing redirect chain: POST -> 303 -> GET -> 307 -> GET
+  ============================================================
+
+  1. Initial request: POST http://server.example.com/do_something
+     Response: 303 -> /new_thing_1513
+
+  Redirects processed: 2
+
+  2. Redirect request: GET http://server.example.com/new_thing_1513
+     Response: 307 -> //failover.example.com/new_thing_1513
+
+  3. Redirect request: GET http://failover.example.com/new_thing_1513
+     Response: 200 (final)
+
+  ============================================================
+  VERIFICATION:
+  ============================================================
+  ✓ First redirect after 303: GET
+  ✓ Second redirect after 307: GET
+
+  ============================================================
+  SUCCESS: All redirects used the correct HTTP method!
+  ============================================================
+- [Test Output after action #14]
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #18]
+  Traceback (most recent call last):
+    File "test_requests.py", line 13, in <module>
+      import pytest
+  ImportError: No module named pytest
+
+SOURCE EDIT EVIDENCE
+--------------------
+- requests/sessions.py
+  Tool: Edit action #6
+  old_text_sha256: 0ceda33d637bc8ed97cd85fac84ca3dbae3b4bf18d651c95971750c5b32295bb
+  new_text_sha256: f1098ab536953af37782c077af1ee6ca69a7dd80258a585bc322c5cbebdedf0b
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

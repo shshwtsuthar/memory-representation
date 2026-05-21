@@ -1,0 +1,427 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: fdbca609-c411-47fc-816f-eb9832f7708a
+- repo:
+- instance_id:
+- base_commit:
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+(not found)
+
+FILES INSPECTED
+---------------
+- tests/model_fields [Grep: 1]
+- tests/model_fields/test_jsonfield.py [Grep: 2, Read: 1]
+- django/db/models/fields/json.py [Grep: 2, Read: 3]
+
+SEARCH ANCHORS
+--------------
+- [0] Grep pattern='class TestQuerying' path='tests/model_fields'
+- [1] Glob path='testbed' glob='**/test_jsonfield.py'
+- [3] Glob glob='**/test_jsonfield.py'
+- [5] Grep pattern='def test_isnull_key' path='tests/model_fields/test_jsonfield.py'
+- [7] Grep pattern='class TestQuerying' path='tests/model_fields/test_jsonfield.py'
+- [9] Grep pattern='class KeyTransformIsNull'
+- [11] Grep pattern='class HasKey'
+- [13] Grep pattern='def as_sqlite' path='django/db/models/fields/json.py'
+- [22] Grep pattern='def compile_json_path' path='django/db/models/fields/json.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [test] python -m pytest tests/model_fields/test_jsonfield.py::TestQuerying::test_isnull_key -xvs 2>&1 | head -100
+- [test] python tests/runtests.py model_fields.test_jsonfield.TestQuerying.test_isnull_key --settings=test_sqlite 2>&1 | head -150
+- [test] python3 tests/runtests.py model_fields.test_jsonfield.TestQuerying.test_isnull_key --settings=test_sqlite 2>&1 | head -200
+- [test] python3 tests/runtests.py model_fields.test_jsonfield.TestQuerying --settings=test_sqlite 2>&1 | tail -50
+- [test] python3 test_issue.py 2>&1
+- [test] python3 tests/runtests.py model_fields.test_jsonfield.TestQuerying.test_isnull_key model_fields.test_jsonfield.TestQuerying.test_isnull_key_or_none model_fields.test_jsonfield.TestQuerying.test_none_key --settings=test_sqlite -v 2 2>&1 | tail -50
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #1]
+  <tool_use_error>Directory does not exist: testbed</tool_use_error>
+- [Glob Result after action #3]
+  ./swebench_9_15/testbed/tests/forms_tests/field_tests/test_jsonfield.py
+  ./swebench_9_15/testbed/tests/model_fields/test_jsonfield.py
+- [Grep Result after action #5]
+  583:    def test_isnull_key(self):
+  584-        # key__isnull=False works the same as has_key='key'.
+  585-        self.assertSequenceEqual(
+  586-            NullableJSONModel.objects.filter(value__a__isnull=True),
+  587-            self.objs[:3] + self.objs[5:],
+  588-        )
+  589-        self.assertSequenceEqual(
+  590-            NullableJSONModel.objects.filter(value__a__isnull=False),
+  591-            [self.objs[3], self.objs[4]],
+  592-        )
+  593-        self.assertSequenceEqual(
+  594-            NullableJSONModel.objects.filter(value__j__isnull=False),
+  595-            [self.objs[4]],
+  596-        )
+  597-
+  598:    def test_isnull_key_or_none(self):
+  599-        obj = NullableJSONModel.objects.create(value={'a': None})
+  600-        self.assertSequenceEqual(
+  601-            NullableJSONModel.objects.filter(Q(value__a__isnull=True) | Q(value__a=None)),
+  602-            self.objs[:3] + self.objs[5:] + [obj],
+  603-        )
+  604-
+  605-    def test_none_key(self):
+  606-        self.assertSequenceEqual(
+  607-            NullableJSONModel.objects.filter(value__j=None),
+  608-            [self.objs[4]],
+  609-        )
+  610-
+  611-    def test_none_key_exclude(self):
+  612-        obj = NullableJSONModel.objects.c
+  [... truncated ...]
+- [Grep Result after action #7]
+  263:class TestQuerying(TestCase):
+  264-    @classmethod
+  265-    def setUpTestData(cls):
+  266-        cls.primitives = [True, False, 'yes', 7, 9.6]
+  267-        values = [
+  268-            None,
+  269-            [],
+  270-            {},
+  271-            {'a': 'b', 'c': 14},
+  272-            {
+  273-                'a': 'b',
+  274-                'c': 14,
+  275-                'd': ['e', {'f': 'g'}],
+  276-                'h': True,
+  277-                'i': False,
+  278-                'j': None,
+  279-                'k': {'l': 'm'},
+  280-                'n': [None],
+  281-                'o': '"quoted"',
+  282-                'p': 4.2,
+  283-            },
+  284-            [1, [2]],
+  285-            {'k': True, 'l': False, 'foo': 'bax'},
+  286-            {
+  287-                'foo': 'bar',
+  288-                'baz': {'a': 'b', 'c': 'd'},
+  289-                'bar': ['foo', 'bar'],
+  290-                'bax': {'foo': 'bar'},
+  291-            },
+  292-        ]
+  293-        cls.objs = [
+  294-            NullableJSONModel.objects.create(value=value)
+  295-            for value in values
+  296-        ]
+  297-        if connection.features.supports_primitives_in_json_field:
+  298-            cls.objs.extend([
+  299-
+  [... truncated ...]
+- [Grep Result after action #9]
+  django/db/models/fields/json.py:366:class KeyTransformIsNull(lookups.IsNull):
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-367-    # key__isnull=False is the same as has_key='key'
+  django/db/models/fields/json.py-368-    def as_oracle(self, compiler, connection):
+  django/db/models/fields/json.py-369-        if not self.rhs:
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-370-            return HasKey(self.lhs.lhs, self.lhs.key_name).as_oracle(compiler, connection)
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-371-        return super().as_sql(compiler, connection)
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-372-
+  django/db/models/fields/json.py-373-    def as_sqlite(self, compiler, connection):
+  django/db/models/fields/json.py-374-        if not self.rhs:
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-375-            return HasKey(self.lhs.lhs, self.lhs.key_name).as_sqlite(compiler, connection)
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-376-        return super().as_sql(compiler, connection)
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-377-
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-378-
+  django/db/mo
+  [... truncated ...]
+- [Grep Result after action #11]
+  django/db/models/fields/json.py:167:class HasKeyLookup(PostgresOperatorLookup):
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-168-    logical_operator = None
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-169-
+  django/db/models/fields/json.py-170-    def as_sql(self, compiler, connection, template=None):
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-171-        # Process JSON path from the left-hand side.
+  django/db/models/fields/json.py-172-        if isinstance(self.lhs, KeyTransform):
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-173-            lhs, lhs_params, lhs_key_transforms = self.lhs.preprocess_lhs(compiler, connection)
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-174-            lhs_json_path = compile_json_path(lhs_key_transforms)
+  django/db/models/fields/json.py-175-        else:
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-176-            lhs, lhs_params = self.process_lhs(compiler, connection)
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-177-            lhs_json_path = '$'
+  ./swebench_9_15/testbed/django/db/models/fields/json.py-178-        sql = template % lhs
+  ./swebench_9_15/testbed/django/db/mode
+  [... truncated ...]
+- [Grep Result after action #13]
+  210-            for key in rhs_key_transforms[:-1]:
+  211-                self.lhs = KeyTransform(key, self.lhs)
+  212-            self.rhs = rhs_key_transforms[-1]
+  213-        return super().as_postgresql(compiler, connection)
+  214-
+  215:    def as_sqlite(self, compiler, connection):
+  216-        return self.as_sql(compiler, connection, template='JSON_TYPE(%s, %%s) IS NOT NULL')
+  217-
+  218-
+  219-class HasKey(HasKeyLookup):
+  220-    lookup_name = 'has_key'
+  221-    postgres_operator = '?'
+  222-    prepare_rhs = False
+  223-
+  224-
+  225-class HasKeys(HasKeyLookup):
+  --
+  310-            lookup = int(self.key_name)
+  311-        except ValueError:
+  312-            lookup = self.key_name
+  313-        return '(%s %s %%s)' % (lhs, self.postgres_operator), tuple(params) + (lookup,)
+  314-
+  315:    def as_sqlite(self, compiler, connection):
+  316-        lhs, params, key_transforms = self.preprocess_lhs(compiler, connection)
+  317-        json_path = compile_json_path(key_transforms)
+  318-        return 'JSON_EXTRACT(%s, %%s)' % lhs, tuple(params) + (json_path,)
+  319-
+  320-
+  321-class KeyTextTransform(KeyTransform):
+  322-    postgres_operator = '->>'
+  323-    postgres_nested_operator = '#>>'
+  324-
+  325-
+  --
+  368-    def as_oracle
+  [... truncated ...]
+- [Read Result after action #15]
+     360→        rhs, rhs_params = super().process_rhs(compiler, connection)
+     361→        if connection.vendor == 'mysql':
+     362→            return 'LOWER(%s)' % rhs, rhs_params
+     363→        return rhs, rhs_params
+     364→
+     365→
+     366→class KeyTransformIsNull(lookups.IsNull):
+     367→    # key__isnull=False is the same as has_key='key'
+     368→    def as_oracle(self, compiler, connection):
+     369→        if not self.rhs:
+     370→            return HasKey(self.lhs.lhs, self.lhs.key_name).as_oracle(compiler, connection)
+     371→        return super().as_sql(compiler, connection)
+     372→
+     373→    def as_sqlite(self, compiler, connection):
+     374→        if not self.rhs:
+     375→            return HasKey(self.lhs.lhs, self.lhs.key_name).as_sqlite(compiler, connection)
+     376→        return super().as_sql(compiler, connection)
+     377→
+     378→
+     379→class KeyTransformIn(lookups.In):
+     380→    def resolve_expression_parameter(self, compiler, connection, sql, param):
+     381→        sql, params = super().resolve_expression_parameter(
+     382→            compiler, connection, sql, param,
+     383→        )
+     384→        if (
+     385→            not hasattr(param, 'as_sql') and
+     386→
+  [... truncated ...]
+- [Read Result after action #17]
+     167→class HasKeyLookup(PostgresOperatorLookup):
+     168→    logical_operator = None
+     169→
+     170→    def as_sql(self, compiler, connection, template=None):
+     171→        # Process JSON path from the left-hand side.
+     172→        if isinstance(self.lhs, KeyTransform):
+     173→            lhs, lhs_params, lhs_key_transforms = self.lhs.preprocess_lhs(compiler, connection)
+     174→            lhs_json_path = compile_json_path(lhs_key_transforms)
+     175→        else:
+     176→            lhs, lhs_params = self.process_lhs(compiler, connection)
+     177→            lhs_json_path = '$'
+     178→        sql = template % lhs
+     179→        # Process JSON path from the right-hand side.
+     180→        rhs = self.rhs
+     181→        rhs_params = []
+     182→        if not isinstance(rhs, (list, tuple)):
+     183→            rhs = [rhs]
+     184→        for key in rhs:
+     185→            if isinstance(key, KeyTransform):
+     186→                *_, rhs_key_transforms = key.preprocess_lhs(compiler, connection)
+     187→            else:
+     188→                rhs_key_transforms = [key]
+     189→            rhs_params.append('%s%s' % (
+     190→                lhs_json_path,
+     191→                compile_json_p
+  [... truncated ...]
+- [Read Result after action #20]
+       0→import json
+       1→
+       2→from django import forms
+       3→from django.core import checks, exceptions
+       4→from django.db import NotSupportedError, connections, router
+       5→from django.db.models import lookups
+       6→from django.db.models.lookups import PostgresOperatorLookup, Transform
+       7→from django.utils.translation import gettext_lazy as _
+       8→
+       9→from . import Field
+      10→from .mixins import CheckFieldDefaultMixin
+      11→
+      12→__all__ = ['JSONField']
+      13→
+      14→
+      15→class JSONField(CheckFieldDefaultMixin, Field):
+      16→    empty_strings_allowed = False
+      17→    description = _('A JSON object')
+      18→    default_error_messages = {
+      19→        'invalid': _('Value must be valid JSON.'),
+      20→    }
+      21→    _default_hint = ('dict', '{}')
+      22→
+      23→    def __init__(
+      24→        self, verbose_name=None, name=None, encoder=None, decoder=None,
+      25→        **kwargs,
+      26→    ):
+      27→        if encoder and not callable(encoder):
+      28→            raise ValueError('The encoder parameter must be a callable object.')
+      29→        if decoder and not callable(decoder):
+
+- [Grep Result after action #22]
+  124:def compile_json_path(key_transforms, include_root=True):
+- [Read Result after action #24]
+     583→    def test_isnull_key(self):
+     584→        # key__isnull=False works the same as has_key='key'.
+     585→        self.assertSequenceEqual(
+     586→            NullableJSONModel.objects.filter(value__a__isnull=True),
+     587→            self.objs[:3] + self.objs[5:],
+     588→        )
+     589→        self.assertSequenceEqual(
+     590→            NullableJSONModel.objects.filter(value__a__isnull=False),
+     591→            [self.objs[3], self.objs[4]],
+     592→        )
+     593→        self.assertSequenceEqual(
+     594→            NullableJSONModel.objects.filter(value__j__isnull=False),
+     595→            [self.objs[4]],
+     596→        )
+     597→
+     598→    def test_isnull_key_or_none(self):
+     599→        obj = NullableJSONModel.objects.create(value={'a': None})
+     600→        self.assertSequenceEqual(
+     601→            NullableJSONModel.objects.filter(Q(value__a__isnull=True) | Q(value__a=None)),
+     602→            self.objs[:3] + self.objs[5:] + [obj],
+
+- [Test Output after action #27]
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #29]
+    File "tests/runtests.py", line 18
+      ) from e
+           ^
+  SyntaxError: invalid syntax
+- [Test Output after action #31]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Creating test database for alias 'default'...
+  System check identified no issues (3 silenced).
+  .
+  ----------------------------------------------------------------------
+  Ran 1 test in 0.004s
+
+  OK
+  Destroying test database for alias 'default'...
+- [Test Output after action #33]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Creating test database for alias 'default'...
+  System check identified no issues (3 silenced).
+  ss.sss.s..................s..........s.........................
+  ----------------------------------------------------------------------
+  Ran 63 tests in 0.058s
+
+  OK (skipped=8)
+  Destroying test database for alias 'default'...
+- [Test Output after action #35]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  No sympy found
+  Traceback (most recent call last):
+    File "test_issue.py", line 16, in <module>
+      django.setup()
+    File "./swebench_9_15/testbed/django/__init__.py", line 19, in setup
+      configure_logging(settings.LOGGING_CONFIG, settings.LOGGING)
+    File "./swebench_9_15/testbed/django/conf/__init__.py", line 83, in __getattr__
+      self._setup(name)
+    File "./swebench_9_15/testbed/django/conf/__init__.py", line 70, in _setup
+      self._wrapped = Settings(settings_module)
+    File "./swebench_9_15/testbed/django/conf/__init__.py", line 177, in __init__
+      mod = importlib.import_module(self.SETTINGS_MODULE)
+    File "/opt/anaconda3/lib/python3.8/importlib/__init__.py", line 127, in import_module
+      return _bootstrap._gcd_import(name[level:], package, level)
+
+  [... truncated ...]
+- [Test Output after action #37]
+      Creating table model_fields_positiveintegermodel
+      Creating table model_fields_post
+      Creating table model_fields_nullbooleanmodel
+      Creating table model_fields_booleanmodel
+      Creating table model_fields_datetimemodel
+      Creating table model_fields_durationmodel
+      Creating table model_fields_nulldurationmodel
+      Creating table model_fields_primarykeycharmodel
+      Creating table model_fields_fkstobooleans
+      Creating table model_fields_fktochar
+      Creating table model_fields_renamedfield
+      Creating table model_fields_verbosenamefield
+      Creating table model_fields_genericipaddress
+      Creating table model_fields_decimallessthanone
+      Creating table model_fields_fieldclassattributemodel
+      Creating table model_fields_datamodel
+      Creating table model_fields_document
+      Creating table model_fields_person
+      Creating table model_fields_personwithheight
+      Creating table model_fields_personwithheightandwidth
+      Creating table model_fields_persondimensionsfirst
+      Creating table model_fields_persontwoimages
+      Creating table model_fields_jsonmodel
+      Creating table model_fields_nullablejsonmodel
+      Creating table model_fields_relatedjsonmodel
+      Creating
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/models/fields/json.py
+  Tool: Edit action #19
+  old_text_sha256: ca8c90df643a4751151338ef248c624f174979b544e49223890d8c34d74db121
+  new_text_sha256: 4134aa2905adcc62c2b37bc56e626c7ee098097586cb9ac2a86865101c1b3ff6
+- tests/model_fields/test_jsonfield.py
+  Tool: Edit action #26
+  old_text_sha256: d4e5af48a839b7487c0d7130550bc6fea2be2d45dbdde4593bd99836a7e6f2f5
+  new_text_sha256: 16655700c94fc18083c5ba00651a7307c723a7b6b03a828a6d3f1487c02356b6
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

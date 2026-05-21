@@ -1,0 +1,257 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: f389b942-c8f0-4962-9914-6e921d7365b5
+- repo: django/django
+- instance_id: django__django-16873
+- base_commit: fce90950bef348803fa7cc3e6bc65f4bce429b82
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Template filter `join` should not escape the joining string if `autoescape` is `off`
+Description
+
+Consider the following template code snippet:
+{% autoescape off %}
+{{ some_list|join:some_var }}
+{% endautoescape %}
+in this case, the items inside some_list will not be escaped (matching the expected behavior) but some_var will forcibly be escaped. From the docs for autoescape or join I don't think this is expected behavior.
+The following testcase illustrates what I think is a bug in the join filter (run inside the template_tests/filter_tests folder):
+from django.template.defaultfilters import escape
+from django.test import SimpleTestCase
+from ..utils import setup
+class RegressionTests(SimpleTestCase):
+    @setup({"join01": '{{ some_list|join:some_var }}'})
+    def test_join01(self):
+        some_list = ["<p>Hello World!</p>", "beta & me", "<script>Hi!</script>"]
+        some_var = "<br/>"
+        output = self.engine.render_to_string("join01", {"some_list": some_list, "some_var": some_var})
+        self.assertEqual(output, escape(some_var.join(some_list)))
+    @setup({"join02": '{% autoescape off %}{{ some_list|join:some_var }}{% endautoescape %}'})
+    def test_join02(self):
+        some_list = ["<p>Hello World!</p>", "beta & me", "<script>Hi!</script>"]
+        some_var = "<br/>"
+        output = self.engine.render_to_string("join02", {"some_list": some_list, "some_var": some_var})
+        self.assertEqual(output, some_var.join(some_list))
+Result of this run in current main is:
+.F
+======================================================================
+FAIL: test_join02 (template_tests.filter_tests.test_regression.RegressionTests.test_join02)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+ File "/home/nessita/fellowship/django/django/test/utils.py", line 443, in inner
+    return func(*args, **kwargs)
+         ^^^^^^^^^^^^^^^^^^^^^
+ File "/home/nessita/fellowship/django/tests/template_tests/utils.py", line 58, in inner
+    func(self)
+ File "/home/nessita/fellowship/django/tests/template_tests/filter_tests/test_regression.py", line 21, in test_join02
+    self.assertEqual(output, some_var.join(some_list))
+AssertionError: '<p>Hello World!</p>&lt;br/&gt;beta & me&lt;br/&gt;<script>Hi!</script>' != '<p>Hello World!</p><br/>beta & me<br/><script>Hi!</script>'
+----------------------------------------------------------------------
+Ran 2 tests in 0.007s
+
+FILES INSPECTED
+---------------
+- django/template/defaultfilters.py [Grep: 1, Read: 2]
+- tests/runtests.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [3] Grep pattern='def join' path='testbed'
+- [7] Grep pattern='^def join' path='django/template/defaultfilters.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find . -type f -name "*.yaml" | grep -E "(manual|problem)" | head -5
+- [diagnostic] ls -la testbed 2>&1 | head -10
+- [diagnostic] find testbed -name "defaultfilters.py" -type f
+- [diagnostic] find . -name "defaultfilters.py" -type f
+- [diagnostic] find . -type d -name "filter_tests" | head -3
+- [test] python -m pytest tests/template_tests/filter_tests/test_join_regression.py -v
+- [test] python tests/runtests.py template_tests.filter_tests.test_join_regression -v 2
+- [other/reproduction] python --version && python3 --version
+- [test] python tests/runtests.py template_tests.filter_tests.test_join_regression -v 2
+- [test] python test_join_manual.py
+- [test] python test_join_manual.py
+- [other/reproduction] which python python3
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- Traceback (most recent call last):
+- ImportError: cannot import name 'NoneType' from 'types' (/opt/anaconda3/lib/python3.8/types.py)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #5]
+  ./django/template/defaultfilters.py
+- [Grep Result after action #7]
+  585:def join(value, arg, autoescape=True):
+  586-    """Join a list with a string, like Python's ``str.join(list)``."""
+  587-    try:
+  588-        if autoescape:
+  589-            value = [conditional_escape(v) for v in value]
+  590-        data = conditional_escape(arg).join(value)
+  591-    except TypeError:  # Fail silently if arg isn't iterable.
+  592-        return value
+  593-    return mark_safe(data)
+  594-
+  595-
+  596-@register.filter(is_safe=True)
+  597-def last(value):
+  598-    """Return the last item in a list."""
+  599-    try:
+  600-        return value[-1]
+  601-    except IndexError:
+  602-        return ""
+  603-
+  604-
+  605-@register.filter(is_safe=False)
+- [Read Result after action #9]
+       1→"""Default variable filters."""
+       2→import random as random_module
+       3→import re
+       4→import types
+       5→import warnings
+       6→from decimal import ROUND_HALF_UP, Context, Decimal, InvalidOperation, getcontext
+       7→from functools import wraps
+       8→from inspect import unwrap
+       9→from operator import itemgetter
+      10→from pprint import pformat
+      11→from urllib.parse import quote
+      12→
+      13→from django.utils import formats
+      14→from django.utils.dateformat import format, time_format
+      15→from django.utils.deprecation import RemovedInDjango51Warning
+      16→from django.utils.encoding import iri_to_uri
+      17→from django.utils.html import avoid_wrapping, conditional_escape, escape, escapejs
+      18→from django.utils.html import json_script as _json_script
+      19→from django.utils.html import linebreaks, strip_tags
+      20→from django.utils.html import urlize as _urlize
+      21→from django.utils.safestring import SafeData, mark_safe
+      22→from django.utils.text import Truncator, normalize_newlines, phone2numeric
+      23→from django.utils.text import slugify as _slugify
+      24→from django.utils.text import wrap
+      25→from django.utils.timesince import timesi
+  [... truncated ...]
+- [Read Result after action #11]
+     580→    except IndexError:
+     581→        return ""
+     582→
+     583→
+     584→@register.filter(is_safe=True, needs_autoescape=True)
+     585→def join(value, arg, autoescape=True):
+     586→    """Join a list with a string, like Python's ``str.join(list)``."""
+     587→    try:
+     588→        if autoescape:
+     589→            value = [conditional_escape(v) for v in value]
+     590→        data = conditional_escape(arg).join(value)
+     591→    except TypeError:  # Fail silently if arg isn't iterable.
+     592→        return value
+     593→    return mark_safe(data)
+     594→
+     595→
+     596→@register.filter(is_safe=True)
+     597→def last(value):
+     598→    """Return the last item in a list."""
+     599→    try:
+
+- [Diagnostic Output after action #14]
+  ./tests/template_tests/filter_tests
+- [Test Output after action #17]
+  Exit code 1
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #19]
+  Exit code 1
+    File "tests/runtests.py", line 21
+      ) from e
+           ^
+  SyntaxError: invalid syntax
+- [Test Output after action #23]
+  Exit code 1
+    File "tests/runtests.py", line 21
+      ) from e
+           ^
+  SyntaxError: invalid syntax
+- [Read Result after action #25]
+       1→#!/usr/bin/env python
+       2→import argparse
+       3→import atexit
+       4→import copy
+       5→import gc
+       6→import multiprocessing
+       7→import os
+       8→import shutil
+       9→import socket
+      10→import subprocess
+      11→import sys
+      12→import tempfile
+      13→import warnings
+      14→from pathlib import Path
+      15→
+      16→try:
+      17→    import django
+      18→except ImportError as e:
+      19→    raise RuntimeError(
+      20→        "Django module not found, reference tests/README.rst for instructions."
+      21→    ) from e
+      22→else:
+      23→    from django.apps import apps
+      24→    from django.conf import settings
+      25→    from django.core.exceptions import ImproperlyConfigured
+      26→    from django.db import connection, connections
+      27→    from django.test import TestCase, TransactionTestCase
+      28→    from django.test.runner import get_max_test_processes, parallel_type
+      29→    from django.test.selenium import SeleniumTestCaseBase
+      30→    from django.test.utils import NullTimeKeeper, TimeKeeper, get_runner
+
+- [Test Output after action #30]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_join_manual.py", line 4, in <module>
+      import django
+    File "./swebench_9_15/testbed/django/__init__.py", line 1, in <module>
+      from django.utils.version import get_version
+    File "./swebench_9_15/testbed/django/utils/version.py", line 7, in <module>
+      from django.utils.regex_helper import _lazy_re_compile
+    File "./swebench_9_15/testbed/django/utils/regex_helper.py", line 10, in <module>
+      from django.utils.functional import SimpleLazyObject
+    File "./swebench_9_15/testbed/django/utils/functional.py", line 246
+      if (_wrapped := self._wrapped) is empty:
+                   ^
+  SyntaxError: invalid syntax
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/template/defaultfilters.py
+  Tool: Edit action #13
+  old_text_sha256: bee9766dc0a02639907797aea47dcfa93f42bf51baa7533fe84907b7e8473384
+  new_text_sha256: 1d70479a154da5362d4004612b58667460caf610c4931494955217c75dded02a
+- verify_logic.py
+  Tool: Write action #41
+  new_text_sha256: e9f7b54cef0a0f14b6d0db00cd296118d5c29c53c9df50b2f3aad1cf5e4864b0
+- tests/template_tests/filter_tests/test_join_regression.py
+  Tool: Write action #16
+  new_text_sha256: ef1cd8c4b5767733ce3724d3e2ee55067e882edc505dfe896efbb25575dd28e8
+- test_join_manual.py
+  Tool: Write action #27
+  new_text_sha256: cc45c5f1e202113ec46385811621c01b6eb4cd3493288f4d165acc8c26878b1d
+- test_join_manual.py
+  Tool: Edit action #29
+  old_text_sha256: 69acfdced3a55de9528eaefc830ed996aea90a34c45e4256c28d448d74342707
+  new_text_sha256: beacc8243bd9abe5d75a8e18acd9b2d190956fe577b778f3a6d1047f51e7f41e
+- test_join_simple.py
+  Tool: Write action #38
+  new_text_sha256: af3c7f50d86137779c064aa85aad9259f6af7a5a1e8cb238bd5b08b31df2334b
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

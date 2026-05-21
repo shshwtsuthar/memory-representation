@@ -1,0 +1,407 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: e7b03a35-e2b9-4cc5-bed4-a078b4fadc46
+- repo: sympy/sympy
+- instance_id: sympy__sympy-13437
+- base_commit: 674afc619d7f5c519b6a5393a8b0532a131e57e0
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+bell(n).limit(n, oo) should be oo rather than bell(oo)
+`bell(n).limit(n,oo)` should take the value infinity, but the current output is `bell(oo)`. As the Bell numbers represent the number of partitions of a set, it seems natural that `bell(oo)` should be able to be evaluated rather than be returned unevaluated. This issue is also in line with the recent fixes to the corresponding limit for the Fibonacci numbers and Lucas numbers.
+
+```
+from sympy import *
+n = symbols('n')
+bell(n).limit(n,oo)
+
+Output:
+bell(oo)
+```
+
+I'm new to Sympy, so I'd appreciate the opportunity to fix this bug myself if that's alright.
+
+FILES INSPECTED
+---------------
+- sympy [Grep: 1]
+- swebench_9_15/sympy/functions/combinatorial/numbers.py [Read: 1]
+- sympy/functions/combinatorial/numbers.py [Read: 2]
+- sympy/functions/combinatorial/tests/test_comb_numbers.py [Read: 3]
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='**/*bell*.py'
+- [5] Grep pattern='class bell' path='sympy'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] cd ./swebench_9_15/testbed && find . -type f -name "*.py" | head -20
+- [diagnostic] cd testbed && find . -type f -name "*.py" -path "*/sympy/*" | xargs grep -l "class bell" | head -5
+- [diagnostic] cd testbed && find . -type f -name "*.py" -path "*/sympy/*" | xargs grep -l "def bell" | head -5
+- [other/reproduction] python3 -c "from sympy import *
+n = symbols('n')
+result = bell(n).limit(n, oo)
+print('Result:', result)
+print('Is it oo?', result == oo)
+print('Is it bell(oo)?', result == bell(oo))"
+- [other/reproduction] python3 -c "from sympy import *
+n = symbols('n')
+result = bell(n).limit(n, oo)
+print('Result:', result)
+print('Is it oo?', result == oo)
+print('Is it bell(oo)?', result == bell(oo))
+
+# Also test direct evaluation
+print('\nDirect bell(oo):', bell(oo))"
+- [diagnostic] find ./swebench_9_15/testbed -name "*test*" -type f -path "*/combinatorial/*" | grep -i "\.py$"
+- [diagnostic] grep -n "bell" ./swebench_9_15/testbed/sympy/functions/combinatorial/tests/test_comb_numbers.py | head -20
+- [diagnostic] grep -A5 -B5 "fibonacci.*oo\|oo.*fibonacci\|Infinity.*fibonacci\|fibonacci.*Infinity" ./swebench_9_15/testbed/sympy/functions/combinatorial/tests/test_comb_numbers.py
+- [diagnostic] grep -n "def test_fibonacci\|fibonacci.*Infinity\|issue #8800" ./swebench_9_15/testbed/sympy/functions/combinatorial/tests/test_comb_numbers.py
+- [test] python3 -m pytest sympy/functions/combinatorial/tests/test_comb_numbers.py::test_bell -v
+- [test] python3 -m pytest sympy/functions/combinatorial/tests/test_comb_numbers.py -v
+- [diagnostic] cat > ./swebench_9_15/testbed/test_issue.py << 'EOF'
+"""Test script to verify the fix for issue 13437"""
+from sympy import symbols, bell, oo, fibonacci, lucas
+
+print("Testing bell(n).limit(n, oo)...")
+n = symbols('n')
+result = bell(n).limit(n, oo)
+print(f"  bell(n).limit(n, oo) = {result}")
+assert result == oo, f"Expected oo, got {result}"
+print("  ✓ Limit test passed!")
+
+print("\nTesting direct evaluation of bell(oo)...")
+result = bell(oo)
+print(f"  bell(oo) = {result}")
+assert result == oo, f"
+  [... truncated ...]
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #5]
+  Found 1 file
+  sympy/functions/combinatorial/numbers.py
+- [Read Result after action #8]
+       1→"""
+       2→This module implements some special functions that commonly appear in
+       3→combinatorial contexts (e.g. in power series); in particular,
+       4→sequences of rational numbers such as Bernoulli and Fibonacci numbers.
+       5→
+       6→Factorials, binomial coefficients and related functions are located in
+       7→the separate 'factorials' module.
+       8→"""
+       9→
+      10→from __future__ import print_function, division
+      11→
+      12→from sympy.core import S, Symbol, Rational, Integer, Add, Dummy
+      13→from sympy.core.compatibility import as_int, SYMPY_INTS, range
+      14→from sympy.core.cache import cacheit
+      15→from sympy.core.function import Function, expand_mul
+      16→from sympy.core.numbers import E, pi
+      17→from sympy.core.relational import LessThan, StrictGreaterThan
+      18→from sympy.functions.combinatorial.factorials import binomial, factorial
+      19→from sympy.functions.elementary.exponential import log
+      20→from sympy.functions.elementary.integers import floor
+      21→from sympy.functions.elementary.trigonometric import sin, cos, cot
+      22→from sympy.functions.elementary.miscellaneous import sqrt
+      23→from sympy.utilities.memoization import recurrenc
+  [... truncated ...]
+- [Read Result after action #10]
+      98→    @classmethod
+      99→    def eval(cls, n, sym=None):
+     100→        if n is S.Infinity:
+     101→            return S.Infinity
+     102→
+     103→        if n.is_Integer:
+     104→            n = int(n)
+     105→            if n < 0:
+     106→                return S.NegativeOne**(n + 1) * fibonacci(-n)
+     107→            if sym is None:
+     108→                return Integer(cls._fib(n))
+     109→            else:
+     110→                if n < 1:
+     111→                    raise ValueError("Fibonacci polynomials are defined "
+     112→                       "only for positive integer indices.")
+     113→                return cls._fibpoly(n).subs(_sym, sym)
+     114→
+     115→    def _eval_rewrite_as_sqrt(self, n):
+     116→        return 2**(-n)*sqrt(5)*((1 + sqrt(5))**n - (-sqrt(5) + 1)**n) / 5
+     117→
+
+- [Diagnostic Output after action #17]
+  ./swebench_9_15/testbed/sympy/functions/combinatorial/tests/test_comb_factorials.py
+  ./swebench_9_15/testbed/sympy/functions/combinatorial/tests/test_comb_numbers.py
+- [Diagnostic Output after action #19]
+  7:    bernoulli, harmonic, bell, fibonacci, lucas, euler, catalan, genocchi,
+  80:def test_bell():
+  81:    assert [bell(n) for n in range(8)] == [1, 1, 2, 5, 15, 52, 203, 877]
+  83:    assert bell(0, x) == 1
+  84:    assert bell(1, x) == x
+  85:    assert bell(2, x) == x**2 + x
+  86:    assert bell(5, x) == x**5 + 10*x**4 + 25*x**3 + 15*x**2 + x
+  93:    assert bell(6, 2, X[1:]) == 6*X[5]*X[1] + 15*X[4]*X[2] + 10*X[3]**2
+  94:    assert bell(
+  98:    assert bell(6, 2, X) == (6 + 15 + 10)*10000
+  101:    assert bell(6, 2, X) == 6*5 + 15*3*2 + 10*3**2
+  104:    assert bell(6, 3, X) == 15*5 + 60*3*2 + 15*2**3
+  111:        assert bell(i).evalf() == bell(n).rewrite(Sum).evalf(subs={n: i})
+  115:    assert bell(-1).evalf() == bell(m).rewrite(Sum).evalf(subs={m: -1})
+- [Read Result after action #21]
+      80→def test_bell():
+      81→    assert [bell(n) for n in range(8)] == [1, 1, 2, 5, 15, 52, 203, 877]
+      82→
+      83→    assert bell(0, x) == 1
+      84→    assert bell(1, x) == x
+      85→    assert bell(2, x) == x**2 + x
+      86→    assert bell(5, x) == x**5 + 10*x**4 + 25*x**3 + 15*x**2 + x
+      87→
+      88→    X = symbols('x:6')
+      89→    # X = (x0, x1, .. x5)
+      90→    # at the same time: X[1] = x1, X[2] = x2 for standard readablity.
+      91→    # but we must supply zero-based indexed object X[1:] = (x1, .. x5)
+      92→
+      93→    assert bell(6, 2, X[1:]) == 6*X[5]*X[1] + 15*X[4]*X[2] + 10*X[3]**2
+      94→    assert bell(
+      95→        6, 3, X[1:]) == 15*X[4]*X[1]**2 + 60*X[3]*X[2]*X[1] + 15*X[2]**3
+      96→
+      97→    X = (1, 10, 100, 1000, 10000)
+      98→    assert bell(6, 2, X) == (6 + 15 + 10)*10000
+      99→
+     100→    X = (1, 2, 3, 3, 5)
+     101→    assert bell(6, 2, X) == 6*5 + 15*3*2 + 10*3**2
+     102→
+     103→    X = (1, 2, 3, 5)
+     104→    assert bell(6, 3, X) == 15*5 + 60*3*2 + 15*2**3
+     105→
+     106→    # Dobinski's formula
+     107→    n = Symbol('n', integer=True, nonnegative=True)
+     108→    # For large numbers, this is too slow
+     109→    # For nonintegers, there are signifi
+  [... truncated ...]
+- [Diagnostic Output after action #23]
+      assert fibonacci(3, x) == x**2 + 1
+      assert fibonacci(4, x) == x**3 + 2*x
+
+      # issue #8800
+      n = Dummy('n')
+      assert fibonacci(n).limit(n, S.Infinity) == S.Infinity
+      assert lucas(n).limit(n, S.Infinity) == S.Infinity
+
+      assert fibonacci(n).rewrite(sqrt) == \
+          2**(-n)*sqrt(5)*((1 + sqrt(5))**n - (-sqrt(5) + 1)**n) / 5
+      assert fibonacci(n).rewrite(sqrt).subs(n, 10).expand() == fibonacci(10)
+- [Read Result after action #25]
+      80→def test_bell():
+      81→    assert [bell(n) for n in range(8)] == [1, 1, 2, 5, 15, 52, 203, 877]
+      82→
+      83→    assert bell(0, x) == 1
+      84→    assert bell(1, x) == x
+      85→    assert bell(2, x) == x**2 + x
+      86→    assert bell(5, x) == x**5 + 10*x**4 + 25*x**3 + 15*x**2 + x
+      87→
+      88→    X = symbols('x:6')
+      89→    # X = (x0, x1, .. x5)
+      90→    # at the same time: X[1] = x1, X[2] = x2 for standard readablity.
+      91→    # but we must supply zero-based indexed object X[1:] = (x1, .. x5)
+      92→
+      93→    assert bell(6, 2, X[1:]) == 6*X[5]*X[1] + 15*X[4]*X[2] + 10*X[3]**2
+      94→    assert bell(
+      95→        6, 3, X[1:]) == 15*X[4]*X[1]**2 + 60*X[3]*X[2]*X[1] + 15*X[2]**3
+      96→
+      97→    X = (1, 10, 100, 1000, 10000)
+      98→    assert bell(6, 2, X) == (6 + 15 + 10)*10000
+      99→
+     100→    X = (1, 2, 3, 3, 5)
+     101→    assert bell(6, 2, X) == 6*5 + 15*3*2 + 10*3**2
+     102→
+     103→    X = (1, 2, 3, 5)
+     104→    assert bell(6, 3, X) == 15*5 + 60*3*2 + 15*2**3
+     105→
+     106→    # Dobinski's formula
+     107→    n = Symbol('n', integer=True, nonnegative=True)
+     108→    # For large numbers, this is too slow
+     109→    # For nonintegers, there are signifi
+  [... truncated ...]
+- [Diagnostic Output after action #27]
+  54:def test_fibonacci():
+  65:    # issue #8800
+  67:    assert fibonacci(n).limit(n, S.Infinity) == S.Infinity
+- [Read Result after action #29]
+      54→def test_fibonacci():
+      55→    assert [fibonacci(n) for n in range(-3, 5)] == [2, -1, 1, 0, 1, 1, 2, 3]
+      56→    assert fibonacci(100) == 354224848179261915075
+      57→    assert [lucas(n) for n in range(-3, 5)] == [-4, 3, -1, 2, 1, 3, 4, 7]
+      58→    assert lucas(100) == 792070839848372253127
+      59→
+      60→    assert fibonacci(1, x) == 1
+      61→    assert fibonacci(2, x) == x
+      62→    assert fibonacci(3, x) == x**2 + 1
+      63→    assert fibonacci(4, x) == x**3 + 2*x
+      64→
+      65→    # issue #8800
+      66→    n = Dummy('n')
+      67→    assert fibonacci(n).limit(n, S.Infinity) == S.Infinity
+      68→    assert lucas(n).limit(n, S.Infinity) == S.Infinity
+      69→
+      70→    assert fibonacci(n).rewrite(sqrt) == \
+      71→        2**(-n)*sqrt(5)*((1 + sqrt(5))**n - (-sqrt(5) + 1)**n) / 5
+      72→    assert fibonacci(n).rewrite(sqrt).subs(n, 10).expand() == fibonacci(10)
+      73→    assert fibonacci(n).rewrite(GoldenRatio).subs(n,10).evalf() == \
+      74→        fibonacci(10)
+      75→    assert lucas(n).rewrite(sqrt) == \
+      76→        (fibonacci(n-1).rewrite(sqrt) + fibonacci(n+1).rewrite(sqrt)).simplify()
+      77→    assert lucas(n).rewrite(sqrt).subs(n, 10).expand() == lucas(10
+  [... truncated ...]
+- [Test Output after action #32]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 1 item
+
+  sympy/functions/combinatorial/tests/test_comb_numbers.py::test_bell PASSED [100%]
+
+  =============================== warnings summary ===============================
+  sympy/core/basic.py:3
+    ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+      from collections import Mapping, defaultdict
+
+  sympy/core/containers.py:271
+    ./swebench_9_15/testbed/sympy/core/containers.py:271: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will sto
+  [... truncated ...]
+- [Test Output after action #34]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 20 items
+
+  sympy/functions/combinatorial/tests/test_comb_numbers.py::test_bernoulli PASSED [  5%]
+  sympy/functions/combinatorial/tests/test_comb_numbers.py::test_fibonacci PASSED [ 10%]
+  sympy/functions/combinatorial/tests/test_comb_numbers.py::test_bell PASSED [ 15%]
+  sympy/functions/combinatorial/tests/test_comb_numbers.py::test_harmonic PASSED [ 20%]
+  sympy/functions/combinatorial/tests/test_comb_numbers.py::test_harmonic_rational PASSED [ 25%]
+  sympy/functions/combinatorial/tests/test_comb_numbers.py::test_harmonic_evalf PASSED [ 30%]
+  sympy/functions/combinatorial/tests/test_comb_numbers.py::test_harmonic_rewrite_polygamma PASSED [ 35%]
+  sympy/functions/combinatorial/tests/test_comb_numbers.p
+  [... truncated ...]
+- [Diagnostic Output after action #36]
+  Testing bell(n).limit(n, oo)...
+    bell(n).limit(n, oo) = oo
+    ✓ Limit test passed!
+
+  Testing direct evaluation of bell(oo)...
+    bell(oo) = oo
+    ✓ Direct evaluation test passed!
+
+  Verifying consistency with fibonacci and lucas...
+    fibonacci(n).limit(n, oo) = oo
+    lucas(n).limit(n, oo) = oo
+    ✓ All three functions behave consistently!
+
+  Testing that finite bell numbers still work...
+    bell(0) = 1
+    bell(1) = 1
+    bell(2) = 2
+    bell(3) = 5
+    bell(4) = 15
+    bell(5) = 52
+    ✓ All finite values correct!
+
+  ✓✓✓ All tests passed! Issue 13437 is fixed! ✓✓✓
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections
+  [... truncated ...]
+- [Diagnostic Output after action #41]
+  # Solution Summary for Issue sympy__sympy-13437
+
+  ## Problem Statement
+  The issue was that `bell(n).limit(n, oo)` was returning `bell(oo)` instead of `oo` (infinity).
+
+  Bell numbers represent the number of partitions of a set, and as the set size approaches infinity, the number of partitions also approaches infinity. This behavior should be consistent with similar functions like Fibonacci and Lucas numbers.
+
+  ## Solution
+
+  ### Changes Made
+
+  #### 1. Modified `sympy/functions/combinatorial/numbers.py`
+  Added infinity handling to the `bell.eval()` method at line 437-438:
+
+  ```python
+  @classmethod
+  def eval(cls, n, k_sym=None, symbols=None):
+      if n is S.Infinity:
+          return S.Infinity
+
+      if n.is_Integer and n.is_nonnegative:
+          ...
+  ```
+
+  This follows the same pattern used in the `fibonacci` and `lucas` classes (lines 100-101 and 155-156 respectively).
+
+  #### 2. Added Test in `sympy/functions/combinatorial/tests/test_comb_numbers.py`
+  Added a test case at lines 88-90 in the `test_bell()` function:
+
+  ```python
+  # issue 13437
+  n = Symbol('n')
+  assert bell(n).limit(n, S.Infinity) == S.Infinity
+  ```
+
+  This is consistent with the tests for fibonacci and lucas (issue #8800).
+
+  ## Verification
+
+  All
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/functions/combinatorial/numbers.py
+  Tool: Edit action #14
+  old_text_sha256: ab7148cc9c65bd7c988c9659c3871181811b08c041aaf0fc3a950044ee55f45a
+  new_text_sha256: d9f6ffd35d02c8f050a5b9f2c36693ada1192f37d8199d69a9bdf7b6f60e37dc
+- sympy/functions/combinatorial/tests/test_comb_numbers.py
+  Tool: Edit action #31
+  old_text_sha256: d390782d0be17673442ad9137d585d9da31a4a193adf2608a70bc945daf3c279
+  new_text_sha256: 5d8fadadeff2d6a5895d20871885025cd0637da9d0202682cda0fe08ee9aa648
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

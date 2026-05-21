@@ -1,0 +1,296 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 02288eb6-b08e-4b1c-9d29-b4abad2be12f
+- repo: django/django
+- instance_id: django__django-12915
+- base_commit: 4652f1f0aa459a7b980441d629648707c32e36bf
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Add get_response_async for ASGIStaticFilesHandler
+Description
+
+It looks like the StaticFilesHandlerMixin is missing the the async response function.
+Without this, when trying to use the ASGIStaticFilesHandler, this is the traceback:
+Exception inside application: 'NoneType' object is not callable
+Traceback (most recent call last):
+ File ".../lib/python3.7/site-packages/daphne/cli.py", line 30, in asgi
+    await self.app(scope, receive, send)
+ File ".../src/django/django/contrib/staticfiles/handlers.py", line 86, in __call__
+    return await super().__call__(scope, receive, send)
+ File ".../src/django/django/core/handlers/asgi.py", line 161, in __call__
+    response = await self.get_response_async(request)
+ File ".../src/django/django/core/handlers/base.py", line 148, in get_response_async
+    response = await self._middleware_chain(request)
+TypeError: 'NoneType' object is not callable
+
+FILES INSPECTED
+---------------
+- django__django/django/contrib/staticfiles/handlers.py [Read: 1]
+- django__django/django/core/handlers/base.py [Read: 1]
+- django__django/django/core/handlers/asgi.py [Read: 1]
+- django/contrib/staticfiles/handlers.py [Read: 2]
+- django/core/handlers/base.py [Read: 1]
+- django/core/handlers/asgi.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+(none)
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15/testbed -type f -name "handlers.py" | grep staticfiles
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [diagnostic] find testbed -type f -name "*.py" -path "*/tests/*" | xargs grep -l "ASGIStaticFilesHandler" 2>/dev/null | head -5
+- [diagnostic] cd ./swebench_9_15 && find testbed -type f -name "*.py" -path "*/tests/*" | xargs grep -l "ASGIStaticFilesHandler" 2>/dev/null | head -5
+- [diagnostic] find testbed -type f -name "*.py" -path "*/staticfiles/*" | grep -i test | head -10
+- [diagnostic] find testbed/tests -type d -name "*static*" 2>/dev/null
+- [diagnostic] ls -la testbed/tests/staticfiles_tests/*.py | head -20
+- [diagnostic] find testbed/tests -type f -name "*.py" | xargs grep -l "ASGIStaticFilesHandler" 2>/dev/null
+- [diagnostic] find testbed/tests -type d -name "*asgi*"
+- [diagnostic] ls -la testbed/tests/asgi/
+- [test] python test_asgi_static_files.py
+- [other/reproduction] python --version
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #6]
+       1→from urllib.parse import urlparse
+       2→from urllib.request import url2pathname
+       3→
+       4→from django.conf import settings
+       5→from django.contrib.staticfiles import utils
+       6→from django.contrib.staticfiles.views import serve
+       7→from django.core.handlers.asgi import ASGIHandler
+       8→from django.core.handlers.exception import response_for_exception
+       9→from django.core.handlers.wsgi import WSGIHandler, get_path_info
+      10→from django.http import Http404
+      11→
+      12→
+      13→class StaticFilesHandlerMixin:
+      14→    """
+      15→    Common methods used by WSGI and ASGI handlers.
+      16→    """
+      17→    # May be used to differentiate between handler types (e.g. in a
+      18→    # request_finished signal)
+      19→    handles_files = True
+      20→
+      21→    def load_middleware(self):
+      22→        # Middleware are already loaded for self.application; no need to reload
+      23→        # them for self.
+      24→        pass
+      25→
+      26→    def get_base_url(self):
+      27→        utils.check_settings()
+      28→        return settings.STATIC_URL
+      29→
+      30→    def _should_handle(self, path):
+      31→        """
+      32→        Check if the path should be handl
+  [... truncated ...]
+- [Read Result after action #8]
+       1→import asyncio
+       2→import logging
+       3→import types
+       4→
+       5→from asgiref.sync import async_to_sync, sync_to_async
+       6→
+       7→from django.conf import settings
+       8→from django.core.exceptions import ImproperlyConfigured, MiddlewareNotUsed
+       9→from django.core.signals import request_finished
+      10→from django.db import connections, transaction
+      11→from django.urls import get_resolver, set_urlconf
+      12→from django.utils.log import log_response
+      13→from django.utils.module_loading import import_string
+      14→
+      15→from .exception import convert_exception_to_response
+      16→
+      17→logger = logging.getLogger('django.request')
+      18→
+      19→
+      20→class BaseHandler:
+      21→    _view_middleware = None
+      22→    _template_response_middleware = None
+      23→    _exception_middleware = None
+      24→    _middleware_chain = None
+      25→
+      26→    def load_middleware(self, is_async=False):
+      27→        """
+      28→        Populate middleware lists from settings.MIDDLEWARE.
+      29→
+      30→        Must be called after the environment is fixed (see __call__ in subclasses).
+      31→        """
+      32→        self._view_middleware = []
+      33→        self._te
+  [... truncated ...]
+- [Read Result after action #10]
+       1→import logging
+       2→import sys
+       3→import tempfile
+       4→import traceback
+       5→
+       6→from asgiref.sync import sync_to_async
+       7→
+       8→from django.conf import settings
+       9→from django.core import signals
+      10→from django.core.exceptions import RequestAborted, RequestDataTooBig
+      11→from django.core.handlers import base
+      12→from django.http import (
+      13→    FileResponse, HttpRequest, HttpResponse, HttpResponseBadRequest,
+      14→    HttpResponseServerError, QueryDict, parse_cookie,
+      15→)
+      16→from django.urls import set_script_prefix
+      17→from django.utils.functional import cached_property
+      18→
+      19→logger = logging.getLogger('django.request')
+      20→
+      21→
+      22→class ASGIRequest(HttpRequest):
+      23→    """
+      24→    Custom request subclass that decodes from an ASGI-standard request dict
+      25→    and wraps request body handling.
+      26→    """
+      27→    # Number of seconds until a Request gives up on trying to read a request
+      28→    # body and aborts.
+      29→    body_receive_timeout = 60
+      30→
+      31→    def __init__(self, scope, body_file):
+      32→        self.scope = scope
+      33→        self._post_parse_error = False
+
+  [... truncated ...]
+- [Read Result after action #14]
+       1→from urllib.parse import urlparse
+       2→from urllib.request import url2pathname
+       3→
+       4→from asgiref.sync import sync_to_async
+       5→
+       6→from django.conf import settings
+       7→from django.contrib.staticfiles import utils
+       8→from django.contrib.staticfiles.views import serve
+       9→from django.core.handlers.asgi import ASGIHandler
+      10→from django.core.handlers.exception import response_for_exception
+      11→from django.core.handlers.wsgi import WSGIHandler, get_path_info
+      12→from django.http import Http404
+      13→
+      14→
+      15→class StaticFilesHandlerMixin:
+      16→    """
+      17→    Common methods used by WSGI and ASGI handlers.
+      18→    """
+      19→    # May be used to differentiate between handler types (e.g. in a
+      20→    # request_finished signal)
+      21→    handles_files = True
+      22→
+      23→    def load_middleware(self):
+      24→        # Middleware are already loaded for self.application; no need to reload
+      25→        # them for self.
+      26→        pass
+      27→
+      28→    def get_base_url(self):
+      29→        utils.check_settings()
+      30→        return settings.STATIC_URL
+      31→
+      32→    def _should_handle(self, path):
+      33→
+  [... truncated ...]
+- [Diagnostic Output after action #18]
+  testbed/django/contrib/staticfiles/finders.py
+  testbed/django/contrib/staticfiles/checks.py
+  testbed/django/contrib/staticfiles/management/__init__.py
+  testbed/django/contrib/staticfiles/management/commands/__init__.py
+  testbed/django/contrib/staticfiles/management/commands/findstatic.py
+  testbed/django/contrib/staticfiles/management/commands/runserver.py
+  testbed/django/contrib/staticfiles/management/commands/collectstatic.py
+  testbed/django/contrib/staticfiles/handlers.py
+  testbed/django/contrib/staticfiles/__init__.py
+  testbed/django/contrib/staticfiles/apps.py
+- [Diagnostic Output after action #20]
+  testbed/tests/staticfiles_tests
+  testbed/tests/staticfiles_tests/project/site_media/static
+  testbed/tests/staticfiles_tests/apps/test/static
+  testbed/tests/staticfiles_tests/apps/no_label/static
+  testbed/tests/i18n/commands/someapp/static
+  testbed/tests/i18n/commands/static
+  testbed/tests/servers/another_app/static
+  testbed/tests/servers/static
+- [Diagnostic Output after action #22]
+  -rw-r--r--@ 1 user  staff      0 12 Dec 15:20 testbed/tests/staticfiles_tests/__init__.py
+  -rw-r--r--@ 1 user  staff   4509 12 Dec 15:21 testbed/tests/staticfiles_tests/cases.py
+  -rw-r--r--@ 1 user  staff   1068 12 Dec 15:21 testbed/tests/staticfiles_tests/settings.py
+  -rw-r--r--@ 1 user  staff   2449 12 Dec 15:21 testbed/tests/staticfiles_tests/storage.py
+  -rw-r--r--@ 1 user  staff   3044 12 Dec 15:21 testbed/tests/staticfiles_tests/test_checks.py
+  -rw-r--r--@ 1 user  staff   4056 12 Dec 15:21 testbed/tests/staticfiles_tests/test_finders.py
+  -rw-r--r--@ 1 user  staff   1429 12 Dec 15:21 testbed/tests/staticfiles_tests/test_forms.py
+  -rw-r--r--@ 1 user  staff   3023 12 Dec 15:21 testbed/tests/staticfiles_tests/test_liveserver.py
+  -rw-r--r--@ 1 user  staff  22611 12 Dec 15:21 testbed/tests/staticfiles_tests/test_management.py
+  -rw-r--r--@ 1 user  staff  23496 12 Dec 15:21 testbed/tests/staticfiles_tests/test_storage.py
+  -rw-r--r--@ 1 user  staff    907 12 Dec 15:21 testbed/tests/staticfiles_tests/test_templatetags.py
+  -rw-r--r--@ 1 user  staff    628 12 Dec 15:21 testbed/tests/staticfiles_tests/test_utils.py
+  -rw-r--r--@ 1 user  staff   1339 12 Dec 15:21 testbed/tests/staticfiles_tests/test_vie
+  [... truncated ...]
+- [Diagnostic Output after action #24]
+  Exit code 1
+- [Diagnostic Output after action #26]
+  testbed/tests/asgi
+- [Diagnostic Output after action #28]
+  total 32
+  drwxr-xr-x@   5 user  staff   160 12 Dec 15:21 .
+  drwxr-xr-x@ 217 user  staff  6944 12 Dec 15:21 ..
+  -rw-r--r--@   1 user  staff     0 12 Dec 15:20 __init__.py
+  -rw-r--r--@   1 user  staff  8680 12 Dec 15:21 tests.py
+  -rw-r--r--@   1 user  staff   534 12 Dec 15:21 urls.py
+- [Test Output after action #31]
+  Exit code 1
+    File "test_asgi_static_files.py", line 43
+      async def test_get_response_async_exists():
+              ^
+  SyntaxError: invalid syntax
+- [Test Output after action #35]
+  Testing StaticFilesHandlerMixin has get_response_async method...
+  ✓ StaticFilesHandlerMixin.get_response_async exists and is async
+  ✓ ASGIStaticFilesHandler has get_response_async method
+  ✓ ASGIStaticFilesHandler.get_response_async is callable
+
+  ✓ All tests passed! The fix is working correctly.
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/contrib/staticfiles/handlers.py
+  Tool: Edit action #12
+  old_text_sha256: e18b4728d6a3ede1eb42a16173f90869aa799c71c778743eb935fc1fd5269f66
+  new_text_sha256: c10a10fdbaf798d48b21c242641cdf2b32dc52143c715f90d1ab7d51c67b463e
+- django/contrib/staticfiles/handlers.py
+  Tool: Edit action #13
+  old_text_sha256: 2f7612165dcb6bd5204040a87a3280560da4ce757b0d70e05ea7dcae1d003fba
+  new_text_sha256: e5c4673d8fe0aa0460c23a5c62a89ba87c93b9dbbf908f4a7a087437ecabfd79
+- swebench_9_15/test_asgi_static_files.py
+  Tool: Write action #30
+  new_text_sha256: 39c7ffd6588dad7ecad2964d5ebc5b363e8462449c5f4a1f492b50923f2f2972
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

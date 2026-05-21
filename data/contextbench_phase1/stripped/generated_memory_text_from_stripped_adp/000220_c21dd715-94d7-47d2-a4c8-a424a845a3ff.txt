@@ -1,0 +1,394 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: c21dd715-94d7-47d2-a4c8-a424a845a3ff
+- repo: django/django
+- instance_id: django__django-12497
+- base_commit: a4881f5e5d7ee38b7e83301331a0b4962845ef8a
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Wrong hint about recursive relationship.
+Description
+
+        (last modified by Matheus Cunha Motta)
+
+When there's more than 2 ForeignKeys in an intermediary model of a m2m field and no through_fields have been set, Django will show an error with the following hint:
+hint=(
+    'If you want to create a recursive relationship, '
+    'use ForeignKey("%s", symmetrical=False, through="%s").'
+But 'symmetrical' and 'through' are m2m keyword arguments, not ForeignKey.
+This was probably a small mistake where the developer thought ManyToManyField but typed ForeignKey instead. And the symmetrical=False is an outdated requirement to recursive relationships with intermediary model to self, not required since 3.0. I'll provide a PR with a proposed correction shortly after.
+Edit: fixed description.
+
+FILES INSPECTED
+---------------
+- django/db/models/fields/related.py [Read: 4]
+- docs [Grep: 1]
+- docs/releases/3.0.txt [Grep: 1]
+- tests [Grep: 1]
+- tests/invalid_models_tests/test_relative_fields.py [Grep: 3, Read: 1]
+- docs/ref/checks.txt [Read: 1, Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Grep pattern='If you want to create a recursive relationship'
+- [2] Grep pattern='recursive relationship'
+- [3] Grep pattern='symmetrical=False'
+- [5] Grep pattern='symmetrical' path='testbed'
+- [7] Grep pattern='use ForeignKey' path='testbed'
+- [15] Grep pattern='symmetrical.*recursive' path='docs'
+- [17] Grep pattern='symmetrical' path='docs/releases/3.0.txt'
+- [23] Grep pattern='fields.E334' path='testbed'
+- [25] Grep pattern='E334|E335' path='tests'
+- [27] Grep pattern='E334|E335' path='tests/invalid_models_tests/test_relative_fields.py'
+- [29] Grep pattern='ForeignKey.*symmetrical.*through' path='tests/invalid_models_tests/test_relative_fields.py'
+- [31] Grep pattern='fields\\.E334' path='tests/invalid_models_tests/test_relative_fields.py'
+- [38] Grep pattern='fields\\.E33[45]' path='docs/ref/checks.txt'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la testbed 2>/dev/null || echo "No testbed directory"
+- [test] cd testbed && python -m pytest tests/invalid_models_tests/test_relative_fields.py::RelativeFieldTests::test_ambiguous_relationship_model -xvs
+- [test] cd testbed && python tests/runtests.py invalid_models_tests.test_relative_fields.RelativeFieldTests.test_ambiguous_relationship_model --settings=test_sqlite
+- [other/reproduction] python --version
+- [other/reproduction] python3 --version
+- [test] cd testbed && python3 tests/runtests.py invalid_models_tests.test_relative_fields.RelativeFieldTests.test_ambiguous_relationship_model --settings=test_sqlite
+- [test] cd testbed && python3 tests/runtests.py invalid_models_tests.test_relative_fields --settings=test_sqlite 2>&1 | tail -20
+- [test] cd testbed && python3 tests/runtests.py invalid_models_tests.test_relative_fields --settings=test_sqlite
+- [test] python3 tests/runtests.py invalid_models_tests.test_relative_fields --settings=test_sqlite
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #5]
+  Found 19 files
+  testbed/tests/serializers/models/data.py
+  testbed/tests/schema/fields.py
+  testbed/tests/prefetch_related/models.py
+  testbed/tests/model_meta/models.py
+  testbed/tests/migrations/test_state.py
+  testbed/tests/m2m_through/tests.py
+  testbed/tests/m2m_through/models.py
+  testbed/tests/m2m_signals/models.py
+  testbed/tests/m2m_regress/models.py
+  testbed/tests/m2m_recursive/models.py
+  testbed/tests/invalid_models_tests/test_relative_fields.py
+  testbed/tests/foreign_object/models/person.py
+  testbed/tests/backends/models.py
+  testbed/docs/releases/3.0.txt
+  testbed/docs/ref/models/fields.txt
+  testbed/docs/ref/checks.txt
+  testbed/django/db/models/fields/reverse_related.py
+  testbed/django/db/models/fields/related_descriptors.py
+  testbed/django/db/models/fields/related.py
+- [Grep Result after action #7]
+  testbed/django/db/models/fields/related.py:1312:                                'use ForeignKey("%s", symmetrical=False, through="%s").'
+  testbed/django/db/models/fields/related.py:1332:                                'use ForeignKey("%s", symmetrical=False, through="%s").'
+- [Read Result after action #9]
+    1290→
+    1291→            else:
+    1292→                # Count foreign keys in relationship model
+    1293→                seen_from = sum(
+    1294→                    from_model == getattr(field.remote_field, 'model', None)
+    1295→                    for field in self.remote_field.through._meta.fields
+    1296→                )
+    1297→                seen_to = sum(
+    1298→                    to_model == getattr(field.remote_field, 'model', None)
+    1299→                    for field in self.remote_field.through._meta.fields
+    1300→                )
+    1301→
+    1302→                if seen_from > 1 and not self.remote_field.through_fields:
+    1303→                    errors.append(
+    1304→                        checks.Error(
+    1305→                            ("The model is used as an intermediate model by "
+    1306→                             "'%s', but it has more than one foreign key "
+    1307→                             "from '%s', which is ambiguous. You must specify "
+    1308→                             "which foreign key Django should use via the "
+    1309→                             "through_fields keyword argument.") % (self, from_model_name),
+    1310→                            h
+  [... truncated ...]
+- [Read Result after action #11]
+    1150→        except AttributeError:
+    1151→            assert isinstance(to, str), (
+    1152→                "%s(%r) is invalid. First parameter to ManyToManyField must be "
+    1153→                "either a model, a model name, or the string %r" %
+    1154→                (self.__class__.__name__, to, RECURSIVE_RELATIONSHIP_CONSTANT)
+    1155→            )
+    1156→
+    1157→        if symmetrical is None:
+    1158→            symmetrical = (to == RECURSIVE_RELATIONSHIP_CONSTANT)
+    1159→
+    1160→        if through is not None:
+    1161→            assert db_table is None, (
+    1162→                "Cannot specify a db_table if an intermediary model is used."
+    1163→            )
+    1164→
+    1165→        kwargs['rel'] = self.rel_class(
+    1166→            self, to,
+    1167→            related_name=related_name,
+    1168→            related_query_name=related_query_name,
+    1169→            limit_choices_to=limit_choices_to,
+    1170→            symmetrical=symmetrical,
+    1171→            through=through,
+    1172→            through_fields=through_fields,
+    1173→            db_constraint=db_constraint,
+    1174→        )
+    1175→        self.has_null_arg = 'null' in kwargs
+    1176→
+    1177→        super().__ini
+  [... truncated ...]
+- [Read Result after action #13]
+    1090→        to = 'to_%s' % to
+    1091→        from_ = 'from_%s' % from_
+    1092→
+    1093→    meta = type('Meta', (), {
+    1094→        'db_table': field._get_m2m_db_table(klass._meta),
+    1095→        'auto_created': klass,
+    1096→        'app_label': klass._meta.app_label,
+    1097→        'db_tablespace': klass._meta.db_tablespace,
+    1098→        'unique_together': (from_, to),
+    1099→        'verbose_name': _('%(from)s-%(to)s relationship') % {'from': from_, 'to': to},
+    1100→        'verbose_name_plural': _('%(from)s-%(to)s relationships') % {'from': from_, 'to': to},
+    1101→        'apps': field.model._meta.apps,
+    1102→    })
+    1103→    # Construct and return the new class.
+    1104→    return type(name, (models.Model,), {
+    1105→        'Meta': meta,
+    1106→        '__module__': klass.__module__,
+    1107→        from_: models.ForeignKey(
+    1108→            klass,
+    1109→            related_name='%s+' % name,
+    1110→            db_tablespace=field.db_tablespace,
+    1111→            db_constraint=field.remote_field.db_constraint,
+    1112→            on_delete=CASCADE,
+    1113→        ),
+    1114→        to: models.ForeignKey(
+    1115→            to_model,
+    1116→            related_name='%
+  [... truncated ...]
+- [Grep Result after action #15]
+  testbed/docs/ref/models/fields.txt:1752:        Specifying ``symmetrical=True`` for recursive many-to-many
+- [Grep Result after action #17]
+  275-
+  276-* :class:`~django.db.models.FilePathField` now accepts a callable for ``path``.
+  277-
+  278:* Allowed symmetrical intermediate table for self-referential
+  279-  :class:`~django.db.models.ManyToManyField`.
+  280-
+  281-* The ``name`` attributes of :class:`~django.db.models.CheckConstraint`,
+- [Read Result after action #21]
+    1305→                            ("The model is used as an intermediate model by "
+    1306→                             "'%s', but it has more than one foreign key "
+    1307→                             "from '%s', which is ambiguous. You must specify "
+    1308→                             "which foreign key Django should use via the "
+    1309→                             "through_fields keyword argument.") % (self, from_model_name),
+    1310→                            hint=(
+    1311→                                'If you want to create a recursive relationship, '
+    1312→                                'use ManyToManyField("%s", through="%s").'
+    1313→                            ) % (
+    1314→                                RECURSIVE_RELATIONSHIP_CONSTANT,
+    1315→                                relationship_model_name,
+    1316→                            ),
+    1317→                            obj=self,
+    1318→                            id='fields.E334',
+    1319→                        )
+    1320→                    )
+    1321→
+    1322→                if seen_to > 1 and not self.remote_field.through_fields:
+    1323→                    errors.append(
+    1324→                        checks.Error(
+
+  [... truncated ...]
+- [Grep Result after action #23]
+  Found 2 files
+  testbed/django/db/models/fields/related.py
+  testbed/docs/ref/checks.txt
+- [Grep Result after action #25]
+  Found 1 file
+  testbed/tests/invalid_models_tests/test_relative_fields.py
+- [Grep Result after action #27]
+  143-            second_model = models.ForeignKey(Group, models.CASCADE)
+  144-
+  145-        field = Group._meta.get_field('field')
+  146-        self.assertEqual(field.check(from_model=Group), [
+  147-            Error(
+  148-                "The model is used as an intermediate model by "
+  149-                "'invalid_models_tests.Group.field', but it has more than one "
+  150-                "foreign key to 'Person', which is ambiguous. You must specify "
+  151-                "which foreign key Django should use via the through_fields "
+  152-                "keyword argument.",
+  153-                hint=(
+  154-                    'If you want to create a recursive relationship, use '
+  155-                    'ForeignKey("self", symmetrical=False, through="AmbiguousRelationship").'
+  156-                ),
+  157-                obj=field,
+  158:                id='fields.E335',
+  159-            ),
+  160-        ])
+  161-
+  162-    def test_relationship_model_with_foreign_key_to_wrong_model(self):
+  163-        class WrongModel(models.Model):
+  164-            pass
+  165-
+  166-        class Person(models.Model):
+  167-            pass
+  168-
+  169-        class Group(models.Model):
+  170-            members = models.ManyToMa
+  [... truncated ...]
+- [Grep Result after action #29]
+  155:                    'ForeignKey("self", symmetrical=False, through="AmbiguousRelationship").'
+- [Grep Result after action #31]
+  No matches found
+- [Read Result after action #33]
+     125→                'with a through model.',
+     126→                obj=field,
+     127→                id='fields.W343',
+     128→            ),
+     129→        ])
+     130→
+     131→    def test_ambiguous_relationship_model(self):
+     132→
+     133→        class Person(models.Model):
+     134→            pass
+     135→
+     136→        class Group(models.Model):
+     137→            field = models.ManyToManyField('Person', through="AmbiguousRelationship", related_name='tertiary')
+     138→
+     139→        class AmbiguousRelationship(models.Model):
+     140→            # Too much foreign keys to Person.
+     141→            first_person = models.ForeignKey(Person, models.CASCADE, related_name="first")
+     142→            second_person = models.ForeignKey(Person, models.CASCADE, related_name="second")
+     143→            second_model = models.ForeignKey(Group, models.CASCADE)
+     144→
+     145→        field = Group._meta.get_field('field')
+     146→        self.assertEqual(field.check(from_model=Group), [
+     147→            Error(
+     148→                "The model is used as an intermediate model by "
+     149→                "'invalid_models_tests.Group.field', but it has more than one "
+     150→                "f
+  [... truncated ...]
+- [Read Result after action #36]
+       1→======================
+       2→System check framework
+       3→======================
+       4→
+       5→.. currentmodule:: django.core.checks
+       6→
+       7→The system check framework is a set of static checks for validating Django
+       8→projects. It detects common problems and provides hints for how to fix them.
+       9→The framework is extensible so you can easily add your own checks.
+      10→
+      11→For details on how to add your own checks and integrate them with Django's
+      12→system checks, see the :doc:`System check topic guide </topics/checks>`.
+      13→
+      14→API reference
+      15→=============
+      16→
+      17→``CheckMessage``
+      18→----------------
+      19→
+      20→.. class:: CheckMessage(level, msg, hint=None, obj=None, id=None)
+      21→
+      22→The warnings and errors raised by system checks must be instances of
+      23→``CheckMessage``. An instance encapsulates a single reportable error or
+      24→warning. It also provides context and hints applicable to the message, and a
+      25→unique identifier that is used for filtering purposes.
+      26→
+      27→Constructor arguments are:
+      28→
+      29→``level``
+      30→    The severity of the message. Use one of the predefined values: ``
+  [... truncated ...]
+- [Grep Result after action #38]
+  234-  symmetrical. *This check appeared before Django 3.0.*
+  235-* **fields.E333**: The model is used as an intermediate model by ``<model>``,
+  236-  but it has more than two foreign keys to ``<model>``, which is ambiguous.
+  237-  You must specify which two foreign keys Django should use via the
+  238-  ``through_fields`` keyword argument.
+  239:* **fields.E334**: The model is used as an intermediate model by ``<model>``,
+  240-  but it has more than one foreign key from ``<model>``, which is ambiguous.
+  241-  You must specify which foreign key Django should use via the
+  242-  ``through_fields`` keyword argument.
+  243:* **fields.E335**: The model is used as an intermediate model by ``<model>``,
+  244-  but it has more than one foreign key to ``<model>``, which is ambiguous.
+  245-  You must specify which foreign key Django should use via the
+  246-  ``through_fields`` keyword argument.
+  247-* **fields.E336**: The model is used as an intermediary model by ``<model>``,
+  248-  but it does not have foreign key to ``<model>`` or ``<model>``.
+- [Test Output after action #40]
+  Exit code 1
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #42]
+  Exit code 1
+    File "tests/runtests.py", line 18
+      ) from e
+           ^
+  SyntaxError: invalid syntax
+- [Test Output after action #48]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  .
+  ----------------------------------------------------------------------
+  Ran 1 test in 0.001s
+
+  OK
+- [Test Output after action #52]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ...................................................................................
+  ----------------------------------------------------------------------
+  Ran 83 tests in 0.088s
+
+  OK
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/models/fields/related.py
+  Tool: Edit action #19
+  old_text_sha256: 14367807f023fefe4e943e5ef7efecb39046096766fd2d782d7577faf6284cb9
+  new_text_sha256: 47d9a8f22fd0cb9e26d8d398fd2ea68c355583ab56a4d5988ea4b568ad6d64f9
+- django/db/models/fields/related.py
+  Tool: Edit action #20
+  old_text_sha256: 14367807f023fefe4e943e5ef7efecb39046096766fd2d782d7577faf6284cb9
+  new_text_sha256: 47d9a8f22fd0cb9e26d8d398fd2ea68c355583ab56a4d5988ea4b568ad6d64f9
+- tests/invalid_models_tests/test_relative_fields.py
+  Tool: Edit action #35
+  old_text_sha256: dd15da896e47d1d0c095b1458c57dcf13bd19648479055dd5327717881165ba8
+  new_text_sha256: c5e7c7a7d45ab1bbbabeb5d74ff756fd171dbe630286c7de743ee855b777124f
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

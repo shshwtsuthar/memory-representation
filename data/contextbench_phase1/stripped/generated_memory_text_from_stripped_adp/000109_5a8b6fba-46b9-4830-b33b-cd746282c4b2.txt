@@ -1,0 +1,463 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 5a8b6fba-46b9-4830-b33b-cd746282c4b2
+- repo: django/django
+- instance_id: django__django-11910
+- base_commit: d232fd76a85870daf345fd8f8d617fe7802ae194
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+ForeignKey's to_field parameter gets the old field's name when renaming a PrimaryKey.
+Description
+
+Having these two models
+class ModelA(models.Model):
+    field_wrong = models.CharField('field1', max_length=50, primary_key=True) # I'm a Primary key.
+class ModelB(models.Model):
+    field_fk = models.ForeignKey(ModelA, blank=True, null=True, on_delete=models.CASCADE)
+... migrations applyed ...
+the ModelA.field_wrong field has been renamed ... and Django recognizes the "renaming"
+# Primary key renamed
+class ModelA(models.Model):
+    field_fixed = models.CharField('field1', max_length=50, primary_key=True) # I'm a Primary key.
+Attempts to to_field parameter.
+The to_field points to the old_name (field_typo) and not to the new one ("field_fixed")
+class Migration(migrations.Migration):
+    dependencies = [
+        ('app1', '0001_initial'),
+    ]
+    operations = [
+        migrations.RenameField(
+            model_name='modela',
+            old_name='field_wrong',
+            new_name='field_fixed',
+        ),
+        migrations.AlterField(
+            model_name='modelb',
+            name='modela',
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='app1.ModelB', to_field='field_wrong'),
+        ),
+
+FILES INSPECTED
+---------------
+- django/db/migrations/autodetector.py [Read: 3]
+- swebench_9_15/testbed [Grep: 2]
+- tests/migrations/test_autodetector.py [Grep: 2, Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [4] Glob path='swebench_9_15/testbed' glob='**/autodetector.py'
+- [8] Grep pattern='to_field.*rename|rename.*to_field' path='swebench_9_15/testbed'
+- [10] Grep pattern='to_field' path='tests/migrations/test_autodetector.py'
+- [30] Grep pattern='class.*MigrationQuestioner|def ask_rename' path='swebench_9_15/testbed'
+- [32] Grep pattern='def get_changes' path='tests/migrations/test_autodetector.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction]
+- [diagnostic] ls -la ./swebench_9_15/testbed 2>&1 | head -20
+- [diagnostic] ls -la django/ 2>&1 | head -10
+- [test] cd ./swebench_9_15/testbed && python -m pytest tests/migrations/test_autodetector.py::AutodetectorTests::test_rename_field_foreign_key_to_field -xvs
+- [test] cd ./swebench_9_15/testbed && python tests/runtests.py migrations.test_autodetector.AutodetectorTests.test_rename_field_foreign_key_to_field --verbosity=2
+- [other/reproduction] python --version && python3 --version
+- [test] cd ./swebench_9_15/testbed && python test_issue.py
+- [test] cd ./swebench_9_15/testbed && python test_issue.py
+- [other/reproduction] which python3 && /usr/bin/python3 --version 2>&1
+- [test] cd ./swebench_9_15/testbed && python3 test_issue.py
+- [test] cd ./swebench_9_15/testbed && python3 test_issue.py
+- [test] python3 test_issue.py 2>&1 | grep -v "matplotlib"
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #4]
+  ./swebench_9_15/testbed/django/db/migrations/autodetector.py
+- [Read Result after action #6]
+       1→import functools
+       2→import re
+       3→from itertools import chain
+       4→
+       5→from django.conf import settings
+       6→from django.db import models
+       7→from django.db.migrations import operations
+       8→from django.db.migrations.migration import Migration
+       9→from django.db.migrations.operations.models import AlterModelOptions
+      10→from django.db.migrations.optimizer import MigrationOptimizer
+      11→from django.db.migrations.questioner import MigrationQuestioner
+      12→from django.db.migrations.utils import (
+      13→    COMPILED_REGEX_TYPE, RegexObject, get_migration_name_timestamp,
+      14→)
+      15→from django.utils.topological_sort import stable_topological_sort
+      16→
+      17→
+      18→class MigrationAutodetector:
+      19→    """
+      20→    Take a pair of ProjectStates and compare them to see what the first would
+      21→    need doing to make it match the second (the second usually being the
+      22→    project's current state).
+      23→
+      24→    Note that this naturally operates on entire projects at a time,
+      25→    as it's likely that changes interact (for example, you can't
+      26→    add a ForeignKey without having a migration to add the table it
+      27→
+  [... truncated ...]
+- [Grep Result after action #8]
+  Found 3 files
+  testbed/tests/migrations/test_operations.py
+  testbed/tests/migrations/test_autodetector.py
+  testbed/django/db/migrations/autodetector.py
+- [Grep Result after action #10]
+  836-        self.assertOperationTypes(changes, 'testapp', 0, ["RenameField"])
+  837-        self.assertOperationAttributes(changes, 'testapp', 0, 0, old_name="name", new_name="names")
+  838-
+  839:    def test_rename_field_foreign_key_to_field(self):
+  840-        before = [
+  841-            ModelState('app', 'Foo', [
+  842-                ('id', models.AutoField(primary_key=True)),
+  --
+  844-            ]),
+  845-            ModelState('app', 'Bar', [
+  846-                ('id', models.AutoField(primary_key=True)),
+  847:                ('foo', models.ForeignKey('app.Foo', models.CASCADE, to_field='field')),
+  848-            ]),
+  849-        ]
+  850-        after = [
+  --
+  854-            ]),
+  855-            ModelState('app', 'Bar', [
+  856-                ('id', models.AutoField(primary_key=True)),
+  857:                ('foo', models.ForeignKey('app.Foo', models.CASCADE, to_field='renamed_field')),
+  858-            ]),
+  859-        ]
+  860-        changes = self.get_changes(before, after, MigrationQuestioner({'ask_rename': True}))
+  --
+  877-                ('first', models.IntegerField()),
+  878-                ('second', models.IntegerField()),
+  879-                ('foo', models.ForeignObject(
+  880:
+  [... truncated ...]
+- [Read Result after action #12]
+     839→    def test_rename_field_foreign_key_to_field(self):
+     840→        before = [
+     841→            ModelState('app', 'Foo', [
+     842→                ('id', models.AutoField(primary_key=True)),
+     843→                ('field', models.IntegerField(unique=True)),
+     844→            ]),
+     845→            ModelState('app', 'Bar', [
+     846→                ('id', models.AutoField(primary_key=True)),
+     847→                ('foo', models.ForeignKey('app.Foo', models.CASCADE, to_field='field')),
+     848→            ]),
+     849→        ]
+     850→        after = [
+     851→            ModelState('app', 'Foo', [
+     852→                ('id', models.AutoField(primary_key=True)),
+     853→                ('renamed_field', models.IntegerField(unique=True)),
+     854→            ]),
+     855→            ModelState('app', 'Bar', [
+     856→                ('id', models.AutoField(primary_key=True)),
+     857→                ('foo', models.ForeignKey('app.Foo', models.CASCADE, to_field='renamed_field')),
+     858→            ]),
+     859→        ]
+     860→        changes = self.get_changes(before, after, MigrationQuestioner({'ask_rename': True}))
+     861→        # Right number/type of migrations?
+     862→        s
+  [... truncated ...]
+- [Test Output after action #14]
+  Exit code 1
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #16]
+  Exit code 1
+    File "tests/runtests.py", line 18
+      ) from e
+           ^
+  SyntaxError: invalid syntax
+- [Test Output after action #20]
+  Exit code 1
+    File "test_issue.py", line 67
+      print(f"\nApp: {app_label}")
+                                ^
+  SyntaxError: invalid syntax
+- [Test Output after action #22]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 8, in <module>
+      import django
+    File "./swebench_9_15/testbed/django/__init__.py", line 1, in <module>
+      from django.utils.version import get_version
+    File "./swebench_9_15/testbed/django/utils/version.py", line 71, in <module>
+      @functools.lru_cache()
+  AttributeError: 'module' object has no attribute 'lru_cache'
+- [Test Output after action #26]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "test_issue.py", line 103, in <module>
+      test_rename_primary_key_with_foreign_key()
+    File "test_issue.py", line 63, in test_rename_primary_key_with_foreign_key
+      changes = autodetector.changes(graph=None)
+    File "./swebench_9_15/testbed/django/db/migrations/autodetector.py", line 44, in changes
+      changes = self.arrange_for_graph(changes, graph, migration_name)
+    File "./swebench_9_15/testbed/django/db/migrations/autodetector.py", line 1225, in arrange_for_graph
+      leaves = graph.leaf_nodes()
+  AttributeError: 'NoneType' object has no attribute 'leaf_nodes'
+- [Test Output after action #28]
+  Generated migrations:
+
+  App: app1
+    Migration: auto_1
+      - RemoveField: <RemoveField  model_name='modela', name='field_wrong'>
+      - AddField: <AddField  model_name='modela', name='field_fixed', field=<django.db.models.fields.CharField>, preserve_default=False>
+
+  ==================================================
+  ANALYSIS:
+  ==================================================
+  OK No AlterField operations generated (expected behavior)
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Grep Result after action #30]
+  ./swebench_9_15/testbed/django/db/migrations/questioner.py-8-from django.utils import timezone
+  ./swebench_9_15/testbed/django/db/migrations/questioner.py-9-
+  ./swebench_9_15/testbed/django/db/migrations/questioner.py-10-from .loader import MigrationLoader
+  ./swebench_9_15/testbed/django/db/migrations/questioner.py-11-
+  ./swebench_9_15/testbed/django/db/migrations/questioner.py-12-
+  django/db/migrations/questioner.py:13:class MigrationQuestioner:
+  ./swebench_9_15/testbed/django/db/migrations/questioner.py-14-    """
+  ./swebench_9_15/testbed/django/db/migrations/questioner.py-15-    Give the autodetector responses to questions it might have.
+  ./swebench_9_15/testbed/django/db/migrations/questioner.py-16-    This base class has a built-in noninteractive mode, but the
+  ./swebench_9_15/testbed/django/db/migrations/questioner.py-17-    interactive subclass is what the command-line arguments will use.
+  ./swebench_9_15/testbed/django/db/migrations/questioner.py-18-    """
+  --
+  django/db/migrations/questioner.py-61-    def ask_not_null_alteration(self, field_name, model_name):
+  ./swebench_9_15/testbed/django/db/migrations/questioner.py-62-        """Changing a NULL field to NOT NULL."""
+  ./swebench_9_15
+  [... truncated ...]
+- [Grep Result after action #32]
+  576-                    self.repr_changes(changes),
+  577-                ))
+  578-
+  579-    def make_project_state(self, model_states):
+  580-        "Shortcut to make ProjectStates from lists of predefined models"
+  581-        project_state = ProjectState()
+  582-        for model_state in model_states:
+  583-            project_state.add_model(model_state.clone())
+  584-        return project_state
+  585-
+  586:    def get_changes(self, before_states, after_states, questioner=None):
+  587-        return MigrationAutodetector(
+  588-            self.make_project_state(before_states),
+  589-            self.make_project_state(after_states),
+  590-            questioner,
+  591-        )._detect_changes()
+  592-
+  593-    def test_arrange_for_graph(self):
+  594-        """Tests auto-naming of migrations for graph matching."""
+  595-        # Make a fake graph
+  596-        graph = MigrationGraph()
+- [Read Result after action #34]
+     839→    def test_rename_field_foreign_key_to_field(self):
+     840→        before = [
+     841→            ModelState('app', 'Foo', [
+     842→                ('id', models.AutoField(primary_key=True)),
+     843→                ('field', models.IntegerField(unique=True)),
+     844→            ]),
+     845→            ModelState('app', 'Bar', [
+     846→                ('id', models.AutoField(primary_key=True)),
+     847→                ('foo', models.ForeignKey('app.Foo', models.CASCADE, to_field='field')),
+     848→            ]),
+     849→        ]
+     850→        after = [
+     851→            ModelState('app', 'Foo', [
+     852→                ('id', models.AutoField(primary_key=True)),
+     853→                ('renamed_field', models.IntegerField(unique=True)),
+     854→            ]),
+     855→            ModelState('app', 'Bar', [
+     856→                ('id', models.AutoField(primary_key=True)),
+     857→                ('foo', models.ForeignKey('app.Foo', models.CASCADE, to_field='renamed_field')),
+     858→            ]),
+     859→        ]
+     860→        changes = self.get_changes(before, after, MigrationQuestioner({'ask_rename': True}))
+     861→        # Right number/type of migrations?
+     862→        s
+  [... truncated ...]
+- [Test Output after action #36]
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Generated migrations:
+
+  App: app1
+    Migration: auto_1
+      - RemoveField: <RemoveField  model_name='modela', name='field_wrong'>
+      - AddField: <AddField  model_name='modela', name='field_fixed', field=<django.db.models.fields.CharField>, preserve_default=False>
+
+  ==================================================
+  ANALYSIS:
+  ==================================================
+  OK No AlterField operations generated (expected behavior)
+- [Test Output after action #38]
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Generated migrations:
+
+  App: app1
+    Migration: auto_1
+      - RemoveField: <RemoveField  model_name='modela', name='field_wrong'>
+      - AddField: <AddField  model_name='modela', name='field_fixed', field=<django.db.models.fields.CharField>, preserve_default=False>
+
+  ==================================================
+  ANALYSIS:
+  ==================================================
+  OK No AlterField operations generated (expected behavior)
+- [Read Result after action #40]
+     904→    def generate_altered_fields(self):
+     905→        """
+     906→        Make AlterField operations, or possibly RemovedField/AddField if alter
+     907→        isn's possible.
+     908→        """
+     909→        for app_label, model_name, field_name in sorted(self.old_field_keys & self.new_field_keys):
+     910→            # Did the field change?
+     911→            old_model_name = self.renamed_models.get((app_label, model_name), model_name)
+     912→            old_field_name = self.renamed_fields.get((app_label, model_name, field_name), field_name)
+     913→            old_field = self.old_apps.get_model(app_label, old_model_name)._meta.get_field(old_field_name)
+     914→            new_field = self.new_apps.get_model(app_label, model_name)._meta.get_field(field_name)
+     915→            dependencies = []
+     916→            # Implement any model renames on relations; these are handled by RenameModel
+     917→            # so we need to exclude them from the comparison
+     918→            if hasattr(new_field, "remote_field") and getattr(new_field.remote_field, "model", None):
+     919→                rename_key = (
+     920→                    new_field.remote_field.model._meta.app_label,
+
+  [... truncated ...]
+- [Read Result after action #43]
+     916→            # Implement any model renames on relations; these are handled by RenameModel
+     917→            # so we need to exclude them from the comparison
+     918→            if hasattr(new_field, "remote_field") and getattr(new_field.remote_field, "model", None):
+     919→                rename_key = (
+     920→                    new_field.remote_field.model._meta.app_label,
+     921→                    new_field.remote_field.model._meta.model_name,
+     922→                )
+     923→                if rename_key in self.renamed_models:
+     924→                    new_field.remote_field.model = old_field.remote_field.model
+     925→                # Handle ForeignKey which can only have a single to_field.
+     926→                remote_field_name = getattr(new_field.remote_field, 'field_name', None)
+     927→                if remote_field_name:
+     928→                    to_field_rename_key = rename_key + (remote_field_name,)
+     929→                    if to_field_rename_key in self.renamed_fields:
+     930→                        # The to_field was renamed, so temporarily set it to the old name
+     931→                        # for comparison purposes, but save the new name to restore la
+  [... truncated ...]
+- [Test Output after action #50]
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+  test_rename_field_foreign_key_to_field (migrations.test_autodetector.AutodetectorTests) ... ok
+
+  ----------------------------------------------------------------------
+  Ran 1 test in 0.002s
+
+  OK
+  Destroying test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Importing application migrations
+  Skipping setup of unused database(s): other.
+  Operations to perform:
+    Synchronize unmigrated apps: auth, contenttypes, messages, migrations, sessions, staticfiles
+    Apply all migrations: admin, sites
+  Synchronizing apps without migrations:
+    Creating tables...
+      Creating table django_co
+  [... truncated ...]
+- [Test Output after action #53]
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ======================================================================
+  TEST: Renaming Primary Key with ForeignKey reference
+  ======================================================================
+
+  Generated migrations:
+
+  App: app1
+    Migration: auto_1
+      - RemoveField: <RemoveField  model_name='modela', name='field_wrong'>
+      - AddField: <AddField  model_name='modela', name='field_fixed', field=<django.db.models.fields.CharField>, preserve_default=False>
+
+  ======================================================================
+  ✅ TEST PASSED: No AlterField with old to_field was generated
+  ======================================================================
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/migrations/autodetector.py
+  Tool: Edit action #42
+  old_text_sha256: 7634a82e4d5a2d9814541bfcb53eab8a92df55c4ce15ad3a9e3dc4c72e418aa7
+  new_text_sha256: f7d8282ab1975db66f5f25b61cc1f4c4f2ae7eb07cd0b811ae6d17099c843927
+- django/db/migrations/autodetector.py
+  Tool: Edit action #45
+  old_text_sha256: 0029162c9cf156a44edc58fc90211bcf7b95cb5e592ea13546dc036ef7636f91
+  new_text_sha256: cfd53302e0921d455183e9b35acca5c2bb307c01293b43cbefb5e07dc3b9de84
+- django/db/migrations/autodetector.py
+  Tool: Edit action #46
+  old_text_sha256: 24a0aa668b825bc273c26a9e3b34032b7ca19a57874903d02ac7bbeba023455d
+  new_text_sha256: d1f45784bce99d32cdbc3b0d4c45e3e1ea463eed042a4b559544d88386be75ba
+- test_primary_key_rename.py
+  Tool: Write action #52
+  new_text_sha256: 1243e81994ccaf71437220bafed94e99de720ef16e773c1e263d10963b2fe4f9
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

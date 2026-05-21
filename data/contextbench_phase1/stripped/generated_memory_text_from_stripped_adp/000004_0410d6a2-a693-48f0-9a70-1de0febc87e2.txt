@@ -1,0 +1,501 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 0410d6a2-a693-48f0-9a70-1de0febc87e2
+- repo: scikit-learn/scikit-learn
+- instance_id: scikit-learn__scikit-learn-11281
+- base_commit: 4143356c3c51831300789e4fdf795d83716dbab6
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Should mixture models have a clusterer-compatible interface
+Mixture models are currently a bit different. They are basically clusterers, except they are probabilistic, and are applied to inductive problems unlike many clusterers. But they are unlike clusterers in API:
+* they have an `n_components` parameter, with identical purpose to `n_clusters`
+* they do not store the `labels_` of the training data
+* they do not have a `fit_predict` method
+
+And they are almost entirely documented separately.
+
+Should we make the MMs more like clusterers?
+
+FILES INSPECTED
+---------------
+- sklearn/mixture/base.py [Read: 8, Grep: 2]
+- sklearn/mixture/gaussian_mixture.py [Read: 1]
+- sklearn/cluster/k_means_.py [Read: 1, Grep: 2]
+- sklearn [Grep: 1]
+- sklearn/base.py [Grep: 1]
+- sklearn/mixture/bayesian_mixture.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Glob glob='**/mixture/*.py'
+- [2] Glob glob='**/cluster/*.py'
+- [18] Grep pattern='def fit_predict' path='sklearn/cluster/k_means_.py'
+- [20] Grep pattern='labels_' path='sklearn/cluster/k_means_.py'
+- [22] Grep pattern='class ClusterMixin' path='sklearn'
+- [24] Grep pattern='class ClusterMixin' path='sklearn/base.py'
+- [42] Grep pattern='class BaseMixture' path='sklearn/mixture/base.py'
+- [49] Grep pattern='self.labels_' path='sklearn/mixture/base.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find . -name "*.py" -path "*/mixture/*" | head -20
+- [diagnostic] find . -name "*.py" -path "*/cluster/*" | head -20
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [diagnostic] find testbed -name "*.py" -path "*/mixture/*" -type f | head -20
+- [diagnostic] find testbed -name "*.py" -path "*/cluster/*" -type f | head -20
+- [diagnostic] find testbed/sklearn/cluster -name "k_means*.py" -type f | head -5
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [other/reproduction] python --version
+- [test] python test_issue.py
+- [diagnostic] find testbed -path "*/mixture/tests/*.py" -name "test*.py" | head -10
+- [other/reproduction] git -C testbed diff HEAD sklearn/mixture/base.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named _check_build
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #6]
+  testbed/sklearn/mixture/gmm.py
+  testbed/sklearn/mixture/dpgmm.py
+  testbed/sklearn/mixture/tests/test_mixture.py
+  testbed/sklearn/mixture/tests/test_bayesian_mixture.py
+  testbed/sklearn/mixture/tests/test_gmm.py
+  testbed/sklearn/mixture/tests/__init__.py
+  testbed/sklearn/mixture/tests/test_gaussian_mixture.py
+  testbed/sklearn/mixture/tests/test_dpgmm.py
+  testbed/sklearn/mixture/__init__.py
+  testbed/sklearn/mixture/bayesian_mixture.py
+  testbed/sklearn/mixture/gaussian_mixture.py
+  testbed/sklearn/mixture/base.py
+  testbed/examples/mixture/plot_concentration_prior.py
+  testbed/examples/mixture/plot_gmm_covariances.py
+  testbed/examples/mixture/plot_gmm.py
+  testbed/examples/mixture/plot_gmm_selection.py
+  testbed/examples/mixture/plot_gmm_pdf.py
+  testbed/examples/mixture/plot_gmm_sin.py
+- [Diagnostic Output after action #8]
+  testbed/sklearn/metrics/cluster/bicluster.py
+  testbed/sklearn/metrics/cluster/unsupervised.py
+  testbed/sklearn/metrics/cluster/tests/test_supervised.py
+  testbed/sklearn/metrics/cluster/tests/test_common.py
+  testbed/sklearn/metrics/cluster/tests/__init__.py
+  testbed/sklearn/metrics/cluster/tests/test_bicluster.py
+  testbed/sklearn/metrics/cluster/tests/test_unsupervised.py
+  testbed/sklearn/metrics/cluster/__init__.py
+  testbed/sklearn/metrics/cluster/setup.py
+  testbed/sklearn/metrics/cluster/supervised.py
+  testbed/sklearn/cluster/bicluster.py
+  testbed/sklearn/cluster/mean_shift_.py
+  testbed/sklearn/cluster/hierarchical.py
+  testbed/sklearn/cluster/tests/test_mean_shift.py
+  testbed/sklearn/cluster/tests/test_k_means.py
+  testbed/sklearn/cluster/tests/test_feature_agglomeration.py
+  testbed/sklearn/cluster/tests/test_dbscan.py
+  testbed/sklearn/cluster/tests/test_birch.py
+  testbed/sklearn/cluster/tests/test_affinity_propagation.py
+  testbed/sklearn/cluster/tests/__init__.py
+- [Read Result after action #10]
+       1→"""Base class for mixture models."""
+       2→
+       3→# Author: Wei Xue <xuewei4d@gmail.com>
+       4→# Modified by Thierry Guillemot <thierry.guillemot.work@gmail.com>
+       5→# License: BSD 3 clause
+       6→
+       7→from __future__ import print_function
+       8→
+       9→import warnings
+      10→from abc import ABCMeta, abstractmethod
+      11→from time import time
+      12→
+      13→import numpy as np
+      14→
+      15→from .. import cluster
+      16→from ..base import BaseEstimator
+      17→from ..base import DensityMixin
+      18→from ..externals import six
+      19→from ..exceptions import ConvergenceWarning
+      20→from ..utils import check_array, check_random_state
+      21→from ..utils.fixes import logsumexp
+      22→
+      23→
+      24→def _check_shape(param, param_shape, name):
+      25→    """Validate the shape of the input parameter 'param'.
+      26→
+      27→    Parameters
+      28→    ----------
+      29→    param : array
+      30→
+      31→    param_shape : tuple
+      32→
+      33→    name : string
+      34→    """
+      35→    param = np.array(param)
+      36→    if param.shape != param_shape:
+      37→        raise ValueError("The parameter '%s' should have the shape of %s, "
+      38→                         "but got %
+  [... truncated ...]
+- [Read Result after action #12]
+       1→"""Gaussian Mixture Model."""
+       2→
+       3→# Author: Wei Xue <xuewei4d@gmail.com>
+       4→# Modified by Thierry Guillemot <thierry.guillemot.work@gmail.com>
+       5→# License: BSD 3 clause
+       6→
+       7→import numpy as np
+       8→
+       9→from scipy import linalg
+      10→
+      11→from .base import BaseMixture, _check_shape
+      12→from ..externals.six.moves import zip
+      13→from ..utils import check_array
+      14→from ..utils.validation import check_is_fitted
+      15→from ..utils.extmath import row_norms
+      16→
+      17→
+      18→###############################################################################
+      19→# Gaussian mixture shape checkers used by the GaussianMixture class
+      20→
+      21→def _check_weights(weights, n_components):
+      22→    """Check the user provided 'weights'.
+      23→
+      24→    Parameters
+      25→    ----------
+      26→    weights : array-like, shape (n_components,)
+      27→        The proportions of components of each mixture.
+      28→
+      29→    n_components : int
+      30→        Number of components.
+      31→
+      32→    Returns
+      33→    -------
+      34→    weights : array, shape (n_components,)
+      35→    """
+      36→    weights = check_array(weights, dtype=
+  [... truncated ...]
+- [Diagnostic Output after action #14]
+  testbed/sklearn/cluster/k_means_.py
+- [Read Result after action #16]
+       1→"""K-means clustering"""
+       2→
+       3→# Authors: Gael Varoquaux <gael.varoquaux@normalesup.org>
+       4→#          Thomas Rueckstiess <ruecksti@in.tum.de>
+       5→#          James Bergstra <james.bergstra@umontreal.ca>
+       6→#          Jan Schlueter <scikit-learn@jan-schlueter.de>
+       7→#          Nelle Varoquaux
+       8→#          Peter Prettenhofer <peter.prettenhofer@gmail.com>
+       9→#          Olivier Grisel <olivier.grisel@ensta.org>
+      10→#          Mathieu Blondel <mathieu@mblondel.org>
+      11→#          Robert Layton <robertlayton@gmail.com>
+      12→# License: BSD 3 clause
+      13→
+      14→from __future__ import division
+      15→import warnings
+      16→
+      17→import numpy as np
+      18→import scipy.sparse as sp
+      19→
+      20→from ..base import BaseEstimator, ClusterMixin, TransformerMixin
+      21→from ..metrics.pairwise import euclidean_distances
+      22→from ..metrics.pairwise import pairwise_distances_argmin_min
+      23→from ..utils.extmath import row_norms, squared_norm, stable_cumsum
+      24→from ..utils.sparsefuncs_fast import assign_rows_csr
+      25→from ..utils.sparsefuncs import mean_variance_axis
+      26→from ..utils.validation import _num_samples
+      27→from ..uti
+  [... truncated ...]
+- [Grep Result after action #18]
+  962:    def fit_predict(self, X, y=None, sample_weight=None):
+- [Grep Result after action #20]
+  542-        # labels assignment is also called the E-step of EM
+  543-        labels, inertia = \
+  544:            _labels_inertia(X, sample_weight, x_squared_norms, centers,
+  545-                            precompute_distances=precompute_distances,
+  546-                            distances=distances)
+  --
+  574-        # match cluster centers
+  575-        best_labels, best_inertia = \
+  576:            _labels_inertia(X, sample_weight, x_squared_norms, best_centers,
+  577-                            precompute_distances=precompute_distances,
+  578-                            distances=distances)
+  --
+  581-
+  582-
+  583:def _labels_inertia_precompute_dense(X, sample_weight, x_squared_norms,
+  584-                                     centers, distances):
+  585-    """Compute labels and inertia using a full distance matrix.
+  --
+  629-
+  630-
+  631:def _labels_inertia(X, sample_weight, x_squared_norms, centers,
+  632-                    precompute_distances=True, distances=None):
+  633-    """E step of the K-means EM algorithm.
+  --
+  675-    # distances will be changed in-place
+  676-    if sp.issparse(X):
+  677:        inertia = _k_means._assign_labels_csr(
+  678-            X, sample_weight, x_squared_norms, centers, labels,
+  6
+  [... truncated ...]
+- [Grep Result after action #22]
+  Found 1 file
+  testbed/sklearn/base.py
+- [Grep Result after action #24]
+  380:class ClusterMixin(object):
+  381-    """Mixin class for all cluster estimators in scikit-learn."""
+  382-    _estimator_type = "clusterer"
+  383-
+  384-    def fit_predict(self, X, y=None):
+  385-        """Performs clustering on X and returns cluster labels.
+  386-
+  387-        Parameters
+  388-        ----------
+  389-        X : ndarray, shape (n_samples, n_features)
+  390-            Input data.
+  391-
+  392-        Returns
+  393-        -------
+  394-        y : ndarray, shape (n_samples,)
+  395-            cluster labels
+  396-        """
+  397-        # non-optimized default implementation; override when a better
+  398-        # method is possible for a given clustering algorithm
+  399-        self.fit(X)
+  400-        return self.labels_
+  401-
+  402-
+  403-class BiclusterMixin(object):
+  404-    """Mixin class for all bicluster estimators in scikit-learn"""
+  405-
+  406-    @property
+  407-    def biclusters_(self):
+  408-        """Convenient way to get row and column indicators together.
+  409-
+  410-        Returns the ``rows_`` and ``columns_`` members.
+- [Read Result after action #29]
+       1→"""Bayesian Gaussian Mixture Model."""
+       2→# Author: Wei Xue <xuewei4d@gmail.com>
+       3→#         Thierry Guillemot <thierry.guillemot.work@gmail.com>
+       4→# License: BSD 3 clause
+       5→
+       6→import math
+       7→import numpy as np
+       8→from scipy.special import betaln, digamma, gammaln
+       9→
+      10→from .base import BaseMixture, _check_shape
+      11→from .gaussian_mixture import _check_precision_matrix
+      12→from .gaussian_mixture import _check_precision_positivity
+      13→from .gaussian_mixture import _compute_log_det_cholesky
+      14→from .gaussian_mixture import _compute_precision_cholesky
+      15→from .gaussian_mixture import _estimate_gaussian_parameters
+      16→from .gaussian_mixture import _estimate_log_gaussian_prob
+      17→from ..utils import check_array
+      18→from ..utils.validation import check_is_fitted
+      19→
+      20→
+      21→def _log_dirichlet_norm(dirichlet_concentration):
+      22→    """Compute the log of the Dirichlet distribution normalization term.
+      23→
+      24→    Parameters
+      25→    ----------
+      26→    dirichlet_concentration : array-like, shape (n_samples,)
+      27→        The parameters values of the Dirichlet distribution.
+      28→
+      29→
+  [... truncated ...]
+- [Test Output after action #31]
+  Exit code 1
+    File "test_issue.py", line 29
+  SyntaxError: Non-ASCII character '\xe2' in file test_issue.py on line 29, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+- [Test Output after action #33]
+  Exit code 1
+    File "test_issue.py", line 34
+      assert gm.labels_.shape == (300,), f"labels_ should have shape (300,), got {gm.labels_.shape}"
+                                                                                                   ^
+  SyntaxError: invalid syntax
+- [Test Output after action #37]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 12, in <module>
+      from sklearn.mixture import GaussianMixture, BayesianGaussianMixture
+    File "./swebench_9_15/testbed/sklearn/__init__.py", line 63, in <module>
+      from . import __check_build
+    File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 46, in <module>
+      raise_build_error(e)
+    File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 41, in raise_build_error
+      %s""" % (e, local_dir, ''.join(dir_content).strip(), msg))
+  ImportError: No module named _check_build
+  ___________________________________________________________________________
+  Contents of ./swebench_9_15/testbed/sklearn/__check_build:
+  __init__.py               setup.py                  __init__.pyc
+  _check_build.pyx
+  ___________________________________________________________________________
+  It seems that scikit-learn has not been built correctly.
+
+  If you have installed scikit-learn from source, please do not forget
+  to build the package before using it: run `python setup.py install` or
+  `make` in the source directory.
+
+  If you have used an installer, please check that it is suited for your
+  Python version,
+  [... truncated ...]
+- [Read Result after action #40]
+       1→"""Base class for mixture models."""
+       2→
+       3→# Author: Wei Xue <xuewei4d@gmail.com>
+       4→# Modified by Thierry Guillemot <thierry.guillemot.work@gmail.com>
+       5→# License: BSD 3 clause
+       6→
+       7→from __future__ import print_function
+       8→
+       9→import warnings
+      10→from abc import ABCMeta, abstractmethod
+      11→from time import time
+      12→
+      13→import numpy as np
+      14→
+      15→from .. import cluster
+      16→from ..base import BaseEstimator
+      17→from ..base import DensityMixin
+      18→from ..base import ClusterMixin
+      19→from ..externals import six
+      20→from ..exceptions import ConvergenceWarning
+      21→from ..utils import check_array, check_random_state
+      22→from ..utils.fixes import logsumexp
+      23→
+      24→
+      25→def _check_shape(param, param_shape, name):
+      26→    """Validate the shape of the input parameter 'param'.
+      27→
+      28→    Parameters
+      29→    ----------
+      30→    param : array
+
+- [Grep Result after action #42]
+  67:class BaseMixture(six.with_metaclass(ABCMeta, DensityMixin, BaseEstimator)):
+  68-    """Base class for mixture models.
+  69-
+  70-    This abstract class specifies an interface for all mixture classes and
+  71-    provides basic common methods for mixture models.
+  72-    """
+- [Read Result after action #45]
+       1→"""Base class for mixture models."""
+       2→
+       3→# Author: Wei Xue <xuewei4d@gmail.com>
+       4→# Modified by Thierry Guillemot <thierry.guillemot.work@gmail.com>
+       5→# License: BSD 3 clause
+       6→
+       7→from __future__ import print_function
+       8→
+       9→import warnings
+      10→from abc import ABCMeta, abstractmethod
+      11→from time import time
+      12→
+      13→import numpy as np
+      14→
+      15→from .. import cluster
+      16→from ..base import BaseEstimator
+      17→from ..base import DensityMixin
+      18→from ..base import ClusterMixin
+      19→from ..externals import six
+      20→from ..exceptions import ConvergenceWarning
+      21→from ..utils import check_array, check_random_state
+      22→from ..utils.fixes import logsumexp
+      23→
+      24→
+      25→def _check_shape(param, param_shape, name):
+
+- [Read Result after action #47]
+      60→                         % (n_components, X.shape[0]))
+      61→    if n_features is not None and X.shape[1] != n_features:
+      62→        raise ValueError("Expected the input data X have %d features, "
+      63→                         "but got %d features"
+      64→                         % (n_features, X.shape[1]))
+      65→    return X
+      66→
+      67→
+      68→class BaseMixture(six.with_metaclass(ABCMeta, ClusterMixin, DensityMixin,
+      69→                                      BaseEstimator)):
+      70→    """Base class for mixture models.
+      71→
+      72→    This abstract class specifies an interface for all mixture classes and
+      73→    provides basic common methods for mixture models.
+      74→    """
+      75→
+      76→    def __init__(self, n_components, tol, reg_covar,
+      77→                 max_iter, n_init, init_params, random_state, warm_start,
+      78→                 verbose, verbose_interval):
+      79→        self.n_components = n_components
+
+- [Grep Result after action #49]
+  No matches found
+- [Read Result after action #51]
+     230→            if self.lower_bound_ > max_lower_bound:
+     231→                max_lower_bound = self.lower_bound_
+     232→                best_params = self._get_parameters()
+     233→                best_n_iter = n_iter
+     234→
+     235→        if not self.converged_:
+     236→            warnings.warn('Initialization %d did not converge. '
+     237→                          'Try different init parameters, '
+     238→                          'or increase max_iter, tol '
+     239→                          'or check for degenerate data.'
+     240→                          % (init + 1), ConvergenceWarning)
+     241→
+     242→        self._set_parameters(best_params)
+     243→        self.n_iter_ = best_n_iter
+     244→
+     245→        # Store labels_ for clusterer-compatible interface
+     246→        self.labels_ = self._estimate_weighted_log_prob(X).argmax(axis=1)
+     247→
+     248→        return self
+     249→
+
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sklearn/mixture/base.py
+  Tool: Edit action #26
+  old_text_sha256: 1c0c1ebd9d196175e2c1877ad7d40c33d1f1dc7f37ce6432d25186d83e76aba7
+  new_text_sha256: d121b7c5e20fbda68b7a06f151e15f1f6e862e1167aa3368d8322d56a7261f12
+- sklearn/mixture/base.py
+  Tool: Edit action #27
+  old_text_sha256: fb78f4eb03ec1158a96a7cf196bbfb77eb70dd49f5d8bf73734a213c4b52d720
+  new_text_sha256: c1e9a21811914d8d28fc08e391e7a57ad86593b5e276d8b54bab834b497f5c77
+- sklearn/mixture/base.py
+  Tool: Edit action #28
+  old_text_sha256: 8bded4e64112337dbe140e62dc87dfb9acd3fb177e20b99e1037904b4ade4614
+  new_text_sha256: 14762579ab80af48c98144b3932e6222c0645da5b4f593d91c10f886f48d98e7
+- sklearn/mixture/base.py
+  Tool: Edit action #44
+  old_text_sha256: 1c0c1ebd9d196175e2c1877ad7d40c33d1f1dc7f37ce6432d25186d83e76aba7
+  new_text_sha256: d121b7c5e20fbda68b7a06f151e15f1f6e862e1167aa3368d8322d56a7261f12
+- sklearn/mixture/base.py
+  Tool: Edit action #58
+  old_text_sha256: c88a5830c43042b911945814ee2048006e8d582a10d1f68d70371f8dde43da1e
+  new_text_sha256: 6ca73b71c3b38b6e1626d2b2611bda53b96ab8bc28e97f99979df76a177ada8a
+- sklearn/mixture/base.py
+  Tool: Edit action #59
+  old_text_sha256: fb78f4eb03ec1158a96a7cf196bbfb77eb70dd49f5d8bf73734a213c4b52d720
+  new_text_sha256: c1e9a21811914d8d28fc08e391e7a57ad86593b5e276d8b54bab834b497f5c77
+- sklearn/mixture/base.py
+  Tool: Edit action #62
+  old_text_sha256: 8bded4e64112337dbe140e62dc87dfb9acd3fb177e20b99e1037904b4ade4614
+  new_text_sha256: 14762579ab80af48c98144b3932e6222c0645da5b4f593d91c10f886f48d98e7
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

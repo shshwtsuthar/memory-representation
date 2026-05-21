@@ -1,0 +1,607 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 2ce4360f-97b4-4aef-b33c-eb39a81594d1
+- repo: sympy/sympy
+- instance_id: sympy__sympy-23262
+- base_commit: fdc707f73a65a429935c01532cd3970d3355eab6
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Python code printer not respecting tuple with one element
+Hi,
+
+Thanks for the recent updates in SymPy! I'm trying to update my code to use SymPy 1.10 but ran into an issue with the Python code printer. MWE:
+
+
+```python
+import inspect
+from sympy import lambdify
+
+inspect.getsource(lambdify([], tuple([1])))
+```
+SymPy 1.9 and under outputs:
+```
+'def _lambdifygenerated():\n    return (1,)\n'
+```
+
+But SymPy 1.10 gives
+
+```
+'def _lambdifygenerated():\n    return (1)\n'
+```
+Note the missing comma after `1` that causes an integer to be returned instead of a tuple.
+
+For tuples with two or more elements, the generated code is correct:
+```python
+inspect.getsource(lambdify([], tuple([1, 2])))
+```
+In SymPy  1.10 and under, outputs:
+
+```
+'def _lambdifygenerated():\n    return (1, 2)\n'
+```
+This result is expected.
+
+Not sure if this is a regression. As this breaks my program which assumes the return type to always be a tuple, could you suggest a workaround from the code generation side? Thank you.
+
+FILES INSPECTED
+---------------
+- sympy/printing/pycode.py [Read: 1, Grep: 1]
+- sympy/printing/tests/test_pycode.py [Read: 1]
+- sympy/printing/codeprinter.py [Read: 1]
+- sympy/printing [Grep: 1]
+- sympy/printing/str.py [Grep: 1]
+- sympy/printing/numpy.py [Grep: 1]
+- sympy/utilities/lambdify.py [Grep: 2, Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [5] Glob glob='**/*pycode*.py'
+- [11] Glob glob='**/codeprinter.py'
+- [15] Grep pattern='_print.*tuple|_print.*list' path='sympy/printing'
+- [17] Grep pattern='def _print.*tuple|def _print.*list|def _print_seq' path='sympy/printing/str.py'
+- [19] Grep pattern='def _print_seq|def _print_tuple' path='sympy/printing/numpy.py'
+- [21] Grep pattern='def _print_tuple|def _print_Tuple|def _print_seq' path='sympy/printing/pycode.py'
+- [29] Glob glob='**/lambdify.py'
+- [37] Grep pattern='class _EvaluatorPrinter|def _imp_namespace' path='sympy/utilities/lambdify.py'
+- [41] Grep pattern='def _recursive_to_string' path='sympy/utilities/lambdify.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction] cd testbed && python3 -c "
+import inspect
+from sympy import lambdify
+
+# Test single element tuple
+result1 = inspect.getsource(lambdify([], tuple([1])))
+print('Single element tuple:')
+print(repr(result1))
+print()
+
+# Test two element tuple
+result2 = inspect.getsource(lambdify([], tuple([1, 2])))
+print('Two element tuple:')
+print(repr(result2))
+"
+- [diagnostic] cd testbed && find . -name "*pycode*" -o -name "*python*" | grep -E "\.(py)$" | grep -v __pycache__ | grep -v ".pyc" | head -20
+- [diagnostic] find testbed -name "*pycode*" -o -name "*python*" | grep -E "\.(py)$" | grep -v __pycache__ | grep -v ".pyc" | head -20
+- [other/reproduction] python3 -c "
+from sympy.printing.pycode import PythonCodePrinter
+
+p = PythonCodePrinter()
+
+# Test printing a tuple directly
+print('Direct tuple print:')
+print(repr(p.doprint((1,))))
+print(repr(p.doprint((1, 2))))
+print()
+
+# Check if _print_tuple exists
+print('Has _print_tuple:', hasattr(p, '_print_tuple'))
+print('_print_tuple method:', p._print_tuple if hasattr(p, '_print_tuple') else 'Not found')
+"
+- [other/reproduction] python3 -c "
+from sympy import lambdify, Tuple
+
+# Test lambdify with Python tuples
+import inspect
+
+# Create a SymPy Tuple
+result1 = inspect.getsource(lambdify([], tuple([1])))
+print('tuple([1]):')
+print(repr(result1))
+print()
+
+# Create a SymPy Tuple object
+from sympy import Tuple as SymPyTuple
+result2 = inspect.getsource(lambdify([], SymPyTuple(1)))
+print('SymPyTuple(1):')
+print(repr(result2))
+print()
+
+result3 = inspect.getsource(lambdify([], SymPyTuple(1, 2)))
+print('SymPyTuple(1, 2):')
+print(r
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+from sympy.printing.pycode import PythonCodePrinter
+
+p = PythonCodePrinter()
+
+# Test with Python tuple
+python_tuple = (1,)
+print('Python tuple type:', type(python_tuple))
+print('Printing Python tuple:', repr(p.doprint(python_tuple)))
+print()
+
+# Test with SymPy Tuple
+from sympy import Tuple as SymPyTuple
+sympy_tuple = SymPyTuple(1)
+print('SymPy Tuple type:', type(sympy_tuple))
+print('Printing SymPy Tuple:', repr(p.doprint(sympy_tuple)))
+print()
+
+# Check what _print is called
+print('_
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+# Let's trace through what lambdify is doing
+from sympy import lambdify
+from sympy.printing.pycode import PythonCodePrinter
+
+# Get the expression that lambdify will print
+expr = tuple([1])
+print('Expression:', expr)
+print('Type:', type(expr))
+print()
+
+# Let's see what the printer sees
+p = PythonCodePrinter()
+
+# Use doprint which is what lambdify calls
+from sympy import sympify
+from sympy.printing.codeprinter import _convert_python_lists
+
+converted = _convert_python_lists(expr)
+print
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+from sympy.printing.pycode import PythonCodePrinter
+from sympy.codegen.ast import Return
+
+p = PythonCodePrinter()
+
+# Test with Return
+ret1 = Return((1,))
+print('Return with single-element tuple:')
+print(repr(p.doprint(ret1)))
+print()
+
+ret2 = Return((1, 2))
+print('Return with two-element tuple:')
+print(repr(p.doprint(ret2)))
+"
+- [other/reproduction] python3 <<'EOF'
+from sympy import lambdify
+from sympy.core.containers import Tuple as SymPyTuple
+
+# Let me check what lambdify receives
+import inspect
+
+# Check the actual expression type inside lambdify
+class DebugPrinter:
+    def __init__(self):
+        from sympy.printing.pycode import PythonCodePrinter
+        self.printer = PythonCodePrinter()
+
+    def __call__(self, expr):
+        print(f"Expression type: {type(expr)}")
+        print(f"Expression repr: {repr(expr)}")
+        if hasattr(expr
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+import inspect
+from sympy import lambdify
+
+# Test single element tuple
+result1 = inspect.getsource(lambdify([], tuple([1])))
+print('Single element tuple:')
+print(repr(result1))
+print()
+
+# Test two element tuple
+result2 = inspect.getsource(lambdify([], tuple([1, 2])))
+print('Two element tuple:')
+print(repr(result2))
+print()
+
+# Test that the function actually works
+func1 = lambdify([], tuple([1]))
+print('Function returns:', func1())
+print
+  [... truncated ...]
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- E   SystemError: initialization of _internal failed without raising an exception
+- ERROR sympy/utilities/tests/test_lambdify.py - SystemError: initialization of...
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #5]
+  ./swebench_9_15/testbed/sympy/printing/pycode.py
+  ./swebench_9_15/testbed/sympy/printing/tests/test_pycode.py
+- [Read Result after action #7]
+       1→"""
+       2→Python code printers
+       3→
+       4→This module contains Python code printers for plain Python as well as NumPy & SciPy enabled code.
+       5→"""
+       6→from collections import defaultdict
+       7→from itertools import chain
+       8→from sympy.core import S
+       9→from sympy.core.mod import Mod
+      10→from .precedence import precedence
+      11→from .codeprinter import CodePrinter
+      12→
+      13→_kw = {
+      14→    'and', 'as', 'assert', 'break', 'class', 'continue', 'def', 'del', 'elif',
+      15→    'else', 'except', 'finally', 'for', 'from', 'global', 'if', 'import', 'in',
+      16→    'is', 'lambda', 'not', 'or', 'pass', 'raise', 'return', 'try', 'while',
+      17→    'with', 'yield', 'None', 'False', 'nonlocal', 'True'
+      18→}
+      19→
+      20→_known_functions = {
+      21→    'Abs': 'abs',
+      22→    'Min': 'min',
+      23→    'Max': 'max',
+      24→}
+      25→_known_functions_math = {
+      26→    'acos': 'acos',
+      27→    'acosh': 'acosh',
+      28→    'asin': 'asin',
+      29→    'asinh': 'asinh',
+      30→    'atan': 'atan',
+      31→    'atan2': 'atan2',
+      32→    'atanh': 'atanh',
+      33→    'ceiling': 'ceil',
+      34→    'cos': 'cos',
+      35→    'cosh': 'cosh',
+      36→    'erf': '
+  [... truncated ...]
+- [Read Result after action #9]
+       1→from sympy.codegen import Assignment
+       2→from sympy.codegen.ast import none
+       3→from sympy.codegen.cfunctions import expm1, log1p
+       4→from sympy.codegen.scipy_nodes import cosm1
+       5→from sympy.codegen.matrix_nodes import MatrixSolve
+       6→from sympy.core import Expr, Mod, symbols, Eq, Le, Gt, zoo, oo, Rational, Pow
+       7→from sympy.core.numbers import pi
+       8→from sympy.core.singleton import S
+       9→from sympy.functions import acos, KroneckerDelta, Piecewise, sign, sqrt, Min, Max
+      10→from sympy.logic import And, Or
+      11→from sympy.matrices import SparseMatrix, MatrixSymbol, Identity
+      12→from sympy.printing.pycode import (
+      13→    MpmathPrinter, PythonCodePrinter, pycode, SymPyPrinter
+      14→)
+      15→from sympy.printing.tensorflow import TensorflowPrinter
+      16→from sympy.printing.numpy import NumPyPrinter, SciPyPrinter
+      17→from sympy.testing.pytest import raises, skip
+      18→from sympy.tensor import IndexedBase, Idx
+      19→from sympy.tensor.array.expressions.array_expressions import ArraySymbol, ArrayDiagonal, ArrayContraction, ZeroArray, OneArray
+      20→from sympy.external import import_module
+      21→from sympy.functions.special.gamma_functio
+  [... truncated ...]
+- [Glob Result after action #11]
+  ./swebench_9_15/testbed/sympy/printing/codeprinter.py
+- [Read Result after action #13]
+       1→from typing import Any, Dict as tDict, Set as tSet, Tuple as tTuple
+       2→
+       3→from functools import wraps
+       4→
+       5→from sympy.core import Add, Expr, Mul, Pow, S, sympify, Float
+       6→from sympy.core.basic import Basic
+       7→from sympy.core.expr import UnevaluatedExpr
+       8→from sympy.core.function import Lambda
+       9→from sympy.core.mul import _keep_coeff
+      10→from sympy.core.sorting import default_sort_key
+      11→from sympy.core.symbol import Symbol
+      12→from sympy.functions.elementary.complexes import re
+      13→from sympy.printing.str import StrPrinter
+      14→from sympy.printing.precedence import precedence, PRECEDENCE
+      15→
+      16→
+      17→class requires:
+      18→    """ Decorator for registering requirements on print methods. """
+      19→    def __init__(self, **kwargs):
+      20→        self._req = kwargs
+      21→
+      22→    def __call__(self, method):
+      23→        def _method_wrapper(self_, *args, **kwargs):
+      24→            for k, v in self._req.items():
+      25→                getattr(self_, k).update(v)
+      26→            return method(self_, *args, **kwargs)
+      27→        return wraps(method)(_method_wrapper)
+      28→
+      29→
+      30→class Assignme
+  [... truncated ...]
+- [Grep Result after action #15]
+  Found 15 files
+  sympy/printing/tests/test_mathml.py
+  sympy/printing/tensorflow.py
+  sympy/printing/str.py
+  sympy/printing/repr.py
+  sympy/printing/pycode.py
+  sympy/printing/pretty/pretty.py
+  sympy/printing/octave.py
+  sympy/printing/numpy.py
+  sympy/printing/mathml.py
+  sympy/printing/mathematica.py
+  sympy/printing/maple.py
+  sympy/printing/latex.py
+  sympy/printing/lambdarepr.py
+  sympy/printing/julia.py
+  sympy/printing/glsl.py
+- [Grep Result after action #17]
+  232-                                                            (e, z, z0, dir)))
+  233-
+  234:    def _print_list(self, expr):
+  235-        return "[%s]" % self.stringify(expr, ", ")
+  236-
+  237-    def _print_List(self, expr):
+  238-        return self._print_list(expr)
+  239-
+  240-    def _print_MatrixBase(self, expr):
+  241-        return expr._format_str(self)
+  242-
+  243-    def _print_MatrixElement(self, expr):
+  244-        return self.parenthesize(expr.parent, PRECEDENCE["Atom"], strict=True) \
+  --
+  866-        return str(expr)
+  867-
+  868:    def _print_tuple(self, expr):
+  869-        if len(expr) == 1:
+  870-            return "(%s,)" % self._print(expr[0])
+  871-        else:
+  872-            return "(%s)" % self.stringify(expr, ", ")
+  873-
+  874-    def _print_Tuple(self, expr):
+  875-        return self._print_tuple(expr)
+  876-
+  877-    def _print_Transpose(self, T):
+  878-        return "%s.T" % self.parenthesize(T.arg, PRECEDENCE["Pow"])
+- [Grep Result after action #19]
+  56-
+  57-
+  58:    def _print_seq(self, seq):
+  59-        "General sequence printer: converts to tuple"
+  60-        # Print tuples here instead of lists because numba supports
+  61-        #     tuples in nopython mode.
+  62-        delimiter=', '
+  63-        return '({},)'.format(delimiter.join(self._print(item) for item in seq))
+  64-
+  65-    def _print_MatMul(self, expr):
+  66-        "Matrix multiplication printer"
+  67-        if expr.as_coeff_matrices()[0] is not S.One:
+  68-            expr_list = expr.as_coeff_matrices()[1]+[(expr.as_coeff_matrices()[0])]
+  69-            return '({})'.format(').dot('.join(self._print(i) for i in expr_list))
+  70-        return '({})'.format(').dot('.join(self._print(i) for i in expr.args))
+  71-
+  72-    def _print_MatPow(self, expr):
+  73-        "Matrix power printer"
+- [Grep Result after action #21]
+  No matches found
+- [Glob Result after action #29]
+  ./swebench_9_15/testbed/sympy/utilities/lambdify.py
+- [Grep Result after action #37]
+  1083-        else:
+  1084-            expr = sub_expr(expr, dummies_dict)
+  1085-    expr = _recursive_to_string(lambdarepr, expr)
+  1086-    return "lambda %s: (%s)" % (args, expr)
+  1087-
+  1088:class _EvaluatorPrinter:
+  1089-    def __init__(self, printer=None, dummify=False):
+  1090-        self._dummify = dummify
+  1091-
+  1092-        #XXX: This has to be done here because of circular imports
+  1093-        from sympy.printing.lambdarepr import LambdaPrinter
+  1094-
+  1095-        if printer is None:
+  1096-            printer = LambdaPrinter()
+  1097-
+  1098-        if inspect.isfunction(printer):
+  1099-            self._exprrepr = printer
+  1100-        else:
+  1101-            if inspect.isclass(printer):
+  1102-                printer = printer()
+  1103-
+  1104-            self._exprrepr = printer.doprint
+  1105-
+  1106-            #if hasattr(printer, '_print_Symbol'):
+  1107-            #    symbolrepr = printer._print_Symbol
+  1108-
+  1109-            #if hasattr(printer, '_print_Dummy'):
+  1110-            #    dummyrepr = printer._print_Dummy
+  1111-
+  1112-        # Used to print the generated function arguments in a standard way
+  1113-        self._argrepr = LambdaPrinter().doprint
+  1114-
+  1115-    def doprint(self, funcna
+  [... truncated ...]
+- [Read Result after action #39]
+    1115→    def doprint(self, funcname, args, expr, *, cses=()):
+    1116→        """
+    1117→        Returns the function definition code as a string.
+    1118→        """
+    1119→        from sympy.core.symbol import Dummy
+    1120→
+    1121→        funcbody = []
+    1122→
+    1123→        if not iterable(args):
+    1124→            args = [args]
+    1125→
+    1126→        argstrs, expr = self._preprocess(args, expr)
+    1127→
+    1128→        # Generate argument unpacking and final argument list
+    1129→        funcargs = []
+    1130→        unpackings = []
+    1131→
+    1132→        for argstr in argstrs:
+    1133→            if iterable(argstr):
+    1134→                funcargs.append(self._argrepr(Dummy()))
+    1135→                unpackings.extend(self._print_unpacking(argstr, funcargs[-1]))
+    1136→            else:
+    1137→                funcargs.append(argstr)
+    1138→
+    1139→        funcsig = 'def {}({}):'.format(funcname, ', '.join(funcargs))
+    1140→
+    1141→        # Wrap input arguments before unpacking
+    1142→        funcbody.extend(self._print_funcargwrapping(funcargs))
+    1143→
+    1144→        funcbody.extend(unpackings)
+    1145→
+    1146→        for s, e in cses:
+    1147→            if e is None:
+    1148→
+  [... truncated ...]
+- [Grep Result after action #41]
+  946-
+  947-
+  948:def _recursive_to_string(doprint, arg):
+  949-    """Functions in lambdify accept both SymPy types and non-SymPy types such as python
+  950-    lists and tuples. This method ensures that we only call the doprint method of the
+  951-    printer with SymPy types (so that the printer safely can use SymPy-methods)."""
+  952-    from sympy.matrices.common import MatrixOperations
+  953-    from sympy.core.basic import Basic
+  954-
+  955-    if isinstance(arg, (Basic, MatrixOperations)):
+  956-        return doprint(arg)
+  957-    elif iterable(arg):
+  958-        if isinstance(arg, list):
+  959-            left, right = "[]"
+  960-        elif isinstance(arg, tuple):
+  961-            left, right = "()"
+  962-        else:
+  963-            raise NotImplementedError("unhandled type: %s, %s" % (type(arg), arg))
+  964-        return left +', '.join(_recursive_to_string(doprint, e) for e in arg) + right
+  965-    elif isinstance(arg, str):
+  966-        return arg
+  967-    else:
+  968-        return doprint(arg)
+  969-
+  970-
+  971-def lambdastr(args, expr, printer=None, dummify=None):
+  972-    """
+  973-    Returns a string that can be evaluated to a lambda function.
+  974-
+  975-    Examples
+  976-    ========
+  977-
+  978-    >>>
+  [... truncated ...]
+- [Read Result after action #43]
+     948→def _recursive_to_string(doprint, arg):
+     949→    """Functions in lambdify accept both SymPy types and non-SymPy types such as python
+     950→    lists and tuples. This method ensures that we only call the doprint method of the
+     951→    printer with SymPy types (so that the printer safely can use SymPy-methods)."""
+     952→    from sympy.matrices.common import MatrixOperations
+     953→    from sympy.core.basic import Basic
+     954→
+     955→    if isinstance(arg, (Basic, MatrixOperations)):
+     956→        return doprint(arg)
+     957→    elif iterable(arg):
+     958→        if isinstance(arg, list):
+     959→            left, right = "[]"
+     960→        elif isinstance(arg, tuple):
+     961→            left, right = "()"
+     962→        else:
+     963→            raise NotImplementedError("unhandled type: %s, %s" % (type(arg), arg))
+     964→        return left +', '.join(_recursive_to_string(doprint, e) for e in arg) + right
+     965→    elif isinstance(arg, str):
+     966→        return arg
+     967→    else:
+     968→        return doprint(arg)
+     969→
+     970→
+     971→def lambdastr(args, expr, printer=None, dummify=None):
+     972→    """
+
+- [Test Output after action #48]
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  WARNING (aesara.tensor.blas): Using NumPy C-API based implementation for BLAS functions.
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 0 items / 1 error
+
+  ==================================== ERRORS ====================================
+  ___________ ERROR collecting sympy/utilities/tests/test_lambdify
+  [... truncated ...]
+- [Test Output after action #50]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 1 item
+
+  sympy/printing/tests/test_pycode.py::test_PythonCodePrinter PASSED
+
+  ============================== 1 passed in 0.50s ===============================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  WARNING (aesara.tensor.blas): Using NumPy C-API based implementation for BLAS functions.
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/utilities/lambdify.py
+  Tool: Edit action #45
+  old_text_sha256: addaa2c46982a75fb41af73f57b02ec3639546114993c7cb28fa5fba3d5b6be7
+  new_text_sha256: 37bc385fb5ee3a558cfd333f3d977e7b0994f6b6c7fe081563aadd49a6ca2ddb
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

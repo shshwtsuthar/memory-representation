@@ -1,0 +1,163 @@
+STRIPPED RAW CLAUDE CODE TRAJECTORY
+This transcript was rendered from original raw JSONL using the canonical ADP strip manifest.
+
+[RAW line 3 USER]
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-14915
+base_commit: 903aaa35e5ceaa33bfc9b19b7f6da65ce5a91dd4
+problem_statement:
+ModelChoiceIteratorValue is not hashable.
+Description
+
+Recently I migrated from Django 3.0 to Django 3.1. In my code, I add custom data-* attributes to the select widget options. After the upgrade some of those options broke. Error is {TypeError}unhashable type: 'ModelChoiceIteratorValue'.
+Example (this one breaks):
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        context = super().create_option(name, value, label, selected, index, subindex, attrs)
+        if not value:
+            return context
+        if value in self.show_fields: # This is a dict {1: ['first_name', 'last_name']}
+            context['attrs']['data-fields'] = json.dumps(self.show_fields[value])
+However, working with arrays is not an issue:
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        context = super().create_option(name, value, label, selected, index, subindex, attrs)
+        if not value:
+            return context
+        if value in allowed_values: # This is an array [1, 2]
+            ...
+[RAW line 24 TOOL Grep]
+{
+  "output_mode": "content",
+  "path": "testbed",
+  "pattern": "class ModelChoiceIteratorValue"
+}
+[RAW line 25 TOOL RESULT toolu_012w9vEGGfn4q3te94zM8fc5]
+testbed/django/forms/models.py:1161:class ModelChoiceIteratorValue:
+[RAW line 27 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/django/forms/models.py",
+  "limit": 50,
+  "offset": 1150
+}
+[RAW line 28 TOOL RESULT toolu_0197ewUep7QMLWpzjCgMatJ7]
+  1150→            orig = getattr(self.parent_instance, self.to_field)
+  1151→        else:
+  1152→            orig = self.parent_instance.pk
+  1153→        if str(value) != str(orig):
+  1154→            raise ValidationError(self.error_messages['invalid_choice'], code='invalid_choice')
+  1155→        return self.parent_instance
+  1156→
+  1157→    def has_changed(self, initial, data):
+  1158→        return False
+  1159→
+  1160→
+  1161→class ModelChoiceIteratorValue:
+  1162→    def __init__(self, value, instance):
+  1163→        self.value = value
+  1164→        self.instance = instance
+  1165→
+  1166→    def __str__(self):
+  1167→        return str(self.value)
+  1168→
+  1169→    def __eq__(self, other):
+  1170→        if isinstance(other, ModelChoiceIteratorValue):
+  1171→            other = other.value
+  1172→        return self.value == other
+  1173→
+  1174→
+  1175→class ModelChoiceIterator:
+  1176→    def __init__(self, field):
+  1177→        self.field = field
+  1178→        self.queryset = field.queryset
+  1179→
+  1180→    def __iter__(self):
+  1181→        if self.field.empty_label is not None:
+  1182→            yield ("", self.field.empty_label)
+  1183→        queryset = self.queryset
+  1184→        # Can't use iterator() when queryset uses prefetch_related()
+  1185→        if not queryset._prefetch_related_lookups:
+  1186→            queryset = queryset.iterator()
+  1187→        for obj in queryset:
+  1188→            yield self.choice(obj)
+  1189→
+  1190→    def __len__(self):
+  1191→        # count() adds a query but uses less memory since the QuerySet results
+  1192→        # won't be cached. In most cases, the choices will only be iterated on,
+  1193→        # and __len__() won't be called.
+  1194→        return self.queryset.count() + (1 if self.field.empty_label is not None else 0)
+  1195→
+  1196→    def __bool__(self):
+  1197→        return self.field.empty_label is not None or self.queryset.exists()
+  1198→
+  1199→    def choice(self, obj):
+
+[RAW line 33 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/django/forms/models.py",
+  "new_text_sha256": "9576fdb4f47d62a7cccb8c15cbfe38e9e455728f28d9c055f197725b0de653f0",
+  "old_text_sha256": "d7d9d58ecbb91b48d8eaf76eb16958872f5033f70a41ca34bb70865210779a8e"
+}
+[RAW line 40 TOOL Write]
+{
+  "content_sha256": "752dc35c0b2fe33f790818ef441e560a84c67e54c79f92128df0a26e4d6d315a",
+  "file_path": "./swebench_9_15/testbed/test_hashable_fix.py"
+}
+[RAW line 44 TOOL Bash]
+cd testbed && python test_hashable_fix.py
+[RAW line 45 TOOL RESULT toolu_01GNL4Dy52ft9eHs3RFTMvQd]
+Exit code 1
+  File "test_hashable_fix.py", line 27
+    print(f"  hash(value1) = {h1}")
+                                 ^
+SyntaxError: invalid syntax
+[RAW line 47 TOOL Bash]
+cd testbed && python --version
+[RAW line 48 TOOL RESULT toolu_01Y1uj1BeMg5FaHmynDgSp8V]
+Python 2.7.3
+[RAW line 50 TOOL Bash]
+cd testbed && python3 --version
+[RAW line 53 TOOL Bash]
+python3 --version
+[RAW line 54 TOOL RESULT toolu_0179XFLVaPE58VYtFHkagokH]
+Python 3.8.8
+[RAW line 56 TOOL Bash]
+python3 ./swebench_9_15/testbed/test_hashable_fix.py
+[RAW line 57 TOOL RESULT toolu_01LVFwRVDasyKDgNcuMiYGcx]
+Testing hash()...
+  hash(value1) = 1
+  hash(value2) = 2
+  hash(value3) = 1
+  ✓ hash() works
+
+Testing equal values have equal hashes...
+  ✓ Equal values have equal hashes
+
+Testing dictionary key usage...
+  Created dict: {<django.forms.models.ModelChoiceIteratorValue object at 0x7fd6f8112e20>: 'first', <django.forms.models.ModelChoiceIteratorValue object at 0x7fd6f8112b80>: 'second'}
+  value1 in test_dict: True
+  value2 in test_dict: True
+  value3 in test_dict: True
+  ✓ Dictionary key usage works
+
+Testing original use case...
+  value1 found in show_fields: ['first_name', 'last_name']
+  value2 found in show_fields: ['email']
+  ✓ Original use case works
+
+Testing set usage...
+  Set length: 2 (should be 2, not 3)
+  ✓ Set usage works
+
+✅ All tests passed!
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+[RAW line 68 TOOL Bash]
+rm ./swebench_9_15/testbed/test_hashable_fix.py

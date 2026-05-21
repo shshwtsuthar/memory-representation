@@ -1,0 +1,270 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: a07a3a58-dd76-47e6-8651-a4ba61f6ac02
+- repo: sympy/sympy
+- instance_id: sympy__sympy-22714
+- base_commit: 3ff4717b6aef6086e78f01cdfa06f64ae23aed7e
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+simpify gives `Imaginary coordinates are not permitted.` with evaluate(False)
+## Issue
+`with evaluate(False)` crashes unexpectedly with `Point2D`
+
+## Code
+```python
+import sympy as sp
+with sp.evaluate(False):
+  sp.S('Point2D(Integer(1),Integer(2))')
+```
+
+## Error
+```
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/home/avinash/.local/lib/python3.8/site-packages/sympy/core/sympify.py", line 472, in sympify
+    expr = parse_expr(a, local_dict=locals, transformations=transformations, evaluate=evaluate)
+  File "/home/avinash/.local/lib/python3.8/site-packages/sympy/parsing/sympy_parser.py", line 1026, in parse_expr
+    raise e from ValueError(f"Error from parse_expr with transformed code: {code!r}")
+  File "/home/avinash/.local/lib/python3.8/site-packages/sympy/parsing/sympy_parser.py", line 1017, in parse_expr
+    rv = eval_expr(code, local_dict, global_dict)
+  File "/home/avinash/.local/lib/python3.8/site-packages/sympy/parsing/sympy_parser.py", line 911, in eval_expr
+    expr = eval(
+  File "<string>", line 1, in <module>
+  File "/home/avinash/.local/lib/python3.8/site-packages/sympy/geometry/point.py", line 912, in __new__
+    args = Point(*args, **kwargs)
+  File "/home/avinash/.local/lib/python3.8/site-packages/sympy/geometry/point.py", line 153, in __new__
+    raise ValueError('Imaginary coordinates are not permitted.')
+ValueError: Imaginary coordinates are not permitted.
+```
+
+However, it works without `with evaluate(False)`. Both of following commands work
+```python
+sp.S('Point2D(Integer(1),Integer(2))')
+sp.S('Point2D(Integer(1),Integer(2))', evaluate=False)
+```
+
+FILES INSPECTED
+---------------
+- sympy/geometry/point.py [Read: 2]
+
+SEARCH ANCHORS
+--------------
+(none)
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction] cd testbed && python3 -c "
+import sympy as sp
+print('Test 1: Without evaluate(False) - should work')
+result1 = sp.S('Point2D(Integer(1),Integer(2))')
+print(f'Result: {result1}')
+
+print('\nTest 2: With sp.S(..., evaluate=False) - should work')
+result2 = sp.S('Point2D(Integer(1),Integer(2))', evaluate=False)
+print(f'Result: {result2}')
+
+print('\nTest 3: With evaluate(False) context - should fail')
+try:
+    with sp.evaluate(False):
+        result3 = sp.S('Point2D(Integer(1),Integer(2))')
+        pr
+  [... truncated ...]
+- [other/reproduction] cd testbed && python3 -c "
+from sympy import Integer, im, evaluate
+
+print('Without evaluate(False):')
+a = Integer(1)
+print(f'a = {a}')
+print(f'a.is_number = {a.is_number}')
+print(f'im(a) = {im(a)}')
+print(f'bool(im(a)) = {bool(im(a))}')
+
+print('\nWith evaluate(False):')
+with evaluate(False):
+    a = Integer(1)
+    print(f'a = {a}')
+    print(f'a.is_number = {a.is_number}')
+    result_im = im(a)
+    print(f'im(a) = {result_im}')
+    print(f'type(im(a)) = {type(result_im)}')
+    print(f'bool(im(a)
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, 'testbed')
+from sympy import Integer, im, evaluate
+
+print('Without evaluate(False):')
+a = Integer(1)
+print(f'a = {a}')
+print(f'a.is_number = {a.is_number}')
+print(f'im(a) = {im(a)}')
+print(f'bool(im(a)) = {bool(im(a))}')
+
+print('\nWith evaluate(False):')
+with evaluate(False):
+    a = Integer(1)
+    print(f'a = {a}')
+    print(f'a.is_number = {a.is_number}')
+    result_im = im(a)
+    print(f'im(a) = {result_im}')
+    print(f'type(im(a)) = {type(result_im
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, 'testbed')
+from sympy import Integer, im, evaluate, I
+
+print('Test different approaches:')
+
+print('\n1. Without evaluate(False):')
+a = Integer(1)
+print(f'im(a) = {im(a)}')
+print(f'bool(im(a)) = {bool(im(a))}')
+print(f'im(a) != 0 = {im(a) != 0}')
+print(f'im(a).is_zero = {im(a).is_zero}')
+
+print('\n2. With evaluate(False):')
+with evaluate(False):
+    a = Integer(1)
+    result = im(a)
+    print(f'im(a) = {result}')
+    print(f'bool(im(a)) = {bool(result)}'
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+import sys
+sys.path.insert(0, 'testbed')
+from sympy import Integer, im, evaluate, I
+
+print('Test .is_zero property:')
+
+print('\n1. Real number without evaluate(False):')
+a = Integer(1)
+result = im(a)
+print(f'im({a}) = {result}, is_zero = {result.is_zero}')
+
+print('\n2. Real number with evaluate(False):')
+with evaluate(False):
+    a = Integer(1)
+    result = im(a)
+    print(f'im({a}) = {result}, is_zero = {result.is_zero}')
+
+print('\n3. Complex number without evaluate(False):')
+a
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+import sys
+sys.path.insert(0, 'testbed')
+from sympy import symbols, im, I
+
+x = symbols('x')
+print(f'For symbolic x: im(x).is_zero = {im(x).is_zero}')
+print(f'For symbolic x+I: im(x+I).is_zero = {im(x + I).is_zero}')
+EOF
+- [other/reproduction] python3 << 'EOF'
+import sys
+sys.path.insert(0, 'testbed')
+from sympy import Integer, im, evaluate, I, symbols
+
+print('Test the fix approach: "im(a).is_zero is False"')
+
+print('\n1. Real number without evaluate(False):')
+a = Integer(1)
+result = im(a).is_zero is False
+print(f'im({a}).is_zero is False = {result}')
+
+print('\n2. Real number with evaluate(False):')
+with evaluate(False):
+    a = Integer(1)
+    result = im(a).is_zero is False
+    print(f'im({a}).is_zero is False = {result}')
+
+print('\n3
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+import sys
+sys.path.insert(0, 'testbed')
+import sympy as sp
+
+print('Test 1: Without evaluate(False) - should work')
+try:
+    result1 = sp.S('Point2D(Integer(1),Integer(2))')
+    print(f'✓ Result: {result1}')
+except Exception as e:
+    print(f'✗ Error: {e}')
+
+print('\nTest 2: With sp.S(..., evaluate=False) - should work')
+try:
+    result2 = sp.S('Point2D(Integer(1),Integer(2))', evaluate=False)
+    print(f'✓ Result: {result2}')
+except Exception as e:
+    print(f'✗ Error: {e}')
+
+p
+  [... truncated ...]
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #3]
+     140→        if len(coords) != dim:
+     141→            message = ("Dimension of {} needs to be changed "
+     142→                       "from {} to {}.").format(coords, len(coords), dim)
+     143→            if on_morph == 'ignore':
+     144→                pass
+     145→            elif on_morph == "error":
+     146→                raise ValueError(message)
+     147→            elif on_morph == 'warn':
+     148→                warnings.warn(message)
+     149→            else:
+     150→                raise ValueError(filldedent('''
+     151→                        on_morph value should be 'error',
+     152→                        'warn' or 'ignore'.'''))
+     153→        if any(coords[dim:]):
+     154→            raise ValueError('Nonzero coordinates cannot be removed.')
+     155→        if any(a.is_number and im(a) for a in coords):
+     156→            raise ValueError('Imaginary coordinates are not permitted.')
+     157→        if not all(isinstance(a, Expr) for a in coords):
+     158→            raise TypeError('Coordinates must be valid SymPy expressions.')
+     159→
+     160→        # pad with zeros appropriately
+     161→        coords = coords[:dim] + (S.Zero,)*(dim - len(coords))
+     162→
+     163→        # Tur
+  [... truncated ...]
+- [Read Result after action #16]
+     150→                raise ValueError(filldedent('''
+     151→                        on_morph value should be 'error',
+     152→                        'warn' or 'ignore'.'''))
+     153→        if any(coords[dim:]):
+     154→            raise ValueError('Nonzero coordinates cannot be removed.')
+     155→        if any(a.is_number and im(a) for a in coords):
+     156→            raise ValueError('Imaginary coordinates are not permitted.')
+     157→        if not all(isinstance(a, Expr) for a in coords):
+     158→            raise TypeError('Coordinates must be valid SymPy expressions.')
+     159→
+
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/geometry/point.py
+  Tool: Edit action #18
+  old_text_sha256: d5b261693e55283b5bffd5f6e476e5d850297a9590a658edfdeb72529f144e6a
+  new_text_sha256: 8e2a64b6ac063b2afd2ba1ccd36f0ff4f57eaef29a018a7267f936ec2d707c70
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

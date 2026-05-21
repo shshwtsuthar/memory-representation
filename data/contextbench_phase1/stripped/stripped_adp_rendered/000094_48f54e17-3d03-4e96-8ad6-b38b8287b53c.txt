@@ -1,0 +1,565 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 48f54e17-3d03-4e96-8ad6-b38b8287b53c
+- repo: pytest-dev/pytest
+- instance_id: pytest-dev__pytest-8365
+- base_commit: 4964b468c83c06971eb743fbc57cc404f760c573
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: pytest-dev/pytest
+instance_id: pytest-dev__pytest-8365
+base_commit: 4964b468c83c06971eb743fbc57cc404f760c573
+problem_statement:
+tmpdir creation fails when the username contains illegal characters for directory names
+`tmpdir`, `tmpdir_factory` and `tmp_path_factory` rely on `getpass.getuser()` for determining the `basetemp` directory. I found that the user name returned by `getpass.getuser()` may return characters that are not allowed for directory names. This may lead to errors while creating the temporary directory.
+
+The situation in which I reproduced this issue was while being logged in through an ssh connection into my Windows 10 x64 Enterprise version (1909) using an OpenSSH_for_Windows_7.7p1 server. In this configuration the command `python -c "import getpass; print(getpass.getuser())"` returns my domain username e.g. `contoso\john_doe` instead of `john_doe` as when logged in regularly using a local session.
+
+When trying to create a temp directory in pytest through e.g. `tmpdir_factory.mktemp('foobar')` this fails with the following error message:
+```
+self = WindowsPath('C:/Users/john_doe/AppData/Local/Temp/pytest-of-contoso/john_doe')
+mode = 511, parents = False, exist_ok = True
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        if self._closed:
+            self._raise_closed()
+        try:
+>           self._accessor.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] The system cannot find the path specified: 'C:\\Users\\john_doe\\AppData\\Local\\Temp\\pytest-of-contoso\\john_doe'
+
+C:\Python38\lib\pathlib.py:1266: FileNotFoundError
+```
+
+I could also reproduce this without the complicated ssh/windows setup with pytest 6.2.2 using the following commands from a `cmd`:
+```bat
+echo def test_tmpdir(tmpdir):>test_tmp.py
+echo   pass>>test_tmp.py
+set LOGNAME=contoso\john_doe
+py.test test_tmp.py
+```
+
+Thanks for having a look at this!
+sha256: 7cef6dedc7e292605859017bc6fff75eade514799f3c7c388954a1bb45ea3ff7
+truncated: false
+
+[ADP ACTION current=1 original=3: api_action Grep]
+payload:
+{
+  "output_mode": "files_with_matches",
+  "pattern": "getpass\\.getuser"
+}
+sha256: f41a5e974e9fa6191f29f43c2930bfdb1b060cc9aa8d12fa53d2b967a07c4e7f
+truncated: false
+
+[ADP ACTION current=2 original=5: api_action Grep]
+payload:
+{
+  "glob": "**/*.py",
+  "output_mode": "files_with_matches",
+  "pattern": "tmpdir"
+}
+sha256: fd52c38a7970a5af956eea62d4a778638e9a915665955c2a6d911c0f31ebf994
+truncated: false
+
+[ADP ACTION current=3 original=11: code_action bash]
+payload:
+ls -la testbed 2>/dev/null || echo "testbed directory not found"
+sha256: c1102b0e0cbf6b33c6a6ba3c5cb566ff92a572aa191177fdde1758366b6fb412
+truncated: false
+
+[ADP OBSERVATION current=4 original=12 source=environment]
+name: Bash:toolu_01Bc1fqxtLfrehFe6EhyKYag
+excerpt:
+testbed directory not found
+sha256: 40990bea8de553638359f79303833c700833016c22938a23c7aa5ad67c3cce63
+truncated: false
+
+[ADP ACTION current=5 original=23: api_action Grep]
+path: testbed
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed",
+  "pattern": "getpass\\.getuser"
+}
+sha256: 38b547b72d1cae9beac39049797f55c0cc1c6c7f6f695c69e5d656d122407a80
+truncated: false
+
+[ADP OBSERVATION current=6 original=24 source=environment]
+name: Grep:toolu_014kqjm2LMBBrKDqPjhK5ywn
+excerpt:
+testbed/src/_pytest/tmpdir.py:157:        return getpass.getuser()
+sha256: 55bf5270d87e3209bff1004ad79522e5c0d97b829befb6cf74a287e53f3a7660
+truncated: false
+
+[ADP ACTION current=7 original=25: api_action Read]
+path: src/_pytest/tmpdir.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/src/_pytest/tmpdir.py"
+}
+sha256: 0ba4c285d5d39cc35db08102331e274881882b5f5bfd2c3dbcbd0f2f3626e192
+truncated: false
+
+[ADP OBSERVATION current=8 original=26 source=environment]
+name: Read:toolu_01Fx1Spfo9uFE5CT9S6JGDn7
+excerpt:
+     1→"""Support for providing temporary directories to test functions."""
+     2→import os
+     3→import re
+     4→import tempfile
+     5→from pathlib import Path
+     6→from typing import Optional
+     7→
+     8→import attr
+     9→import py
+    10→
+    11→from .pathlib import ensure_reset_dir
+    12→from .pathlib import LOCK_TIMEOUT
+    13→from .pathlib import make_numbered_dir
+    14→from .pathlib import make_numbered_dir_with_cleanup
+    15→from _pytest.compat import final
+    16→from _pytest.config import Config
+    17→from _pytest.deprecated import check_ispytest
+    18→from _pytest.fixtures import fixture
+    19→from _pytest.fixtures import FixtureRequest
+    20→from _pytest.monkeypatch import MonkeyPatch
+    21→
+    22→
+    23→@final
+    24→@attr.s(init=False)
+    25→class TempPathFactory:
+    26→    """Factory for temporary directories under the common base temp directory.
+    27→
+    28→    The base directory can be configured using the ``--basetemp`` option.
+    29→    """
+    30→
+    31→    _given_basetemp = attr.ib(type=Optional[Path])
+    32→    _trace = attr.ib()
+    33→    _basetemp = attr.ib(type=Optional[Path])
+    34→
+    35→    def __init__(
+    36→        self,
+    37→        given_basetemp: Optional[Path],
+    38→        trace,
+    39→        basetemp: Optional[Path] = None,
+    40→        *,
+    41→        _ispytest: bool = False,
+    42→    ) -> None:
+    43→        check_ispytest(_ispytest)
+    44→        if given_basetemp is None:
+    45→            self._given_basetemp = None
+    46→        else:
+    47→            # Use os.path.abspath() to get absolute path instead of resolve() as it
+    48→            # does not work the same in all platforms (see #4427).
+    49→            # Path.absolute() exists, but it is not public (see https://bugs.python.org/issue25012).
+    50→            self._given_basetemp = Path(os.path.abspath(str(given_basetemp)))
+    51→        self._trace = trace
+    52→        self._basetemp = basetemp
+    53→
+    54→
+sha256: 9f6f1fdab2abb6d8b13c9607f54a05e17081a37cca3ae46bb8dbde560dba86f1
+truncated: true
+
+[ADP ACTION current=9 original=29: api_action Edit]
+path: src/_pytest/tmpdir.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/src/_pytest/tmpdir.py",
+  "new_text_sha256": "6f70bee77c3a1a0f0b24c999d3112c6498d0ee7d1e552c79d316190b1b6297a4",
+  "old_text_sha256": "297e5153f90f71c1f89d852239915666cb25c14c586087a24b503841f7a1d89c"
+}
+sha256: 035da5f1838f09228a193bb9d1a81d5bcb5e3ff23f7399f3688d69c9788dc476
+truncated: false
+
+[ADP ACTION current=10 original=33: api_action Write]
+path: test_tmpdir_fix.py
+payload:
+{
+  "content_sha256": "3a259790b99f3b438a753b0a38c9683f914bd53b0a955da56bc6aae462cdbd81",
+  "file_path": "./swebench_9_15/testbed/test_tmpdir_fix.py"
+}
+sha256: 57ace5207aefa4611dcd2c3983bda8821ef16208a2a65f3e1a81a4e5298b96b5
+truncated: false
+
+[ADP ACTION current=11 original=35: code_action bash]
+payload:
+cd testbed && python -m pytest test_tmpdir_fix.py -v
+sha256: d9ea208a27100e1fb5dae48e8d7f6f62fba327d6ff3dc035b32f16dc065266cf
+truncated: false
+
+[ADP OBSERVATION current=12 original=36 source=environment]
+name: Bash:toolu_01YPQiafgJzxWufbHFc2v6qx:error
+excerpt:
+Exit code 1
+/Applications/ADFRsuite-1.0/bin/python: No module named pytest
+sha256: 21eb35765ee9eb93cc09bda0d867ebc56b6f0517b5f6079049d0fd96870f323c
+truncated: false
+
+[ADP ACTION current=13 original=37: code_action bash]
+payload:
+cd testbed && pytest test_tmpdir_fix.py -v
+sha256: 9ae51784722e3ed36a15de4f8aa1f4ec60b27617bb1280e775177c9a2cb8836e
+truncated: false
+
+[ADP OBSERVATION current=14 original=38 source=environment]
+name: Bash:toolu_0193aERjQA3N1XyquPiFLLTo
+excerpt:
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-6.3.0.dev202+g4964b468c, py-1.10.0, pluggy-0.13.1 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: ./swebench_9_15/testbed, configfile: pyproject.toml
+plugins: anyio-3.6.2
+collecting ... collected 4 items
+
+test_tmpdir_fix.py::test_tmpdir_with_illegal_chars PASSED                [ 25%]
+test_tmpdir_fix.py::test_tmpdir_factory_with_illegal_chars PASSED        [ 50%]
+test_tmpdir_fix.py::test_tmp_path_with_illegal_chars PASSED              [ 75%]
+test_tmpdir_fix.py::test_get_user_sanitization PASSED                    [100%]
+
+============================== 4 passed in 0.03s ===============================
+sha256: 78f3031d6a354682e2a390e15aea158f562c16b3e6461e43f5fc35b9b739bcf7
+truncated: false
+
+[ADP ACTION current=15 original=41: code_action bash]
+payload:
+cd testbed && LOGNAME='contoso\john_doe' pytest test_issue.py -v
+sha256: d4952650c82cc90eee170eccae1f75ee5e81b228df3dbcba4b56834a0a439dce
+truncated: false
+
+[ADP ACTION current=16 original=43: code_action bash]
+payload:
+cd testbed && env "LOGNAME=contoso\\john_doe" pytest test_issue.py -v
+sha256: ee4115879c9b61b785f5cda315ce27c8d511f77048f2216898dcadb4b1414837
+truncated: false
+
+[ADP ACTION current=17 original=45: code_action bash]
+payload:
+pytest test_issue.py -v
+sha256: 21ba4d74c0eec5bf0583d0cf7d7387c4124bfe9ebcd83f0e1bc2be1ab67d47fa
+truncated: false
+
+[ADP OBSERVATION current=18 original=46 source=environment]
+name: Bash:toolu_01K5GQLMhVrhTuAHTftoMTh8
+excerpt:
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-6.3.0.dev202+g4964b468c, py-1.10.0, pluggy-0.13.1 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: ./swebench_9_15/testbed, configfile: pyproject.toml
+plugins: anyio-3.6.2
+collecting ... collected 1 item
+
+test_issue.py::test_tmpdir PASSED                                        [100%]
+
+============================== 1 passed in 0.02s ===============================
+sha256: 244516d0d3921e096d21528b77f3c64f2003e6467ddcb10499845decc556f1fb
+truncated: false
+
+[ADP ACTION current=19 original=47: code_action bash]
+payload:
+export LOGNAME='contoso\john_doe' && pytest testbed/test_issue.py -v
+sha256: 6e4411785e8e3bb36012abe185abf4cef337c6ec6ea1394abc21f29017e416f1
+truncated: false
+
+[ADP OBSERVATION current=20 original=48 source=environment]
+name: Bash:toolu_01PVmB1wfFjD5qz2a1eMWZJo:error
+excerpt:
+Exit code 4
+ERROR: file or directory not found: testbed/test_issue.py
+
+
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-6.3.0.dev202+g4964b468c, py-1.10.0, pluggy-0.13.1 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: ./swebench_9_15/testbed, configfile: pyproject.toml
+plugins: anyio-3.6.2
+collecting ... collected 0 items
+
+============================ no tests ran in 0.01s =============================
+sha256: d526bd66dc9e5234a0b8052f5e0c86f91b531a8f5bd454e3e2a29139d0d6d042
+truncated: false
+
+[ADP ACTION current=21 original=49: code_action bash]
+payload:
+pwd && ls -la testbed/test_issue.py
+sha256: 53a45f97277d549a45c027e42a947b9a407eeeda9e036568eea5fea192def716
+truncated: false
+
+[ADP ACTION current=22 original=51: code_action bash]
+payload:
+ls -la test_issue.py
+sha256: 445f1c29b66b3f0bbb6f3559b6d528fddd7611960b4fc69667e8ebaed8a45407
+truncated: false
+
+[ADP OBSERVATION current=23 original=52 source=environment]
+name: Bash:toolu_01W6wM17CkHAsLGDKpffnyAd
+excerpt:
+-rw-------@ 1 user  staff  224 28 Nov 00:06 test_issue.py
+sha256: cd9e52a6241674d1b75b39bf350671c7fd904e9ace514bb18947b1516c470780
+truncated: false
+
+[ADP ACTION current=24 original=53: api_action Write]
+path: run_test_with_env.py
+payload:
+{
+  "content_sha256": "8ce33eba1918ec0faf1f2d3e9a6d6bc8541d86ec030fa7ef7fbd82a81c1804fc",
+  "file_path": "./swebench_9_15/testbed/run_test_with_env.py"
+}
+sha256: b6431be07d6ea098b0abc8fa869cad959abab3b72e5fe57f2a6a82c42744fc5c
+truncated: false
+
+[ADP ACTION current=25 original=55: code_action bash]
+payload:
+python run_test_with_env.py
+sha256: 677cd78a9a682a56a9af4c2e956825ad1b948e1d39345628fac20adb9d63e3c4
+truncated: false
+
+[ADP OBSERVATION current=26 original=56 source=environment]
+name: Bash:toolu_012a5uSXT2LvviZ4E5xsgHcp:error
+excerpt:
+Exit code 1
+Traceback (most recent call last):
+  File "run_test_with_env.py", line 10, in <module>
+    result = subprocess.run([sys.executable, '-m', 'pytest', 'test_issue.py', '-v'],
+AttributeError: 'module' object has no attribute 'run'
+sha256: 8b58f5feb733f53c74e5ab4360a28f9094f43b18a56ca1575094adc74a169550
+truncated: false
+
+[ADP ACTION current=27 original=57: api_action Edit]
+path: run_test_with_env.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/run_test_with_env.py",
+  "new_text_sha256": "9a84de5c444d058b55705db610931d32de69026fe4af6b914b51a45feccbead8",
+  "old_text_sha256": "d38c2ac840474d9ecf98f2303e53aa11c1557063e9a17829dd5d50f88b1a9d00"
+}
+sha256: 2ff77460a36936abab40c82cd5ed691e0015a5e35e5bd4373f0809f0c8402bd0
+truncated: false
+
+[ADP ACTION current=28 original=59: code_action bash]
+payload:
+python run_test_with_env.py
+sha256: dfeff13b1a890b7d2f1b3fc6b45980a220a71b2280b26d052da370f9adf68c94
+truncated: false
+
+[ADP OBSERVATION current=29 original=60 source=environment]
+name: Bash:toolu_01LaoEryz2u6CX6X7BfToYss:error
+excerpt:
+Exit code 1
+/Applications/ADFRsuite-1.0/bin/python: No module named pytest
+sha256: 21eb35765ee9eb93cc09bda0d867ebc56b6f0517b5f6079049d0fd96870f323c
+truncated: false
+
+[ADP ACTION current=30 original=61: code_action bash]
+payload:
+which python && which pytest
+sha256: aef642ec05ea6ab3f5b38d67321c273f4d7b34e32b4b23b58f64d214c8e88ede
+truncated: false
+
+[ADP OBSERVATION current=31 original=62 source=environment]
+name: Bash:toolu_01L3K29H3QaEMKx9EGz2sEcn
+excerpt:
+/Applications/ADFRsuite-1.0/bin/python
+/opt/anaconda3/bin/pytest
+sha256: ed03c7f14fbfd24eeed1c2a463e5122056a16a236441af1d142c7ba2ab044115
+truncated: false
+
+[ADP ACTION current=32 original=63: code_action bash]
+payload:
+LOGNAME='contoso\john_doe' /opt/anaconda3/bin/pytest test_issue.py -v
+sha256: f6ce9cc1aaf126051e831e7fd7ce666f92c9824fa195fd58176d01026ae233ee
+truncated: false
+
+[ADP OBSERVATION current=33 original=64 source=environment]
+name: Bash:toolu_01N1xcx7RfJ1P5SCGYco9vRa
+excerpt:
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-6.3.0.dev202+g4964b468c, py-1.10.0, pluggy-0.13.1 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: ./swebench_9_15/testbed, configfile: pyproject.toml
+plugins: anyio-3.6.2
+collecting ... collected 1 item
+
+test_issue.py::test_tmpdir PASSED                                        [100%]
+
+============================== 1 passed in 0.02s ===============================
+sha256: 244516d0d3921e096d21528b77f3c64f2003e6467ddcb10499845decc556f1fb
+truncated: false
+
+[ADP ACTION current=34 original=65: code_action bash]
+payload:
+pytest testing/test_tmpdir.py -v
+sha256: 9b16023174b60a5bd43b2a99e8da57208904722d61a9cb6fbb4f326764c3a798
+truncated: false
+
+[ADP OBSERVATION current=35 original=66 source=environment]
+name: Bash:toolu_01M7Rs945CwFm2Wfcag6pKhY
+excerpt:
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-6.3.0.dev202+g4964b468c, py-1.10.0, pluggy-0.13.1 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: ./swebench_9_15/testbed, configfile: pyproject.toml
+plugins: anyio-3.6.2
+collecting ... collected 33 items
+
+testing/test_tmpdir.py::TestTempdirHandler::test_mktemp PASSED           [  3%]
+testing/test_tmpdir.py::TestTempdirHandler::test_tmppath_relative_basetemp_absolute PASSED [  6%]
+testing/test_tmpdir.py::test_get_user_uid_not_found PASSED               [  9%]
+testing/test_tmpdir.py::test_get_user SKIPPED (win only)                 [ 12%]
+testing/test_tmpdir.py::TestNumberedDir::test_make PASSED                [ 15%]
+testing/test_tmpdir.py::TestNumberedDir::test_cleanup_lock_create PASSED [ 18%]
+testing/test_tmpdir.py::TestNumberedDir::test_lock_register_cleanup_removal PASSED [ 21%]
+testing/test_tmpdir.py::TestNumberedDir::test_cleanup_keep PASSED        [ 24%]
+testing/test_tmpdir.py::TestNumberedDir::test_cleanup_locked PASSED      [ 27%]
+testing/test_tmpdir.py::TestNumberedDir::test_cleanup_ignores_symlink PASSED [ 30%]
+testing/test_tmpdir.py::TestNumberedDir::test_removal_accepts_lock PASSED [ 33%]
+testing/test_tmpdir.py::TestRmRf::test_rm_rf PASSED                      [ 36%]
+testing/test_tmpdir.py::TestRmRf::test_rm_rf_with_read_only_file PASSED  [ 39%]
+testing/test_tmpdir.py::TestRmRf::test_rm_rf_with_read_only_directory PASSED [ 42%]
+testing/test_tmpdir.py::TestRmRf::test_on_rm_rf_error PASSED             [ 45%]
+testing/test_tmpdir.py::test_tmpdir_equals_tmp_path PASSED               [ 48%]
+testing/test_tmpdir.py::test_tmpdir_fixture PASSED                       [ 51%]
+testing/test_tmpdir.py::TestConfigTmpdir::test_getbasetemp_custom_removes_old PASSED [ 54%]
+testing/test_tmpdir.py::test_mktemp[mypath-True] PASSED                  [ 57%]
+testing/test_tmpdir.py::test_mktemp[/mypath1-False] PASSED               [ 60%]
+testing/te
+sha256: aaada296ee2d0e9c042f6e1dccb9fc01ebe7041e3f278e8adb97adaa16ed1870
+truncated: true
+
+[ADP ACTION current=36 original=69: api_action Grep]
+path: testing
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/testing",
+  "pattern": "test_get_user"
+}
+sha256: 12389fa37c85269b860a2a426caf8b8f462e25aae63e245b972fccab58eb7a5e
+truncated: false
+
+[ADP ACTION current=37 original=71: code_action bash]
+payload:
+find . -name "test_tmpdir.py" -type f | head -5
+sha256: 82f78a11c0d88a4533b05bfbb4b75e201b184c743836ca47744f349bdeb83ece
+truncated: false
+
+[ADP OBSERVATION current=38 original=72 source=environment]
+name: Bash:toolu_01AVcspp5TVr4zEuPoyzKyQN
+excerpt:
+./testing/test_tmpdir.py
+sha256: f36acc9f5e6ae890ad52a4bcfbeacbcf2955a8310775fc980c74a358aa51fd37
+truncated: false
+
+[ADP ACTION current=39 original=73: api_action Grep]
+path: testbed
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed",
+  "pattern": "test_get_user"
+}
+sha256: bf0a942dc979aa64620ac6778340ba3f8c44f04c6b217f6db212440c341646c8
+truncated: false
+
+[ADP ACTION current=40 original=77: api_action Grep]
+path: .
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": ".",
+  "pattern": "test_get_user"
+}
+sha256: 114ec413086d934103210ca5106f5e0ebb012c011908e7bc729cd754a661ec7b
+truncated: false
+
+[ADP OBSERVATION current=41 original=78 source=environment]
+name: Grep:toolu_01CcG2Ag7MkXwZgyEDE2rfDk
+excerpt:
+test_tmpdir_fix.py:42:def test_get_user_sanitization():
+testing/test_tmpdir.py:230:def test_get_user_uid_not_found():
+testing/test_tmpdir.py:239:def test_get_user(monkeypatch):
+sha256: 190ffb5c733f96d47ccd8886789ab8f40765eb8dd30af2bbcd1fe60ba76e864b
+truncated: false
+
+[ADP ACTION current=42 original=79: api_action Read]
+path: testing/test_tmpdir.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/testing/test_tmpdir.py",
+  "limit": 20,
+  "offset": 228
+}
+sha256: 91f16b4d1c4016f766ff2f8ef9b9a4dd4bcd9404a93e9bdd0e89add8bebbbf90
+truncated: false
+
+[ADP OBSERVATION current=43 original=80 source=environment]
+name: Read:toolu_0199Lhkc7W5ajvgPEdQQTr8P
+excerpt:
+   228→@pytest.mark.usefixtures("break_getuser")
+   229→@pytest.mark.skipif(sys.platform.startswith("win"), reason="no os.getuid on windows")
+   230→def test_get_user_uid_not_found():
+   231→    """Test that get_user() function works even if the current process's
+   232→    user id does not correspond to a valid user (e.g. running pytest in a
+   233→    Docker container with 'docker run -u'.
+   234→    """
+   235→    assert get_user() is None
+   236→
+   237→
+   238→@pytest.mark.skipif(not sys.platform.startswith("win"), reason="win only")
+   239→def test_get_user(monkeypatch):
+   240→    """Test that get_user() function works even if environment variables
+   241→    required by getpass module are missing from the environment on Windows
+   242→    (#1010).
+   243→    """
+   244→    monkeypatch.delenv("USER", raising=False)
+   245→    monkeypatch.delenv("USERNAME", raising=False)
+   246→    assert get_user() is None
+   247→
+
+sha256: bf78c2a62ba28a79d392b4e10143f274e95a45adb6f04e2bf62f0aff735922b0
+truncated: false
+
+[ADP ACTION current=44 original=91: api_action Read]
+path: src/_pytest/tmpdir.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/src/_pytest/tmpdir.py",
+  "limit": 15,
+  "offset": 150
+}
+sha256: b7a0a6997f9c6ce70171f1f0df5dfdb6633d5f1c7539faea15a4b9e7e629e8bb
+truncated: false
+
+[ADP OBSERVATION current=45 original=92 source=environment]
+name: Read:toolu_01LudnAmRtzEZnZcojXquAmE
+excerpt:
+   150→
+   151→def get_user() -> Optional[str]:
+   152→    """Return the current user name, or None if getuser() does not work
+   153→    in the current environment (see #1010)."""
+   154→    import getpass
+   155→
+   156→    try:
+   157→        user = getpass.getuser()
+   158→    except (ImportError, KeyError):
+   159→        return None
+   160→    # Replace any illegal characters (like backslashes in Windows domain usernames)
+   161→    # with underscores to ensure the username is safe for directory names.
+   162→    return re.sub(r"[\W]", "_", user)
+   163→
+   164→
+
+sha256: 7c8cb42d6e4ed87b1cc50b63384dc8a73b4e49b7e6e4e1d5a68e2896689e47c9
+truncated: false

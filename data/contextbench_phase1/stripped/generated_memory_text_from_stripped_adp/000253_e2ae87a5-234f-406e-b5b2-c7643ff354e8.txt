@@ -1,0 +1,384 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: e2ae87a5-234f-406e-b5b2-c7643ff354e8
+- repo: sympy/sympy
+- instance_id: sympy__sympy-15609
+- base_commit: 15f56f3b0006d2ed2c29bde3c43e91618012c849
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Indexed matrix-expression LaTeX printer is not compilable
+```python
+i, j, k = symbols("i j k")
+M = MatrixSymbol("M", k, k)
+N = MatrixSymbol("N", k, k)
+latex((M*N)[i, j])
+```
+
+The LaTeX string produced by the last command is:
+```
+\sum_{i_{1}=0}^{k - 1} M_{i, _i_1} N_{_i_1, j}
+```
+LaTeX complains about a double subscript `_`. This expression won't render in MathJax either.
+
+FILES INSPECTED
+---------------
+- sympy/printing [Grep: 2]
+- sympy/printing/latex.py [Grep: 2, Read: 2]
+- sympy/printing/tests/test_latex.py [Grep: 1, Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [4] Grep pattern='class.*LaTeX.*Printer' path='sympy/printing'
+- [5] Glob path='swebench_9_15/testbed' glob='**/printing/latex.py'
+- [7] Grep pattern='MatrixElement|_print_MatrixElement' path='sympy/printing'
+- [9] Grep pattern='Indexed|_print_Indexed' path='sympy/printing/latex.py'
+- [19] Grep pattern='MatrixElement|_print_MatrixElement' path='sympy/printing/latex.py'
+- [30] Grep pattern='def test.*atrix' path='sympy/printing/tests/test_latex.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction] cd testbed && python3 << 'EOF'
+from sympy import symbols, MatrixSymbol, latex
+
+i, j, k = symbols("i j k")
+M = MatrixSymbol("M", k, k)
+N = MatrixSymbol("N", k, k)
+result = latex((M*N)[i, j])
+print("Generated LaTeX:")
+print(result)
+print("\nThe issue is the '_i_1' which creates a double subscript")
+EOF
+
+- [diagnostic] cd testbed && find . -type f -name "*.py" -path "*/printing/latex*" | head -20
+- [other/reproduction] python3 << 'EOF'
+from sympy import symbols, MatrixSymbol, latex
+from sympy.core.expr import Expr
+
+i, j, k = symbols("i j k")
+M = MatrixSymbol("M", k, k)
+N = MatrixSymbol("N", k, k)
+
+# Get the indexed expression
+expr = (M*N)[i, j]
+print("Expression type:", type(expr))
+print("Expression:", expr)
+print("\nExpression tree:")
+from sympy import srepr
+print(srepr(expr))
+EOF
+
+- [other/reproduction] python3 << 'EOF'
+from sympy import symbols, MatrixSymbol, latex, Dummy
+from sympy.printing.latex import LatexPrinter
+
+# Create a Dummy symbol
+dummy = Dummy('i_1')
+print("Dummy symbol:", dummy)
+print("LaTeX of dummy:", latex(dummy))
+print("Name of dummy:", dummy.name)
+
+# Check how it's printed
+printer = LatexPrinter()
+print("Printer result:", printer._print(dummy))
+EOF
+
+- [other/reproduction] python3 << 'EOF'
+from sympy import symbols, MatrixSymbol, latex, Dummy
+from sympy.tensor.indexed import Indexed
+
+i, j, k = symbols("i j k")
+M = MatrixSymbol("M", k, k)
+
+# Create a MatrixElement
+dummy = Dummy('i_1')
+mat_elem = M[i, dummy]
+print("MatrixElement:", mat_elem)
+print("MatrixElement type:", type(mat_elem))
+print("LaTeX of MatrixElement:", latex(mat_elem))
+print("Indices:", mat_elem.indices)
+print("LaTeX of first index:", latex(mat_elem.indices[0]))
+print("LaTeX of second index:", latex(
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+from sympy import Dummy
+
+# When we use str() on a Dummy, it shows the underscore prefix
+dummy = Dummy('i_1')
+print("str(dummy):", str(dummy))
+print("repr(dummy):", repr(dummy))
+
+# The display representation is what gets used in string formatting
+print("Using %s:", "%s" % dummy)
+EOF
+
+- [other/reproduction] python3 << 'EOF'
+from sympy import symbols, MatrixSymbol, latex
+
+i, j, k = symbols("i j k")
+M = MatrixSymbol("M", k, k)
+N = MatrixSymbol("N", k, k)
+result = latex((M*N)[i, j])
+print("Generated LaTeX:")
+print(result)
+print("\nExpected: \\sum_{i_{1}=0}^{k - 1} M_{i, i_{1}} N_{i_{1}, j}")
+print("\nChecking if the fix works...")
+if "_i_1" not in result and "i_{1}" in result:
+    print("✓ Fix successful! No double subscripts found.")
+else:
+    print("✗ Fix failed. Double subscripts still present.")
+E
+  [... truncated ...]
+- [test] python3 -m pytest sympy/printing/tests/test_latex.py::test_MatrixElement -xvs
+- [test] python3 -m pytest sympy/printing/tests/test_latex.py::test_MatrixElement_printing -xvs
+- [test] python3 -m pytest sympy/printing/tests/test_latex.py -x --tb=short 2>&1 | head -100
+- [test] python3 -m pytest sympy/printing/tests/test_latex.py::test_latex_Matrix sympy/printing/tests/test_latex.py::test_MatrixElement_printing sympy/printing/tests/test_latex.py::test_MatrixSymbol_printing sympy/printing/tests/test_latex.py::test_latex_MatrixSlice -xvs
+- [other/reproduction] python3 << 'EOF'
+from sympy import symbols, MatrixSymbol, latex, Dummy
+
+print("Test 1: Original bug report - indexed matrix product")
+i, j, k = symbols("i j k")
+M = MatrixSymbol("M", k, k)
+N = MatrixSymbol("N", k, k)
+result = latex((M*N)[i, j])
+print(f"LaTeX: {result}")
+assert "_i_" not in result, "Double subscript found!"
+assert "i_{1}" in result or "i_{" in result, "Proper subscript formatting not found"
+print("✓ PASSED\n")
+
+print("Test 2: Simple MatrixElement with Dummy index")
+dummy = Dummy(
+  [... truncated ...]
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ERROR: not found: ./swebench_9_15/testbed/sympy/printing/tests/test_latex.py::test_MatrixElement
+- E   ValueError: Name node can't be used with 'False' constant
+- FAILED sympy/printing/tests/test_latex.py::test_issue_8470 - ValueError: Name...
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #5]
+  ./swebench_9_15/testbed/sympy/printing/latex.py
+- [Grep Result after action #7]
+  Found 22 files
+  sympy/printing/tests/test_tensorflow.py
+  sympy/printing/tests/test_str.py
+  sympy/printing/tests/test_rcode.py
+  sympy/printing/tests/test_octave.py
+  sympy/printing/tests/test_latex.py
+  sympy/printing/tests/test_julia.py
+  sympy/printing/tests/test_jscode.py
+  sympy/printing/tests/test_glsl.py
+  sympy/printing/tests/test_fcode.py
+  sympy/printing/tests/test_ccode.py
+  sympy/printing/str.py
+  sympy/printing/rust.py
+  sympy/printing/rcode.py
+  sympy/printing/pretty/tests/test_pretty.py
+  sympy/printing/pretty/pretty.py
+  sympy/printing/octave.py
+  sympy/printing/latex.py
+  sympy/printing/julia.py
+  sympy/printing/jscode.py
+  sympy/printing/glsl.py
+  sympy/printing/fcode.py
+  sympy/printing/ccode.py
+- [Grep Result after action #9]
+  615:    def _print_Indexed(self, expr):
+  621:    def _print_IndexedBase(self, expr):
+- [Read Result after action #11]
+     610→            outstr = outstr[3:]
+     611→        else:
+     612→            outstr = outstr[1:]
+     613→        return outstr
+     614→
+     615→    def _print_Indexed(self, expr):
+     616→        tex_base = self._print(expr.base)
+     617→        tex = '{'+tex_base+'}'+'_{%s}' % ','.join(
+     618→            map(self._print, expr.indices))
+     619→        return tex
+     620→
+     621→    def _print_IndexedBase(self, expr):
+     622→        return self._print(expr.label)
+     623→
+     624→    def _print_Derivative(self, expr):
+     625→        if requires_partial(expr):
+     626→            diff_symbol = r'\partial'
+     627→        else:
+     628→            diff_symbol = r'd'
+     629→
+     630→        tex = ""
+     631→        dim = 0
+     632→        for x, num in reversed(expr.variable_count):
+     633→            dim += num
+     634→            if num == 1:
+     635→                tex += r"%s %s" % (diff_symbol, self._print(x))
+     636→            else:
+     637→                tex += r"%s %s^{%s}" % (diff_symbol, self._print(x), num)
+     638→
+     639→        if dim == 1:
+
+- [Grep Result after action #19]
+  1439:    def _print_MatrixElement(self, expr):
+- [Read Result after action #21]
+    1439→    def _print_MatrixElement(self, expr):
+    1440→        return self.parenthesize(expr.parent, PRECEDENCE["Atom"], strict=True) \
+    1441→            + '_{%s, %s}' % (expr.i, expr.j)
+    1442→
+    1443→    def _print_MatrixSlice(self, expr):
+    1444→        def latexslice(x):
+    1445→            x = list(x)
+    1446→            if x[2] == 1:
+    1447→                del x[2]
+    1448→            if x[1] == x[0] + 1:
+
+- [Test Output after action #28]
+  Exit code 4
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ERROR: not found: ./swebench_9_15/testbed/sympy/printing/tests/test_latex.py::test_MatrixElement
+  (no match in any of [<Module test_latex.py>])
+
+
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 0 items
+
+  =============================== warnings summary ===============================
+  sympy/physics/quantum/matrixu
+  [... truncated ...]
+- [Grep Result after action #30]
+  959:def test_latex_Matrix():
+  978:def test_latex_matrix_with_functions():
+  1239:def test_latex_MatrixSlice():
+  1424:def test_ZeroMatrix():
+  1729:def test_MatrixElement_printing():
+  1742:def test_MatrixSymbol_printing():
+- [Test Output after action #32]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 1 item
+
+  sympy/printing/tests/test_latex.py::test_MatrixElement_printing PASSED
+
+  =============================== warnings summary ===============================
+  sympy/physics/quantum/matrixutils.py:46
+    ./swebench_9_15/testbed/sympy/physics/quantum/matrixutils.py:46: DeprecationWarning: Please use `spmatrix` from the `scipy.sparse` namespace, the `scipy.sparse.base` namespace is deprecated.
+      scipy_sparse_matrix = sparse.base.spmatrix
+
+  -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+  ========================= 1 passed, 1 warning in 0.63s =========================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Tracebac
+  [... truncated ...]
+- [Test Output after action #34]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collected 127 items
+
+  sympy/printing/tests/test_latex.py .........x........................... [ 29%]
+  ................................................................x......F [ 85%]
+
+
+  =================================== FAILURES ===================================
+  _______________________________ test_issue_8470 ________________________________
+  sympy/printing/tests/test_latex.py:1670: in test_issue_8470
+      e = parse_expr("-B*A", evaluate=False)
+  sympy/parsing/sympy_parser.py:964: in parse_expr
+      code = compile(evaluateFalse(code), '<string>', 'eval')
+  E   ValueError: Name node can't be used with 'False' constant
+  =============================== warnings summary ===============================
+  sympy/physics/quantum/matrixutils.py:46
+    ./swebench_9_15/testbed/sympy/physics/quantum/matrixutils.py:46: DeprecationWarning: Please use `spmatrix` from the `scipy.sparse` namespace, the `scipy.sparse.base`
+  [... truncated ...]
+- [Read Result after action #36]
+    1668→def test_issue_8470():
+    1669→    from sympy.parsing.sympy_parser import parse_expr
+    1670→    e = parse_expr("-B*A", evaluate=False)
+    1671→    assert latex(e) == r"A \left(- B\right)"
+    1672→
+    1673→
+    1674→def test_issue_7117():
+    1675→    # See also issue #5031 (hence the evaluate=False in these).
+    1676→    e = Eq(x + 1, 2*x)
+    1677→    q = Mul(2, e, evaluate=False)
+
+- [Test Output after action #38]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 4 items
+
+  sympy/printing/tests/test_latex.py::test_latex_Matrix PASSED
+  sympy/printing/tests/test_latex.py::test_MatrixElement_printing PASSED
+  sympy/printing/tests/test_latex.py::test_MatrixSymbol_printing PASSED
+  sympy/printing/tests/test_latex.py::test_latex_MatrixSlice PASSED
+
+  =============================== warnings summary ===============================
+  sympy/physics/quantum/matrixutils.py:46
+    ./swebench_9_15/testbed/sympy/physics/quantum/matrixutils.py:46: DeprecationWarning: Please use `spmatrix` from the `scipy.sparse` namespace, the `scipy.sparse.base` namespace is deprecated.
+      scipy_sparse_matrix = sparse.base.spmatrix
+
+  -- Docs: https://docs.pytest.org/en/stable/how-to/capture-
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/printing/latex.py
+  Tool: Edit action #25
+  old_text_sha256: b8a0aa3b0684941a0f3b6f689b7edb78932a0ef9f1a0bb3c44d9d53bf51b5f89
+  new_text_sha256: ecee91e8aff114b168f2bc7652b49ddf708ab8c4cd8b7a95873d1e271e2af20f
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

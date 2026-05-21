@@ -1,0 +1,226 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 1816f8b9-180e-43b5-b035-be7f416d7d4f
+- repo: sympy/sympy
+- instance_id: sympy__sympy-20442
+- base_commit: 1abbc0ac3e552cb184317194e5d5c5b9dd8fb640
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+convert_to seems to combine orthogonal units
+Tested in sympy 1.4, not presently in a position to install 1.5+.
+Simple example. Consider `J = kg*m**2/s**2 => J*s = kg*m**2/s`. The convert_to behavior is odd:
+```
+>>>convert_to(joule*second,joule)
+    joule**(7/9)
+```
+I would expect the unchanged original expression back, an expression in terms of base units, or an error. It appears that convert_to can only readily handle conversions where the full unit expression is valid.
+
+Note that the following three related examples give sensible results:
+```
+>>>convert_to(joule*second,joule*second)
+    joule*second
+```
+```
+>>>convert_to(J*s, kg*m**2/s)
+    kg*m**2/s
+```
+```
+>>>convert_to(J*s,mins)
+    J*mins/60
+```
+
+FILES INSPECTED
+---------------
+- sympy/physics/units/util.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Grep pattern='def convert_to' path='testbed'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction] cd testbed && python3 -c "
+from sympy.physics.units import joule, second, convert_to, kilogram, meter, minute
+
+# Reproduce the bug
+result1 = convert_to(joule*second, joule)
+print('convert_to(joule*second, joule) =', result1)
+
+# These should work correctly
+result2 = convert_to(joule*second, joule*second)
+print('convert_to(joule*second, joule*second) =', result2)
+
+result3 = convert_to(joule*second, kilogram*meter**2/second)
+print('convert_to(joule*second, kg*m**2/s) =', result3)
+
+result4 = convert
+  [... truncated ...]
+- [other/reproduction] cd testbed && python3 << 'EOF'
+from sympy.physics.units import joule, second, UnitSystem
+from sympy.physics.units.util import _get_conversion_matrix_for_expr
+from sympy import Matrix
+
+unit_system = UnitSystem.get_unit_system("SI")
+expr = joule * second
+target_units = [joule]
+
+# Get the conversion matrix
+depmat = _get_conversion_matrix_for_expr(expr, target_units, unit_system)
+print("Conversion matrix result:", depmat)
+print("Type:", type(depmat))
+
+# Let's manually compute what happens
+dimension_
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+import sys
+sys.path.insert(0, './swebench_9_15/testbed')
+
+from sympy.physics.units import joule, second, UnitSystem
+from sympy.physics.units.util import _get_conversion_matrix_for_expr
+from sympy import Matrix
+
+unit_system = UnitSystem.get_unit_system("SI")
+expr = joule * second
+target_units = [joule]
+
+# Get the conversion matrix
+depmat = _get_conversion_matrix_for_expr(expr, target_units, unit_system)
+print("Conversion matrix result:", depmat)
+print("Type:", type(depmat))
+
+# Le
+  [... truncated ...]
+- [other/reproduction] python3 << 'EOF'
+import sys
+sys.path.insert(0, './swebench_9_15/testbed')
+
+from sympy.physics.units import joule, second, convert_to, kilogram, meter, minute
+
+print("Testing the fix:")
+print("="*50)
+
+# Test case 1: The bug - should return the original expression unchanged
+result1 = convert_to(joule*second, joule)
+print('1. convert_to(joule*second, joule) =', result1)
+print('   Expected: joule*second (unchanged)')
+print('   Match:', result1 == joule*second)
+print()
+
+# Test case 2: Should work (sa
+  [... truncated ...]
+- [test] cd testbed && python3 -m pytest sympy/physics/units/tests/test_util.py -xvs 2>&1 | head -100
+- [test] python3 -m pytest ./swebench_9_15/testbed/sympy/physics/units/tests/test_util.py -xvs 2>&1 | head -150
+- [test] python3 ./swebench_9_15/test_issue.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #1]
+  Found 7 files
+  testbed/sympy/testing/runtests.py
+  testbed/sympy/polys/domainmatrix.py
+  testbed/sympy/physics/units/util.py
+  testbed/sympy/physics/units/quantities.py
+  testbed/sympy/physics/quantum/circuitutils.py
+  testbed/sympy/parsing/sym_expr.py
+  testbed/doc/generate_logos.py
+- [Read Result after action #3]
+       1→"""
+       2→Several methods to simplify expressions involving unit objects.
+       3→"""
+       4→
+       5→from sympy import Add, Mul, Pow, Tuple, sympify
+       6→from sympy.core.compatibility import reduce, Iterable, ordered
+       7→from sympy.physics.units.dimensions import Dimension
+       8→from sympy.physics.units.prefixes import Prefix
+       9→from sympy.physics.units.quantities import Quantity
+      10→from sympy.utilities.iterables import sift
+      11→
+      12→
+      13→def _get_conversion_matrix_for_expr(expr, target_units, unit_system):
+      14→    from sympy import Matrix
+      15→
+      16→    dimension_system = unit_system.get_dimension_system()
+      17→
+      18→    expr_dim = Dimension(unit_system.get_dimensional_expr(expr))
+      19→    dim_dependencies = dimension_system.get_dimensional_dependencies(expr_dim, mark_dimensionless=True)
+      20→    target_dims = [Dimension(unit_system.get_dimensional_expr(x)) for x in target_units]
+      21→    canon_dim_units = [i for x in target_dims for i in dimension_system.get_dimensional_dependencies(x, mark_dimensionless=True)]
+      22→    canon_expr_units = {i for i in dim_dependencies}
+      23→
+      24→    if not canon_expr_units.issubset(set(canon_di
+  [... truncated ...]
+- [Test Output after action #14]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 9 items
+
+  sympy/physics/units/tests/test_util.py::test_dim_simplify_add PASSED
+  sympy/physics/units/tests/test_util.py::test_dim_simplify_mul PASSED
+  sympy/physics/units/tests/test_util.py::test_dim_simplify_pow PASSED
+  sympy/physics/units/tests/test_util.py::test_dim_simplify_rec PASSED
+  sympy/physics/units/tests/test_util.py::test_convert_to_quantities PASSED
+  sympy/physics/units/tests/test_util.py::test_convert_to_tuples_of_quantities PASSED
+  sympy/physics/units/tests/test_util.py::test_eval_simplify PASSED
+  sympy/physics/units/tests/test_util.py::test_quantity_simplify PASSED
+  sympy/physics/units/tests/test_util.py::test_check_dimensions PASSED
+
+  ==========================
+  [... truncated ...]
+- [Test Output after action #16]
+  Testing fix for sympy issue #20442
+  ============================================================
+  ✓ convert_to(joule*second, joule) returns original expression
+
+  ✓ convert_to(joule*second, joule*second) works correctly
+  ✓ convert_to(joule*second, kg*m**2/s) works correctly
+  ✓ convert_to(joule*second, minute) works correctly
+  ✓ convert_to(joule, kg*m**2/s**2) works correctly
+
+  ============================================================
+  All tests passed! ✓
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/physics/units/util.py
+  Tool: Edit action #10
+  old_text_sha256: 9b90d2bac353fe710f08bbde14a0ec13279072867f21ad54ea5a0f1375c163ce
+  new_text_sha256: ca77477b016385ec958f16bd01d868276a194916d2de8d290cefea2001092c0c
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

@@ -1,0 +1,600 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 50198d0e-f222-40f4-b43c-6eae5821ebba
+- repo: django/django
+- instance_id: django__django-16400
+- base_commit: 0bd2c0c9015b53c41394a1c0989afbfd94dc2830
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+migrate management command does not respect database parameter when adding Permissions.
+Description
+
+        (last modified by Vasanth)
+
+When invoking migrate with a database parameter, the migration runs successfully. However, there seems to be a DB read request that runs after the migration. This call does not respect the db param and invokes the db router .
+When naming the db as a parameter, all DB calls in the context of the migrate command are expected to use the database specified.
+I came across this as I am currently using a thread-local variable to get the active DB with a custom DB router for a multi-tenant service .
+Minimal example
+Setup the custom middleware and custom DB Router as show below. Then run any DB migration. We see that "read {}" is being printed before the exception message.
+Ideally none of this code must be called as the DB was specified during management command.
+from threading import local
+from django.conf import settings
+local_state = local()
+class InvalidTenantException(Exception):
+    pass
+class TenantSubdomainMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+    def __call__(self, request):
+        ## Get Subdomain
+        host = request.get_host().split(":")[0]
+        local_state.subdomain = (
+            # We assume single level of subdomain : app.service.com
+            # HOST_IP : used to for local dev.
+            host if host in settings.HOST_IP else host.split(".")[0]
+        )
+        response = self.get_response(request)
+        return response
+class TenantDatabaseRouter:
+    def _default_db(self):
+        subdomain = getattr(local_state, "subdomain", None)
+        if subdomain is not None and subdomain in settings.TENANT_MAP:
+            db_name = settings.TENANT_MAP[local_state.subdomain]
+            return db_name
+        else:
+            raise InvalidTenantException()
+    def db_for_read(self, model, **hints):
+        print("read", hints)
+        return self._default_db()
+    def db_for_write(self, model, **hints):
+        print("write", hints)
+        return self._default_db()
+    def allow_relation(self, obj1, obj2, **hints):
+        return None
+    def allow_migrate(self, db, app_label, model_name=None, **hints):
+        return None
+## settings.py
+MIDDLEWARE = [
+    "utils.tenant_db_router.TenantSubdomainMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    ...
+]
+TENANT_MAP = {"localhost":"default", "tenant_1":"default"}
+DATABASE_ROUTERS = ["utils.tenant_db_router.TenantDatabaseRouter"]
+
+FILES INSPECTED
+---------------
+- django/core/management/commands/migrate.py [Read: 1]
+- django/contrib/auth/management/__init__.py [Read: 1]
+- django/contrib/auth/apps.py [Read: 1]
+- django/core/management/sql.py [Read: 2]
+- tests/auth_tests/test_management.py [Read: 1]
+- django/contrib/contenttypes/models.py [Read: 5]
+- tests/multiple_database/routers.py [Read: 1]
+- django/contrib/contenttypes/management/__init__.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Glob glob='**/migrate.py'
+- [2] Grep pattern='def add_permissions'
+- [3] Grep pattern='create_permissions'
+- [5] Glob glob='testbed/**/migrate.py'
+- [7] Grep pattern='create_permissions' path='testbed'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find . -name "migrate.py" -type f 2>/dev/null | head -20
+- [diagnostic] cd testbed && find . -name "*.py" -type f -exec grep -l "create_permissions" {} \;
+- [diagnostic] find testbed -name "*.py" -type f -exec grep -l "create_permissions" {} \;
+- [diagnostic] find . -name "*.py" -type f -exec grep -l "create_permissions" {} \; 2>/dev/null | head -20
+- [diagnostic] find . -name "*.py" -type f -exec grep -l "emit_post_migrate_signal" {} \; 2>/dev/null | head -10
+- [diagnostic] find . -path "*/contenttypes/*.py" -name "*.py" -type f -exec grep -l "get_for_model" {} \;
+- [diagnostic] python -c "
+import os
+import django
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tests.test_sqlite')
+django.setup()
+
+from django.contrib.auth.management import create_permissions
+from django.apps import apps
+
+# Try to call create_permissions with a specific database
+app_config = apps.get_app_config('auth')
+create_permissions(app_config, verbosity=2, using='default')
+" 2>&1 | head -50
+- [diagnostic] grep -r "database.*permission" tests/auth_tests/test_management.py | head -20
+- [diagnostic] find . -name "router.py" -path "*/db/*" -type f
+- [diagnostic] find . -name "*.py" -type f -exec grep -l "def db_for_read" {} \; | head -10
+- [diagnostic] grep -A 30 "class.*Router" tests/multiple_database/routers.py
+- [diagnostic] find . -name "*.py" -path "*/db/models/*" -type f -exec grep -l "def using" {} \;
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ModuleNotFoundError: No module named 'sqlparse'
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #5]
+  ./swebench_9_15/testbed/django/core/management/commands/migrate.py
+- [Read Result after action #8]
+       1→import sys
+       2→import time
+       3→from importlib import import_module
+       4→
+       5→from django.apps import apps
+       6→from django.core.management.base import BaseCommand, CommandError, no_translations
+       7→from django.core.management.sql import emit_post_migrate_signal, emit_pre_migrate_signal
+       8→from django.db import DEFAULT_DB_ALIAS, connections, router
+       9→from django.db.migrations.autodetector import MigrationAutodetector
+      10→from django.db.migrations.executor import MigrationExecutor
+      11→from django.db.migrations.loader import AmbiguityError
+      12→from django.db.migrations.state import ModelState, ProjectState
+      13→from django.utils.module_loading import module_has_submodule
+      14→from django.utils.text import Truncator
+      15→
+      16→
+      17→class Command(BaseCommand):
+      18→    help = (
+      19→        "Updates database schema. Manages both apps with migrations and those without."
+      20→    )
+      21→    requires_system_checks = []
+      22→
+      23→    def add_arguments(self, parser):
+      24→        parser.add_argument(
+      25→            "--skip-checks",
+      26→            action="store_true",
+      27→            help="Skip system checks.",
+
+  [... truncated ...]
+- [Diagnostic Output after action #12]
+  ./tests/auth_tests/test_management.py
+  ./django/contrib/auth/management/__init__.py
+  ./django/contrib/auth/apps.py
+- [Read Result after action #14]
+       1→"""
+       2→Creates permissions for all installed apps that need permissions.
+       3→"""
+       4→import getpass
+       5→import unicodedata
+       6→
+       7→from django.apps import apps as global_apps
+       8→from django.contrib.auth import get_permission_codename
+       9→from django.contrib.contenttypes.management import create_contenttypes
+      10→from django.core import exceptions
+      11→from django.db import DEFAULT_DB_ALIAS, router
+      12→
+      13→
+      14→def _get_all_permissions(opts):
+      15→    """
+      16→    Return (codename, name) for all permissions in the given opts.
+      17→    """
+      18→    return [*_get_builtin_permissions(opts), *opts.permissions]
+      19→
+      20→
+      21→def _get_builtin_permissions(opts):
+      22→    """
+      23→    Return (codename, name) for all autogenerated permissions.
+      24→    By default, this is ('add', 'change', 'delete', 'view')
+      25→    """
+      26→    perms = []
+      27→    for action in opts.default_permissions:
+      28→        perms.append(
+      29→            (
+      30→                get_permission_codename(action, opts),
+      31→                "Can %s %s" % (action, opts.verbose_name_raw),
+      32→            )
+      33→        )
+      34→    r
+  [... truncated ...]
+- [Read Result after action #16]
+       1→from django.apps import AppConfig
+       2→from django.core import checks
+       3→from django.db.models.query_utils import DeferredAttribute
+       4→from django.db.models.signals import post_migrate
+       5→from django.utils.translation import gettext_lazy as _
+       6→
+       7→from . import get_user_model
+       8→from .checks import check_models_permissions, check_user_model
+       9→from .management import create_permissions
+      10→from .signals import user_logged_in
+      11→
+      12→
+      13→class AuthConfig(AppConfig):
+      14→    default_auto_field = "django.db.models.AutoField"
+      15→    name = "django.contrib.auth"
+      16→    verbose_name = _("Authentication and Authorization")
+      17→
+      18→    def ready(self):
+      19→        post_migrate.connect(
+      20→            create_permissions,
+      21→            dispatch_uid="django.contrib.auth.management.create_permissions",
+      22→        )
+      23→        last_login_field = getattr(get_user_model(), "last_login", None)
+      24→        # Register the handler only if UserModel.last_login is a field.
+      25→        if isinstance(last_login_field, DeferredAttribute):
+      26→            from .models import update_last_login
+      27→
+      28→
+  [... truncated ...]
+- [Diagnostic Output after action #18]
+  ./django/core/management/commands/flush.py
+  ./django/core/management/commands/migrate.py
+  ./django/core/management/sql.py
+  ./django/test/testcases.py
+- [Read Result after action #20]
+       1→import sys
+       2→
+       3→from django.apps import apps
+       4→from django.db import models
+       5→
+       6→
+       7→def sql_flush(style, connection, reset_sequences=True, allow_cascade=False):
+       8→    """
+       9→    Return a list of the SQL statements used to flush the database.
+      10→    """
+      11→    tables = connection.introspection.django_table_names(
+      12→        only_existing=True, include_views=False
+      13→    )
+      14→    return connection.ops.sql_flush(
+      15→        style,
+      16→        tables,
+      17→        reset_sequences=reset_sequences,
+      18→        allow_cascade=allow_cascade,
+      19→    )
+      20→
+      21→
+      22→def emit_pre_migrate_signal(verbosity, interactive, db, **kwargs):
+      23→    # Emit the pre_migrate signal for every application.
+      24→    for app_config in apps.get_app_configs():
+      25→        if app_config.models_module is None:
+      26→            continue
+      27→        if verbosity >= 2:
+      28→            stdout = kwargs.get("stdout", sys.stdout)
+      29→            stdout.write(
+      30→                "Running pre-migrate handlers for application %s" % app_config.label
+      31→            )
+      32→        models.signals.pre_migrate.
+  [... truncated ...]
+- [Read Result after action #22]
+       1→import builtins
+       2→import getpass
+       3→import os
+       4→import sys
+       5→from datetime import date
+       6→from io import StringIO
+       7→from unittest import mock
+       8→
+       9→from django.apps import apps
+      10→from django.contrib.auth import get_permission_codename, management
+      11→from django.contrib.auth.management import create_permissions, get_default_username
+      12→from django.contrib.auth.management.commands import changepassword, createsuperuser
+      13→from django.contrib.auth.models import Group, Permission, User
+      14→from django.contrib.contenttypes.models import ContentType
+      15→from django.core.management import call_command
+      16→from django.core.management.base import CommandError
+      17→from django.db import migrations
+      18→from django.test import TestCase, override_settings
+      19→from django.utils.translation import gettext_lazy as _
+      20→
+      21→from .models import (
+      22→    CustomUser,
+      23→    CustomUserNonUniqueUsername,
+      24→    CustomUserWithFK,
+      25→    CustomUserWithM2M,
+      26→    CustomUserWithUniqueConstraint,
+      27→    Email,
+      28→    Organization,
+      29→    UserProxy,
+      30→)
+      31→
+      32→MOCK_INPUT_KEY_TO_P
+  [... truncated ...]
+- [Diagnostic Output after action #24]
+  ./django/contrib/contenttypes/models.py
+  ./django/contrib/contenttypes/fields.py
+  ./django/contrib/contenttypes/forms.py
+- [Read Result after action #26]
+       1→from collections import defaultdict
+       2→
+       3→from django.apps import apps
+       4→from django.db import models
+       5→from django.db.models import Q
+       6→from django.utils.translation import gettext_lazy as _
+       7→
+       8→
+       9→class ContentTypeManager(models.Manager):
+      10→    use_in_migrations = True
+      11→
+      12→    def __init__(self, *args, **kwargs):
+      13→        super().__init__(*args, **kwargs)
+      14→        # Cache shared by all the get_for_* methods to speed up
+      15→        # ContentType retrieval.
+      16→        self._cache = {}
+      17→
+      18→    def get_by_natural_key(self, app_label, model):
+      19→        try:
+      20→            ct = self._cache[self.db][(app_label, model)]
+      21→        except KeyError:
+      22→            ct = self.get(app_label=app_label, model=model)
+      23→            self._add_to_cache(self.db, ct)
+      24→        return ct
+      25→
+      26→    def _get_opts(self, model, for_concrete_model):
+      27→        if for_concrete_model:
+      28→            model = model._meta.concrete_model
+      29→        return model._meta
+      30→
+      31→    def _get_from_cache(self, opts):
+      32→        key = (opts.app_label, opts.model_name)
+
+  [... truncated ...]
+- [Diagnostic Output after action #28]
+  Traceback (most recent call last):
+    File "<string>", line 3, in <module>
+    File "django/__init__.py", line 1, in <module>
+      from django.utils.version import get_version
+    File "django/utils/version.py", line 7, in <module>
+      from django.utils.regex_helper import _lazy_re_compile
+    File "django/utils/regex_helper.py", line 10, in <module>
+      from django.utils.functional import SimpleLazyObject
+    File "django/utils/functional.py", line 265
+      if (_wrapped := self._wrapped) is empty:
+                   ^
+  SyntaxError: invalid syntax
+- [Diagnostic Output after action #32]
+  ./tests/auth_tests/test_admin_multidb.py
+  ./tests/cache/tests.py
+  ./tests/contenttypes_tests/test_models.py
+  ./tests/admin_views/test_multidb.py
+  ./tests/multiple_database/tests.py
+  ./tests/multiple_database/routers.py
+  ./tests/gis_tests/layermap/tests.py
+- [Read Result after action #34]
+       1→from django.db import DEFAULT_DB_ALIAS
+       2→
+       3→
+       4→class TestRouter:
+       5→    """
+       6→    Vaguely behave like primary/replica, but the databases aren't assumed to
+       7→    propagate changes.
+       8→    """
+       9→
+      10→    def db_for_read(self, model, instance=None, **hints):
+      11→        if instance:
+      12→            return instance._state.db or "other"
+      13→        return "other"
+      14→
+      15→    def db_for_write(self, model, **hints):
+      16→        return DEFAULT_DB_ALIAS
+      17→
+      18→    def allow_relation(self, obj1, obj2, **hints):
+      19→        return obj1._state.db in ("default", "other") and obj2._state.db in (
+      20→            "default",
+      21→            "other",
+      22→        )
+      23→
+      24→    def allow_migrate(self, db, app_label, **hints):
+      25→        return True
+      26→
+      27→
+      28→class AuthRouter:
+      29→    """
+      30→    Control all database operations on models in the contrib.auth application.
+      31→    """
+      32→
+      33→    def db_for_read(self, model, **hints):
+      34→        "Point all read operations on auth models to 'default'"
+      35→        if model._meta.app_label == "auth":
+      36→            # We us
+  [... truncated ...]
+- [Diagnostic Output after action #36]
+  class TestRouter:
+      """
+      Vaguely behave like primary/replica, but the databases aren't assumed to
+      propagate changes.
+      """
+
+      def db_for_read(self, model, instance=None, **hints):
+          if instance:
+              return instance._state.db or "other"
+          return "other"
+
+      def db_for_write(self, model, **hints):
+          return DEFAULT_DB_ALIAS
+
+      def allow_relation(self, obj1, obj2, **hints):
+          return obj1._state.db in ("default", "other") and obj2._state.db in (
+              "default",
+              "other",
+          )
+
+      def allow_migrate(self, db, app_label, **hints):
+          return True
+
+
+  class AuthRouter:
+      """
+      Control all database operations on models in the contrib.auth application.
+      """
+
+      def db_for_read(self, model, **hints):
+          "Point all read operations on auth models to 'default'"
+          if model._meta.app_label == "auth":
+              # We use default here to ensure we can tell the difference
+              # between a read request and a write request for Auth objects
+              return "default"
+          return None
+
+      def db_for_write(self, model, **hints):
+          "Point all operations on auth models to 'other'"
+          if model
+  [... truncated ...]
+- [Diagnostic Output after action #38]
+  ./django/db/models/query.py
+- [Diagnostic Output after action #40]
+                  raise ValueError("only() is not supported with FilteredRelation.")
+          clone = self._chain()
+          clone.query.add_immediate_loading(fields)
+          return clone
+
+      def using(self, alias):
+          """Select which database this QuerySet should execute against."""
+          clone = self._chain()
+          clone._db = alias
+          return clone
+
+      ###################################
+      # PUBLIC INTROSPECTION ATTRIBUTES #
+      ###################################
+
+      @property
+      def ordered(self):
+          """
+          Return True if the QuerySet is ordered -- i.e. has an order_by()
+          clause or a default ordering on the model (or is empty).
+          """
+  --
+      @property
+      def db(self):
+          """Return the database used if this query is executed now."""
+          return self._db or router.db_for_read(self.model, **self._hints)
+
+      def using(self, alias):
+          """Select the database this RawQuerySet should execute against."""
+          return RawQuerySet(
+              self.raw_query,
+              model=self.model,
+              query=self.query.chain(using=alias),
+              params=self.params,
+              translations=self.translations,
+              using=alia
+  [... truncated ...]
+- [Diagnostic Output after action #42]
+  ./django/db/models/manager.py
+- [Diagnostic Output after action #44]
+          class-level copy.
+          """
+          self.creation_counter = BaseManager.creation_counter
+          BaseManager.creation_counter += 1
+
+      def db_manager(self, using=None, hints=None):
+          obj = copy.copy(self)
+          obj._db = using or self._db
+          obj._hints = hints or self._hints
+          return obj
+
+      @property
+      def db(self):
+          return self._db or router.db_for_read(self.model, **self._hints)
+
+      #######################
+      # PROXIES TO QUERYSET #
+      #######################
+
+      def get_queryset(self):
+          """
+- [Diagnostic Output after action #48]
+      # PROXIES TO QUERYSET #
+      #######################
+
+      def get_queryset(self):
+          """
+          Return a new QuerySet object. Subclasses can override this method to
+          customize the behavior of the Manager.
+          """
+          return self._queryset_class(model=self.model, using=self._db, hints=self._hints)
+
+      def all(self):
+          # We can't proxy this method through the `QuerySet` like we do for the
+          # rest of the `QuerySet` methods. This is because `QuerySet.all()`
+          # works by creating a "copy" of the current queryset and in making said
+          # copy, all the cached `prefetch_related` lookups are lost. See the
+          # implementation of `RelatedManager.get_queryset()` for a better
+          # understanding of how this comes into play.
+          return self.get_queryset()
+
+      def __eq__(self, other):
+          return (
+              isinstance(other, self.__class__)
+              and self._constructor_args == other._constructor_args
+          )
+
+      def __hash__(self):
+          return id(self)
+
+
+  class Manager(BaseManager.from_queryset(QuerySet)):
+      pass
+- [Diagnostic Output after action #50]
+              batch_size=batch_size,
+          )
+
+      abulk_update.alters_data = True
+
+      def get_or_create(self, defaults=None, **kwargs):
+          """
+          Look up an object with the given kwargs, creating one if necessary.
+          Return a tuple of (object, created), where created is a boolean
+          specifying whether an object was created.
+          """
+          # The get() needs to be targeted at the write database in order
+          # to avoid potential transaction consistency problems.
+          self._for_write = True
+          try:
+              return self.get(**kwargs), False
+          except self.model.DoesNotExist:
+              params = self._extract_model_params(defaults, **kwargs)
+              # Try to create an object using passed params.
+              try:
+                  with transaction.atomic(using=self.db):
+                      params = dict(resolve_callables(params))
+                      return self.create(**params), True
+              except IntegrityError:
+                  try:
+                      return self.get(**kwargs), False
+                  except self.model.DoesNotExist:
+                      pass
+                  raise
+
+      async def aget_or_create(self, defaults=None, **kwar
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/contrib/contenttypes/models.py
+  Tool: Edit action #84
+  old_text_sha256: f94a73b0d759c21f7a5d2655b321aab1ba946d58d1b0747a7eb8f6b78daf7dcf
+  new_text_sha256: d295069b58213c0670ddc47363e64f108a2afee3516e677f7d341265c4b3af4c
+- django/contrib/contenttypes/models.py
+  Tool: Edit action #85
+  old_text_sha256: d63a70275bfff554605f02f8f94cab1b0145385a0b7ec551197cb2ee9642f152
+  new_text_sha256: fc4c23a3602c2aef09ebd10b2d83a5876006b801bd105229beec9e5dd5436363
+- django/contrib/contenttypes/models.py
+  Tool: Edit action #88
+  old_text_sha256: 5dd90ae4a8d94999876e59b0bdb3df927766cdfbfdeef6b3129b0be78c951846
+  new_text_sha256: 4fd7229ae67591ed983ae7e528c6e0039303b50cc947018cdde7be58d7c35e94
+- django/contrib/contenttypes/models.py
+  Tool: Edit action #91
+  old_text_sha256: 3008b38269ff4ff67e8d3240a9d0381a5bb725cdfed10b02f9babba748cc1be6
+  new_text_sha256: f1e78594dd7cd2771c0193b368633193ad9d827494dd6a73a73cc79f0017fda9
+- django/contrib/contenttypes/models.py
+  Tool: Edit action #96
+  old_text_sha256: 7e9169ab36fa0e66d141bf7fad2ebf4bb6971e89873d920a7a660b9f39f0b166
+  new_text_sha256: 1952be0b4c262c6cde5fde7c630da9215bd0f780e387e279d543014de62ed19b
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

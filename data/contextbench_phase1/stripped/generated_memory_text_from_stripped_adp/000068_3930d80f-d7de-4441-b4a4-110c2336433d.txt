@@ -1,0 +1,633 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 3930d80f-d7de-4441-b4a4-110c2336433d
+- repo: sympy/sympy
+- instance_id: sympy__sympy-15346
+- base_commit: 9ef28fba5b4d6d0168237c9c005a550e6dc27d81
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+can't simplify sin/cos with Rational?
+latest cloned sympy, python 3 on windows
+firstly, cos, sin with symbols can be simplified; rational number can be simplified
+```python
+from sympy import *
+
+x, y = symbols('x, y', real=True)
+r = sin(x)*sin(y) + cos(x)*cos(y)
+print(r)
+print(r.simplify())
+print()
+
+r = Rational(1, 50) - Rational(1, 25)
+print(r)
+print(r.simplify())
+print()
+```
+says
+```cmd
+sin(x)*sin(y) + cos(x)*cos(y)
+cos(x - y)
+
+-1/50
+-1/50
+```
+
+but
+```python
+t1 = Matrix([sin(Rational(1, 50)), cos(Rational(1, 50)), 0])
+t2 = Matrix([sin(Rational(1, 25)), cos(Rational(1, 25)), 0])
+r = t1.dot(t2)
+print(r)
+print(r.simplify())
+print()
+
+r = sin(Rational(1, 50))*sin(Rational(1, 25)) + cos(Rational(1, 50))*cos(Rational(1, 25))
+print(r)
+print(r.simplify())
+print()
+
+print(acos(r))
+print(acos(r).simplify())
+print()
+```
+says
+```cmd
+sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25)
+sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25)
+
+sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25)
+sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25)
+
+acos(sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25))
+acos(sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25))
+```
+
+FILES INSPECTED
+---------------
+- sympy/simplify [Grep: 1]
+- sympy/simplify/trigsimp.py [Grep: 5, Read: 2]
+- sympy/simplify/fu.py [Grep: 5, Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [11] Grep pattern='cos.*sin.*TR' path='sympy/simplify'
+- [16] Grep pattern='TR10|TR11|TR12' path='sympy/simplify/trigsimp.py'
+- [18] Grep pattern='def TR10i' path='sympy/simplify/fu.py'
+- [22] Grep pattern='def trig_split' path='sympy/simplify/fu.py'
+- [31] Grep pattern='def trigsimp' path='sympy/simplify/trigsimp.py'
+- [35] Grep pattern='def futrig' path='sympy/simplify/trigsimp.py'
+- [41] Grep pattern='from.*import.*greedy' path='sympy/simplify/trigsimp.py'
+- [45] Grep pattern='^def L\\(' path='sympy/simplify/fu.py'
+- [47] Grep pattern='def _eapply' path='sympy/simplify/trigsimp.py'
+- [49] Grep pattern='def process_common_addends' path='sympy/simplify/fu.py'
+- [61] Grep pattern='def TRmorrie' path='sympy/simplify/fu.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [test] cd testbed && python ../test_bug.py
+- [other/reproduction] python --version
+- [other/reproduction] python3 --version
+- [test] cd testbed && python3 ../test_bug.py
+- [diagnostic] ls testbed/sympy/simplify/
+- [diagnostic] find testbed -type d -name "simplify" | head -10
+- [diagnostic] ls sympy/simplify/
+- [other/reproduction] cd testbed && python3 ../debug_trig_split.py
+- [other/reproduction] python3 ../debug_trig_split.py
+- [other/reproduction] python3 ../debug_TR10i.py
+- [other/reproduction] python3 ../debug_has_trig.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- Traceback (most recent call last):
+- ImportError: cannot import name 'greedy' from 'sympy.strategies' (./swebench_9_15/testbed/sympy/strategies/__init__.py)
+- ImportError: cannot import name 'fu' from 'simplify' (unknown location)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Test Output after action #3]
+  Exit code 1
+    File "../test_bug.py", line 6
+      print(f"Expression: {r}")
+                             ^
+  SyntaxError: invalid syntax
+- [Test Output after action #9]
+  Test 1: Symbolic simplification (works)
+  Expression: sin(x)*sin(y) + cos(x)*cos(y)
+  Simplified: cos(x - y)
+
+  Test 2: Rational simplification (works)
+  Expression: -1/50
+  Simplified: -1/50
+
+  Test 3: Trig with Rational (doesn't work)
+  Expression: sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25)
+  Simplified: sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25)
+  Expected: cos(-1/50) = cos(-1/50)
+
+  Test 4: Matrix dot product (doesn't work)
+  Expression: sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25)
+  Simplified: sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25)
+
+  Test 5: acos wrapper (doesn't work)
+  acos(sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25))
+  Simplified: acos(sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25))
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/solvers/diophantine.py:3188: SyntaxWarning: "is" with a literal. Did you mean "=="?
+
+  [... truncated ...]
+- [Diagnostic Output after action #14]
+  __init__.py
+  __pycache__
+  combsimp.py
+  cse_main.py
+  cse_opts.py
+  epathtools.py
+  fu.py
+  gammasimp.py
+  hyperexpand.py
+  hyperexpand_doc.py
+  powsimp.py
+  radsimp.py
+  ratsimp.py
+  simplify.py
+  sqrtdenest.py
+  tests
+  traversaltools.py
+  trigsimp.py
+- [Grep Result after action #16]
+  938:    from sympy.simplify.fu import TR10i
+  1005:                expr = TR10i(expr)
+  1113:        TR1, TR2, TR3, TR2i, TR10, L, TR10i,
+  1114:        TR8, TR6, TR15, TR16, TR111, TR5, TRmorrie, TR11, TR14, TR22,
+  1115:        TR12)
+  1133:        TR12,  # expand tan of sum
+  1141:        TR10,  # sin-cos of sums -> sin-cos prod
+  1142:        TR11, TR6, # reduce double angles and rewrite cos pows
+  1147:        TR10i,  # sin-cos products > sin-cos of sums
+  1158:        TR111,  # tan, sin, cos to neg power -> cot, csc, sec
+  1164:            factor_terms, TR12(x), trigs)],  # expand tan of sum
+- [Grep Result after action #18]
+  810:def TR10i(rv):
+  811-    """Sum of products to function of sum.
+  812-
+  813-    Examples
+  814-    ========
+  815-
+  816-    >>> from sympy.simplify.fu import TR10i
+  817-    >>> from sympy import cos, sin, pi, Add, Mul, sqrt, Symbol
+  818-    >>> from sympy.abc import x, y
+  819-
+  820-    >>> TR10i(cos(1)*cos(3) + sin(1)*sin(3))
+  821-    cos(2)
+  822-    >>> TR10i(cos(1)*sin(3) + sin(1)*cos(3) + cos(3))
+  823-    cos(3) + sin(4)
+  824-    >>> TR10i(sqrt(2)*cos(x)*x + sqrt(6)*sin(x)*x)
+  825-    2*sqrt(2)*x*sin(x + pi/6)
+  826-
+  827-    """
+  828-    global _ROOT2, _ROOT3, _invROOT3
+  829-    if _ROOT2 is None:
+  830-        _roots()
+  831-
+  832-    def f(rv):
+  833-        if not rv.is_Add:
+  834-            return rv
+  835-
+  836-        def do(rv, first=True):
+  837-            # args which can be expressed as A*(cos(a)*cos(b)+/-sin(a)*sin(b))
+  838-            # or B*(cos(a)*sin(b)+/-cos(b)*sin(a)) can be combined into
+  839-            # A*f(a+/-b) where f is either sin or cos.
+  840-            #
+- [Read Result after action #20]
+     810→def TR10i(rv):
+     811→    """Sum of products to function of sum.
+     812→
+     813→    Examples
+     814→    ========
+     815→
+     816→    >>> from sympy.simplify.fu import TR10i
+     817→    >>> from sympy import cos, sin, pi, Add, Mul, sqrt, Symbol
+     818→    >>> from sympy.abc import x, y
+     819→
+     820→    >>> TR10i(cos(1)*cos(3) + sin(1)*sin(3))
+     821→    cos(2)
+     822→    >>> TR10i(cos(1)*sin(3) + sin(1)*cos(3) + cos(3))
+     823→    cos(3) + sin(4)
+     824→    >>> TR10i(sqrt(2)*cos(x)*x + sqrt(6)*sin(x)*x)
+     825→    2*sqrt(2)*x*sin(x + pi/6)
+     826→
+     827→    """
+     828→    global _ROOT2, _ROOT3, _invROOT3
+     829→    if _ROOT2 is None:
+     830→        _roots()
+     831→
+     832→    def f(rv):
+     833→        if not rv.is_Add:
+     834→            return rv
+     835→
+     836→        def do(rv, first=True):
+     837→            # args which can be expressed as A*(cos(a)*cos(b)+/-sin(a)*sin(b))
+     838→            # or B*(cos(a)*sin(b)+/-cos(b)*sin(a)) can be combined into
+     839→            # A*f(a+/-b) where f is either sin or cos.
+     840→            #
+     841→            # If there are more than two args, the pairs which "work" will have
+     842→            # a gcd extractable and the remain
+  [... truncated ...]
+- [Grep Result after action #22]
+  1832:def trig_split(a, b, two=False):
+  1833-    """Return the gcd, s1, s2, a1, a2, bool where
+  1834-
+  1835-    If two is False (default) then::
+  1836-        a + b = gcd*(s1*f(a1) + s2*f(a2)) where f = cos if bool else sin
+  1837-    else:
+  1838-        if bool, a + b was +/- cos(a1)*cos(a2) +/- sin(a1)*sin(a2) and equals
+  1839-            n1*gcd*cos(a - b) if n1 == n2 else
+  1840-            n1*gcd*cos(a + b)
+  1841-        else a + b was +/- cos(a1)*sin(a2) +/- sin(a1)*cos(a2) and equals
+  1842-            n1*gcd*sin(a + b) if n1 = n2 else
+  1843-            n1*gcd*sin(b - a)
+  1844-
+  1845-    Examples
+  1846-    ========
+  1847-
+  1848-    >>> from sympy.simplify.fu import trig_split
+  1849-    >>> from sympy.abc import x, y, z
+  1850-    >>> from sympy import cos, sin, sqrt
+  1851-
+  1852-    >>> trig_split(cos(x), cos(y))
+  1853-    (1, 1, 1, x, y, True)
+  1854-    >>> trig_split(2*cos(x), -2*cos(y))
+  1855-    (2, 1, -1, x, y, True)
+  1856-    >>> trig_split(cos(x)*sin(y), cos(y)*sin(y))
+  1857-    (sin(y), 1, 1, x, y, True)
+  1858-
+  1859-    >>> trig_split(cos(x), -sqrt(3)*sin(x), two=True)
+  1860-    (2, 1, -1, x, pi/6, False)
+  1861-    >>> trig_split(cos(x), sin(x), two=True)
+  1862-    (sqrt(2), 1, 1, x, pi/4, False)
+  1863
+  [... truncated ...]
+- [Read Result after action #24]
+    1900→        ``a = (r or 1)*(c or 1)*(s or 1)``.
+    1901→
+    1902→        Three arguments are returned (radical, c-factor, s-factor) as
+    1903→        long as the conditions set by ``two`` are met; otherwise None is
+    1904→        returned. If ``two`` is True there will be one or two non-None
+    1905→        values in the tuple: c and s or c and r or s and r or s or c with c
+    1906→        being a cosine function (if possible) else a sine, and s being a sine
+    1907→        function (if possible) else oosine. If ``two`` is False then there
+    1908→        will only be a c or s term in the tuple.
+    1909→
+    1910→        ``two`` also require that either two cos and/or sin be present (with
+    1911→        the condition that if the functions are the same the arguments are
+    1912→        different or vice versa) or that a single cosine or a single sine
+    1913→        be present with an optional radical.
+    1914→
+    1915→        If the above conditions dictated by ``two`` are not met then None
+    1916→        is returned.
+    1917→        """
+    1918→        c = s = None
+    1919→        co = S.One
+    1920→        if a.is_Mul:
+    1921→            co, a = a.as_coeff_Mul()
+    1922→            if len(a.arg
+  [... truncated ...]
+- [Grep Result after action #31]
+  28:def trigsimp_groebner(expr, hints=[], quick=False, order="grlex",
+  29-                      polynomial=False):
+  30-    """
+  31-    Simplify trigonometric expressions using a groebner basis algorithm.
+  32-
+  33-    This routine takes a fraction involving trigonometric or hyperbolic
+  34-    expressions, and tries to simplify it. The primary metric is the
+  35-    total degree. Some attempts are made to choose the simplest possible
+  36-    expression of the minimal degree, but this is non-rigorous, and also
+  37-    very slow (see the ``quick=True`` option).
+  38-
+  39-    If ``polynomial`` is set to True, instead of simplifying numerator and
+  40-    denominator together, this function just brings numerator and denominator
+  41-    into a canonical form. This is much faster, but has potentially worse
+  42-    results. However, if the input is a polynomial, then the result is
+  43-    guaranteed to be an equivalent polynomial of minimal degree.
+  44-
+  45-    The most important option is hints. Its entries can be any of the
+  46-    following:
+  47-
+  48-    - a natural number
+  49-    - a function
+  50-    - an iterable of the form (func, var1, var2, ...)
+  51-    - anything else, interpreted as a generator
+  52-
+  53-    A
+  [... truncated ...]
+- [Read Result after action #33]
+     428→def trigsimp(expr, **opts):
+     429→    """
+     430→    reduces expression by using known trig identities
+     431→
+     432→    Notes
+     433→    =====
+     434→
+     435→    method:
+     436→    - Determine the method to use. Valid choices are 'matching' (default),
+     437→    'groebner', 'combined', and 'fu'. If 'matching', simplify the
+     438→    expression recursively by targeting common patterns. If 'groebner', apply
+     439→    an experimental groebner basis algorithm. In this case further options
+     440→    are forwarded to ``trigsimp_groebner``, please refer to its docstring.
+     441→    If 'combined', first run the groebner basis algorithm with small
+     442→    default parameters, then run the 'matching' algorithm. 'fu' runs the
+     443→    collection of trigonometric transformations described by Fu, et al.
+     444→    (see the `fu` docstring).
+     445→
+     446→
+     447→    Examples
+     448→    ========
+     449→
+     450→    >>> from sympy import trigsimp, sin, cos, log
+     451→    >>> from sympy.abc import x, y
+     452→    >>> e = 2*sin(x)**2 + 2*cos(x)**2
+     453→    >>> trigsimp(e)
+     454→    2
+     455→
+     456→    Simplification occurs wherever trigonometric functions are located.
+     457→
+
+  [... truncated ...]
+- [Grep Result after action #35]
+  1066:def futrig(e, **kwargs):
+  1067-    """Return simplified ``e`` using Fu-like transformations.
+  1068-    This is not the "Fu" algorithm. This is called by default
+  1069-    from ``trigsimp``. By default, hyperbolics subexpressions
+  1070-    will be simplified, but this can be disabled by setting
+  1071-    ``hyper=False``.
+  1072-
+  1073-    Examples
+  1074-    ========
+  1075-
+  1076-    >>> from sympy import trigsimp, tan, sinh, tanh
+  1077-    >>> from sympy.simplify.trigsimp import futrig
+  1078-    >>> from sympy.abc import x
+  1079-    >>> trigsimp(1/tan(x)**2)
+  1080-    tan(x)**(-2)
+  1081-
+  1082-    >>> futrig(sinh(x)/tanh(x))
+  1083-    cosh(x)
+  1084-
+  1085-    """
+  1086-    from sympy.simplify.fu import hyper_as_trig
+  1087-    from sympy.simplify.simplify import bottom_up
+  1088-
+  1089-    e = sympify(e)
+  1090-
+  1091-    if not isinstance(e, Basic):
+  1092-        return e
+  1093-
+  1094-    if not e.args:
+  1095-        return e
+  1096-
+  1097-    old = e
+  1098-    e = bottom_up(e, lambda x: _futrig(x, **kwargs))
+  1099-
+  1100-    if kwargs.pop('hyper', True) and e.has(HyperbolicFunction):
+  1101-        e, f = hyper_as_trig(e)
+  1102-        e = f(_futrig(e))
+  1103-
+  1104-    if e != old and e.is_Mul and e.args[0].is_Rationa
+  [... truncated ...]
+- [Grep Result after action #41]
+  16:from sympy.strategies.tree import greedy
+- [Grep Result after action #45]
+  1633:def L(rv):
+  1634-    """Return count of trigonometric functions in expression.
+  1635-
+  1636-    Examples
+  1637-    ========
+  1638-
+  1639-    >>> from sympy.simplify.fu import L
+  1640-    >>> from sympy.abc import x
+  1641-    >>> from sympy import cos, sin
+  1642-    >>> L(cos(x)+sin(x))
+  1643-    2
+  1644-    """
+  1645-    return S(rv.count(TrigonometricFunction))
+  1646-
+  1647-
+  1648-# ============== end of basic Fu-like tools =====================
+  1649-
+  1650-if SYMPY_DEBUG:
+  1651-    (TR0, TR1, TR2, TR3, TR4, TR5, TR6, TR7, TR8, TR9, TR10, TR11, TR12, TR13,
+  1652-    TR2i, TRmorrie, TR14, TR15, TR16, TR12i, TR111, TR22
+  1653-    )= list(map(debug,
+  1654-    (TR0, TR1, TR2, TR3, TR4, TR5, TR6, TR7, TR8, TR9, TR10, TR11, TR12, TR13,
+  1655-    TR2i, TRmorrie, TR14, TR15, TR16, TR12i, TR111, TR22)))
+  1656-
+  1657-
+  1658-# tuples are chains  --  (f, g) -> lambda x: g(f(x))
+  1659-# lists are choices  --  [f, g] -> lambda x: min(f(x), g(x), key=objective)
+  1660-
+  1661-CTR1 = [(TR5, TR0), (TR6, TR0), identity]
+  1662-
+  1663-CTR2 = (TR11, [(TR5, TR0), (TR6, TR0), TR0])
+- [Grep Result after action #47]
+  1181:def _eapply(func, e, cond=None):
+  1182-    """Apply ``func`` to ``e`` if all args are Exprs else only
+  1183-    apply it to those args that *are* Exprs."""
+  1184-    if not isinstance(e, Expr):
+  1185-        return e
+  1186-    if _is_Expr(e) or not e.args:
+  1187-        return func(e)
+  1188-    return e.func(*[
+  1189-        _eapply(func, ei) if (cond is None or cond(ei)) else ei
+  1190-        for ei in e.args])
+- [Grep Result after action #49]
+  1776:def process_common_addends(rv, do, key2=None, key1=True):
+  1777-    """Apply ``do`` to addends of ``rv`` that (if key1=True) share at least
+  1778-    a common absolute value of their coefficient and the value of ``key2`` when
+  1779-    applied to the argument. If ``key1`` is False ``key2`` must be supplied and
+  1780-    will be the only key applied.
+  1781-    """
+  1782-
+  1783-    # collect by absolute value of coefficient and key2
+  1784-    absc = defaultdict(list)
+  1785-    if key1:
+  1786-        for a in rv.args:
+  1787-            c, a = a.as_coeff_Mul()
+  1788-            if c < 0:
+  1789-                c = -c
+  1790-                a = -a  # put the sign on `a`
+  1791-            absc[(c, key2(a) if key2 else 1)].append(a)
+  1792-    elif key2:
+  1793-        for a in rv.args:
+  1794-            absc[(S.One, key2(a))].append(a)
+  1795-    else:
+  1796-        raise ValueError('must have at least one key')
+  1797-
+  1798-    args = []
+  1799-    hit = False
+  1800-    for k in absc:
+  1801-        v = absc[k]
+  1802-        c, _ = k
+  1803-        if len(v) > 1:
+  1804-            e = Add(*v, evaluate=False)
+  1805-            new = do(e)
+  1806-            if new != e:
+  1807-                e = new
+  1808-                h
+  [... truncated ...]
+- [Grep Result after action #61]
+  1230:def TRmorrie(rv):
+  1231-    """Returns cos(x)*cos(2*x)*...*cos(2**(k-1)*x) -> sin(2**k*x)/(2**k*sin(x))
+  1232-
+  1233-    Examples
+  1234-    ========
+  1235-
+  1236-    >>> from sympy.simplify.fu import TRmorrie, TR8, TR3
+  1237-    >>> from sympy.abc import x
+  1238-    >>> from sympy import Mul, cos, pi
+  1239-    >>> TRmorrie(cos(x)*cos(2*x))
+  1240-    sin(4*x)/(4*sin(x))
+  1241-    >>> TRmorrie(7*Mul(*[cos(x) for x in range(10)]))
+  1242-    7*sin(12)*sin(16)*cos(5)*cos(7)*cos(9)/(64*sin(1)*sin(3))
+  1243-
+  1244-    Sometimes autosimplification will cause a power to be
+  1245-    not recognized. e.g. in the following, cos(4*pi/7) automatically
+  1246-    simplifies to -cos(3*pi/7) so only 2 of the 3 terms are
+  1247-    recognized:
+  1248-
+  1249-    >>> TRmorrie(cos(pi/7)*cos(2*pi/7)*cos(4*pi/7))
+  1250-    -sin(3*pi/7)*cos(3*pi/7)/(4*sin(pi/7))
+  1251-
+  1252-    A touch by TR8 resolves the expression to a Rational
+  1253-
+  1254-    >>> TR8(_)
+  1255-    -1/8
+  1256-
+  1257-    In this case, if eq is unsimplified, the answer is obtained
+  1258-    directly:
+  1259-
+  1260-    >>> eq = cos(pi/9)*cos(2*pi/9)*cos(3*pi/9)*cos(4*pi/9)
+  1261-    >>> TRmorrie(eq)
+  1262-    1/16
+  1263-
+  1264-    But if angles are made canonical with TR
+  [... truncated ...]
+- [Test Output after action #64]
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  1/25 = 1/25
+  2 * 1/50 = 1/25
+  Are they equal? True
+
+  Expression: cos(1/50)*cos(1/25)
+  TRmorrie result: sin(2/25)/(4*sin(1/50))
+
+  Expected: sin(2/25)/(4*sin(1/50))
+  Match: True
+- [Read Result after action #66]
+    1140→        TR5,  # sin-pow -> cos_pow
+    1141→        TR10,  # sin-cos of sums -> sin-cos prod
+    1142→        TR11, TR6, # reduce double angles and rewrite cos pows
+    1143→        lambda x: _eapply(factor, x, trigs),
+    1144→        TR14,  # factored powers of identities
+    1145→        [identity, lambda x: _eapply(_mexpand, x, trigs)],
+    1146→        TRmorrie,
+    1147→        TR10i,  # sin-cos products > sin-cos of sums
+    1148→        [identity, TR8],  # sin-cos products -> sin-cos of sums
+    1149→        [identity, lambda x: TR2i(TR2(x))],  # tan -> sin-cos -> tan
+
+- [Test Output after action #69]
+        exec(line)
+
+  Test 1: Symbolic simplification (works)
+  Expression: sin(x)*sin(y) + cos(x)*cos(y)
+  Simplified: cos(x - y)
+
+  Test 2: Rational simplification (works)
+  Expression: -1/50
+  Simplified: -1/50
+
+  Test 3: Trig with Rational (doesn't work)
+  Expression: sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25)
+  Simplified: cos(1/50)
+  Expected: cos(-1/50) = cos(-1/50)
+
+  Test 4: Matrix dot product (doesn't work)
+  Expression: sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25)
+  Simplified: cos(1/50)
+
+  Test 5: acos wrapper (doesn't work)
+  acos(sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25))
+  Simplified: 1/50
+- [Test Output after action #72]
+        exec(line)
+
+  ============================================================
+  Test 1: Original bug - sin/cos with Rationals
+  ============================================================
+  ✓ Symbolic: sin(x)*sin(y) + cos(x)*cos(y) -> cos(x - y)
+  ✓ Rational: sin(1/50)*sin(1/25) + cos(1/50)*cos(1/25) -> cos(1/50)
+  ✓ Matrix dot: simplified to cos(1/50)
+  ✓ acos wrapper: simplified to 1/50
+
+  ============================================================
+  Test 2: Make sure TRmorrie still works
+  ============================================================
+  ✓ TRmorrie: cos(x)*cos(2*x) -> sin(4*x)/(4*sin(x))
+
+  ============================================================
+  Test 3: Other trigonometric simplifications
+  ============================================================
+  ✓ sin(x)^2 + cos(x)^2 -> 1
+  ✓ 2*sin(x)*cos(x) -> sin(2*x)
+  ✓ sin(x)*cos(y) + cos(x)*sin(y) -> sin(x + y)
+
+  ============================================================
+  All tests passed! ✓
+  ============================================================
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/simplify/trigsimp.py
+  Tool: Edit action #68
+  old_text_sha256: 823f43c8d0cbada0c11b5f98d80419651c711180c0f1ffa8245976db2b0501cf
+  new_text_sha256: a1ba7f3dca370a4518158fbc657f31cf8fc8e5eb3e8ba967ed36857eea11b316
+- swebench_9_15/test_bug.py
+  Tool: Write action #2
+  new_text_sha256: 9872c51808a9883fc670529e55fbd4da9fb9e54eb97bef8a31403b37930288ad
+- swebench_9_15/test_morrie_pattern.py
+  Tool: Write action #63
+  new_text_sha256: a1c19078c4329787050d1fdcffd1abc432aeb70c6366630a641ecda070c513ac
+- swebench_9_15/test_comprehensive.py
+  Tool: Write action #71
+  new_text_sha256: 88cfa6c7c1bef7cdfb6894f329a1393505ade51d0b3897cd52b7d193d7a62fc3
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

@@ -1,0 +1,339 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: ac934d03-c525-499a-83d8-417a453058a5
+- repo: django/django
+- instance_id: django__django-15789
+- base_commit: d4d5427571b4bf3a21c902276c2a00215c2a37cc
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Add an encoder parameter to django.utils.html.json_script().
+Description
+
+I have a use case where I want to customize the JSON encoding of some values to output to the template layer. It looks like django.utils.html.json_script is a good utility for that, however the JSON encoder is hardcoded to DjangoJSONEncoder. I think it would be nice to be able to pass a custom encoder class.
+By the way, django.utils.html.json_script is not documented (only its template filter counterpart is), would it be a good thing to add to the docs?
+
+FILES INSPECTED
+---------------
+- django/utils/html.py [Read: 1]
+- tests/utils_tests/test_html.py [Read: 1]
+- tests/template_tests/filter_tests/test_json_script.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Grep pattern='def json_script'
+- [2] Grep pattern='json_script'
+- [3] Glob glob='**/django/utils/html.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find . -type f -name "html.py" | head -20
+- [diagnostic] find testbed -name "html.py" -path "*/utils/*" | head -5
+- [diagnostic] find testbed -name "*.py" -type f -exec grep -l "json_script" {} \; | head -20
+- [diagnostic] find testbed -name "*.py" -path "*/serializers/*" | grep json
+- [diagnostic] grep -A 20 "class DjangoJSONEncoder" testbed/django/core/serializers/json.py
+- [diagnostic] grep -A 10 "def json_script" testbed/django/template/defaultfilters.py
+- [diagnostic] grep "from django.utils.html import" testbed/django/template/defaultfilters.py | head -5
+- [test] cd testbed && python -m pytest tests/utils_tests/test_html.py::TestUtilsHtml::test_json_script -xvs
+- [test] cd testbed && python tests/runtests.py utils_tests.test_html.TestUtilsHtml.test_json_script -v 2
+- [other/reproduction] python --version
+- [other/reproduction] python3 --version
+- [test] cd testbed && python3 tests/runtests.py utils_tests.test_html.TestUtilsHtml.test_json_script -v 2
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #5]
+  testbed/django/utils/html.py
+- [Read Result after action #7]
+       1→"""HTML utilities suitable for global use."""
+       2→
+       3→import html
+       4→import json
+       5→import re
+       6→from html.parser import HTMLParser
+       7→from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
+       8→
+       9→from django.utils.encoding import punycode
+      10→from django.utils.functional import Promise, keep_lazy, keep_lazy_text
+      11→from django.utils.http import RFC3986_GENDELIMS, RFC3986_SUBDELIMS
+      12→from django.utils.regex_helper import _lazy_re_compile
+      13→from django.utils.safestring import SafeData, SafeString, mark_safe
+      14→from django.utils.text import normalize_newlines
+      15→
+      16→
+      17→@keep_lazy(SafeString)
+      18→def escape(text):
+      19→    """
+      20→    Return the given text with ampersands, quotes and angle brackets encoded
+      21→    for use in HTML.
+      22→
+      23→    Always escape input, even if it's already escaped and marked as such.
+      24→    This may result in double-escaping. If this is a concern, use
+      25→    conditional_escape() instead.
+      26→    """
+      27→    return SafeString(html.escape(str(text)))
+      28→
+      29→
+      30→_js_escapes = {
+      31→    ord("\\"): "\\u005C",
+      32→
+  [... truncated ...]
+- [Diagnostic Output after action #9]
+  testbed/tests/template_tests/filter_tests/test_json_script.py
+  testbed/tests/utils_tests/test_html.py
+  testbed/django/template/defaultfilters.py
+  testbed/django/utils/html.py
+- [Read Result after action #11]
+       1→import os
+       2→from datetime import datetime
+       3→
+       4→from django.test import SimpleTestCase
+       5→from django.utils.functional import lazystr
+       6→from django.utils.html import (
+       7→    conditional_escape,
+       8→    escape,
+       9→    escapejs,
+      10→    format_html,
+      11→    html_safe,
+      12→    json_script,
+      13→    linebreaks,
+      14→    smart_urlquote,
+      15→    strip_spaces_between_tags,
+      16→    strip_tags,
+      17→    urlize,
+      18→)
+      19→from django.utils.safestring import mark_safe
+      20→
+      21→
+      22→class TestUtilsHtml(SimpleTestCase):
+      23→    def check_output(self, function, value, output=None):
+      24→        """
+      25→        function(value) equals output. If output is None, function(value)
+      26→        equals value.
+      27→        """
+      28→        if output is None:
+      29→            output = value
+      30→        self.assertEqual(function(value), output)
+      31→
+      32→    def test_escape(self):
+      33→        items = (
+      34→            ("&", "&amp;"),
+      35→            ("<", "&lt;"),
+      36→            (">", "&gt;"),
+      37→            ('"', "&quot;"),
+      38→            ("'", "&#x27;"),
+      39→        )
+      40→
+  [... truncated ...]
+- [Read Result after action #13]
+       1→from django.test import SimpleTestCase
+       2→
+       3→from ..utils import setup
+       4→
+       5→
+       6→class JsonScriptTests(SimpleTestCase):
+       7→    @setup({"json-tag01": '{{ value|json_script:"test_id" }}'})
+       8→    def test_basic(self):
+       9→        output = self.engine.render_to_string(
+      10→            "json-tag01", {"value": {"a": "testing\r\njson 'string\" <b>escaping</b>"}}
+      11→        )
+      12→        self.assertEqual(
+      13→            output,
+      14→            '<script id="test_id" type="application/json">'
+      15→            '{"a": "testing\\r\\njson \'string\\" '
+      16→            '\\u003Cb\\u003Eescaping\\u003C/b\\u003E"}'
+      17→            "</script>",
+      18→        )
+      19→
+      20→    @setup({"json-tag02": "{{ value|json_script }}"})
+      21→    def test_without_id(self):
+      22→        output = self.engine.render_to_string("json-tag02", {"value": {}})
+      23→        self.assertEqual(output, '<script type="application/json">{}</script>')
+      24→
+
+- [Diagnostic Output after action #15]
+  testbed/tests/serializers/test_jsonl.py
+  testbed/tests/serializers/test_json.py
+  testbed/django/core/serializers/jsonl.py
+  testbed/django/core/serializers/json.py
+  testbed/django/contrib/gis/serializers/geojson.py
+- [Diagnostic Output after action #17]
+  class DjangoJSONEncoder(json.JSONEncoder):
+      """
+      JSONEncoder subclass that knows how to encode date/time, decimal types, and
+      UUIDs.
+      """
+
+      def default(self, o):
+          # See "Date Time String Format" in the ECMA-262 specification.
+          if isinstance(o, datetime.datetime):
+              r = o.isoformat()
+              if o.microsecond:
+                  r = r[:23] + r[26:]
+              if r.endswith("+00:00"):
+                  r = r[:-6] + "Z"
+              return r
+          elif isinstance(o, datetime.date):
+              return o.isoformat()
+          elif isinstance(o, datetime.time):
+              if is_aware(o):
+                  raise ValueError("JSON can't represent timezone-aware times.")
+              r = o.isoformat()
+- [Diagnostic Output after action #21]
+  from django.utils.html import avoid_wrapping, conditional_escape, escape, escapejs
+  from django.utils.html import json_script as _json_script
+  from django.utils.html import linebreaks, strip_tags
+  from django.utils.html import urlize as _urlize
+- [Test Output after action #24]
+  Exit code 1
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #26]
+  Exit code 1
+    File "tests/runtests.py", line 21
+      ) from e
+           ^
+  SyntaxError: invalid syntax
+- [Test Output after action #32]
+  Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+  Importing application utils_tests
+  Found 1 test(s).
+  Skipping setup of unused database(s): default, other.
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  test_json_script (utils_tests.test_html.TestUtilsHtml) ... ok
+
+  ----------------------------------------------------------------------
+  Ran 1 test in 0.000s
+
+  OK
+- [Test Output after action #35]
+  Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+  Importing application utils_tests
+  Found 1 test(s).
+  Skipping setup of unused database(s): default, other.
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  test_json_script_custom_encoder (utils_tests.test_html.TestUtilsHtml)
+  Test json_script with a custom encoder. ... ok
+
+  ----------------------------------------------------------------------
+  Ran 1 test in 0.000s
+
+  OK
+- [Test Output after action #37]
+  test_json_script (utils_tests.test_html.TestUtilsHtml) ... ok
+  test_json_script_custom_encoder (utils_tests.test_html.TestUtilsHtml)
+  test_json_script_without_id (utils_tests.test_html.TestUtilsHtml) ... ok
+  OK
+- [Test Output after action #39]
+  Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+  Importing application template_tests
+  Found 2 test(s).
+  Skipping setup of unused database(s): default, other.
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  test_basic (template_tests.filter_tests.test_json_script.JsonScriptTests) ... ok
+  test_without_id (template_tests.filter_tests.test_json_script.JsonScriptTests) ... ok
+
+  ----------------------------------------------------------------------
+  Ran 2 tests in 0.002s
+
+  OK
+- [Test Output after action #43]
+  Exit code 2
+  python3: can't open file 'testbed/test_custom_encoder.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Diagnostic Output after action #45]
+  -rw-------@ 1 user  staff  1105 10 Dec 18:08 ./swebench_9_15/testbed/test_custom_encoder.py
+- [Test Output after action #47]
+  Test 1: Default encoder
+  <script id="test_id" type="application/json">{"price": 19.99}</script>
+
+  Test 2: Custom encoder with Decimal
+  <script id="price_data" type="application/json">{"price": "$19.99", "tax": "$1.60"}</script>
+
+  Test 3: Verify custom encoder is used
+  SUCCESS: Custom encoder is working correctly!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #49]
+  System check identified no issues (0 silenced).
+  ----------------------------------------------------------------------
+  Ran 18 tests in 0.216s
+
+  OK
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/utils/html.py
+  Tool: Edit action #19
+  old_text_sha256: 80d2dfc897cf782129ad146e0f6c89de2b2d8630f4ae806e851475bcd40c00ba
+  new_text_sha256: c42bd5b38f9fd3d2d5ca06cd5ceb92532d4fc79f6485c448330267a9add4e332
+- tests/utils_tests/test_html.py
+  Tool: Edit action #23
+  old_text_sha256: fd94e0ff3ae57d8606fb8dfb9df6cc3f86cb5e08017aace97bcea4a0444af271
+  new_text_sha256: 8d237192fa4d4871f6efdcd4970fe0b5a14af38299b497a9d5e60cbec3c169af
+- test_custom_encoder.py
+  Tool: Write action #41
+  new_text_sha256: a5ca9d127340596aec1c78ffc45f3dddab0bc8e1ab6ab8d0c6e31d819b35253a
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

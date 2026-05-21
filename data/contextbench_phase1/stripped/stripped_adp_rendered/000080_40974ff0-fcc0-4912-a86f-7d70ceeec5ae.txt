@@ -1,0 +1,391 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 40974ff0-fcc0-4912-a86f-7d70ceeec5ae
+- repo: django/django
+- instance_id: django__django-14672
+- base_commit: 00ea883ef56fb5e092cbe4a6f7ff2e7470886ac4
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-14672
+base_commit: 00ea883ef56fb5e092cbe4a6f7ff2e7470886ac4
+problem_statement:
+Missing call `make_hashable` on `through_fields` in `ManyToManyRel`
+Description
+
+In 3.2 identity property has been added to all ForeignObjectRel to make it possible to compare them. A hash is derived from said identity and it's possible because identity is a tuple. To make limit_choices_to hashable (one of this tuple elements), ​there's a call to make_hashable.
+It happens that through_fields can be a list. In such case, this make_hashable call is missing in ​ManyToManyRel.
+For some reason it only fails on checking proxy model. I think proxy models have 29 checks and normal ones 24, hence the issue, but that's just a guess.
+Minimal repro:
+class Parent(models.Model):
+    name = models.CharField(max_length=256)
+class ProxyParent(Parent):
+    class Meta:
+        proxy = True
+class Child(models.Model):
+    parent = models.ForeignKey(Parent, on_delete=models.CASCADE)
+    many_to_many_field = models.ManyToManyField(
+        to=Parent,
+        through="ManyToManyModel",
+        through_fields=['child', 'parent'],
+        related_name="something"
+    )
+class ManyToManyModel(models.Model):
+    parent = models.ForeignKey(Parent, on_delete=models.CASCADE, related_name='+')
+    child = models.ForeignKey(Child, on_delete=models.CASCADE, related_name='+')
+    second_child = models.ForeignKey(Child, on_delete=models.CASCADE, null=True, default=None)
+Which will result in
+ File "manage.py", line 23, in <module>
+    main()
+ File "manage.py", line 19, in main
+    execute_from_command_line(sys.argv)
+ File "/home/tom/PycharmProjects/broken_m2m_project/venv/lib/python3.8/site-packages/django/core/management/__init__.py", line 419, in execute_from_command_line
+    utility.execute()
+ File "/home/tom/PycharmProjects/broken_m2m_project/venv/lib/python3.8/site-packages/django/core/management/__init__.py", line 413, in execute
+    self.fetch_command
+sha256: 9f52c81593da89ad0c67c34c1593ed9e317b74432fd0a8830b0ea0b74758971c
+truncated: true
+
+[ADP ACTION current=1 original=3: api_action Grep]
+payload:
+{
+  "output_mode": "files_with_matches",
+  "pattern": "class ManyToManyRel"
+}
+sha256: 5f17e269e31bd167cdf7328fb37a19d753909aa491411e898a081a3c9383408b
+truncated: false
+
+[ADP ACTION current=2 original=5: api_action Grep]
+payload:
+{
+  "output_mode": "files_with_matches",
+  "pattern": "def make_hashable"
+}
+sha256: 138e6c228aa43b05f236b960133e85583aed861fa2a8c90bbdd92eebed827df3
+truncated: false
+
+[ADP ACTION current=3 original=7: code_action bash]
+payload:
+find ./swebench_9_15 -name "reverse_related.py" -type f 2>/dev/null | head -5
+sha256: 51397c0b39121b31225c9a384f01a0c1e880f0ab27ae11537012d4bd1722b4f9
+truncated: false
+
+[ADP ACTION current=4 original=19: code_action bash]
+payload:
+find testbed -name "reverse_related.py" -type f
+sha256: 5ffb240eee3e3976254e92d9f5d99f85714a924d127fc1954c25247e8a05d2df
+truncated: false
+
+[ADP ACTION current=5 original=23: code_action bash]
+payload:
+find . -name "reverse_related.py" -type f
+sha256: 57a1060e6cd2ed6d49b8f2d4f1861fb84e9b791bc0c31cb0c8455002bf33fd16
+truncated: false
+
+[ADP OBSERVATION current=6 original=24 source=environment]
+name: Bash:toolu_015bHeJSnypAdCDANqLYD6BH
+excerpt:
+./django/db/models/fields/reverse_related.py
+sha256: 9c28624704c419be90c3f2c2ef1f36b146e2b383ec534c11253cba2c9e773e70
+truncated: false
+
+[ADP ACTION current=7 original=25: api_action Read]
+path: swebench_9_15/django/db/models/fields/reverse_related.py
+payload:
+{
+  "file_path": "./swebench_9_15/django/db/models/fields/reverse_related.py"
+}
+sha256: 090ca5fa03bdc7f41aa969c095699d2c099f784dbb9a201cfb23f578b61d8f5d
+truncated: false
+
+[ADP ACTION current=8 original=27: api_action Read]
+path: django/db/models/fields/reverse_related.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/fields/reverse_related.py"
+}
+sha256: bac285f963446cd8da273053e06996702ecfdd2ae2572ce40df35538aede6acf
+truncated: false
+
+[ADP OBSERVATION current=9 original=28 source=environment]
+name: Read:toolu_01N4CHCd7SKj8VoqD8mu2fHJ
+excerpt:
+     1→"""
+     2→"Rel objects" for related fields.
+     3→
+     4→"Rel objects" (for lack of a better name) carry information about the relation
+     5→modeled by a related field and provide some utility functions. They're stored
+     6→in the ``remote_field`` attribute of the field.
+     7→
+     8→They also act as reverse fields for the purposes of the Meta API because
+     9→they're the closest concept currently available.
+    10→"""
+    11→
+    12→from django.core import exceptions
+    13→from django.utils.functional import cached_property
+    14→from django.utils.hashable import make_hashable
+    15→
+    16→from . import BLANK_CHOICE_DASH
+    17→from .mixins import FieldCacheMixin
+    18→
+    19→
+    20→class ForeignObjectRel(FieldCacheMixin):
+    21→    """
+    22→    Used by ForeignObject to store information about the relation.
+    23→
+    24→    ``_meta.get_fields()`` returns this class to provide access to the field
+    25→    flags for the reverse relation.
+    26→    """
+    27→
+    28→    # Field flags
+    29→    auto_created = True
+    30→    concrete = False
+    31→    editable = False
+    32→    is_relation = True
+    33→
+    34→    # Reverse relations are always nullable (Django can't enforce that a
+    35→    # foreign key on the related model points to this model).
+    36→    null = True
+    37→    empty_strings_allowed = False
+    38→
+    39→    def __init__(self, field, to, related_name=None, related_query_name=None,
+    40→                 limit_choices_to=None, parent_link=False, on_delete=None):
+    41→        self.field = field
+    42→        self.model = to
+    43→        self.related_name = related_name
+    44→        self.related_query_name = related_query_name
+    45→        self.limit_choices_to = {} if limit_choices_to is None else limit_choices_to
+    46→        self.parent_link = parent_link
+    47→        self.on_delete = on_delete
+    48→
+    49→        self.symmetrical = False
+    50→        self.multiple = True
+    51→
+    52→
+sha256: 01439d7d0be01a3ba9817ade57b5f95e1e2683f354ceba80249cf84f8e58424a
+truncated: true
+
+[ADP ACTION current=10 original=31: api_action Edit]
+path: django/db/models/fields/reverse_related.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/fields/reverse_related.py",
+  "new_text_sha256": "046cdc4f237e0f94e1ddc736ccd33fd29f1b6b8619a5d689e1b7d44291fe5753",
+  "old_text_sha256": "d031231038e14bc9efc2f824eee4bb2d63d99b2d8edaa3d539fea9b86bad7bcc"
+}
+sha256: ba95a7bfbca1238722b148acabced5b7f1d44312ad24d0478ecd550d1297b738
+truncated: false
+
+[ADP ACTION current=11 original=37: code_action bash]
+payload:
+python test_issue.py
+sha256: 041b6b4283923198dbefaebde93f77ba9df16277d4cf4919753c1f231ecd22ef
+truncated: false
+
+[ADP OBSERVATION current=12 original=38 source=environment]
+name: Bash:toolu_01M6iFy7AuzyxzEEvwWYUUaH:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 76
+SyntaxError: Non-ASCII character '\xe2' in file test_issue.py on line 76, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+sha256: 9afffa4696fc40a94ae2c761b6bc0791723ee6c6a69fd4e3618c16a783bff191
+truncated: false
+
+[ADP ACTION current=13 original=41: code_action bash]
+payload:
+python test_issue.py
+sha256: 7bfd8f1f06452ad068e1b341c1a4f8ab087a62e4c88b2aca6803e8f4549ad25e
+truncated: false
+
+[ADP OBSERVATION current=14 original=42 source=environment]
+name: Bash:toolu_014eLtMf5aZ7qonxyrmkArKN:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 82
+    print(f"[FAIL] Test failed with the original error: {e}")
+                                                           ^
+SyntaxError: invalid syntax
+sha256: 1905cbc7d1ca928bd66515630727366a95b94e6a3c11c898839d73e712b408e4
+truncated: false
+
+[ADP ACTION current=15 original=43: code_action bash]
+payload:
+python --version
+sha256: 94ddb8bd3c3383bd411ab7ea050d5a08bd76356e152bdbcff4c1ba84739025a0
+truncated: false
+
+[ADP OBSERVATION current=16 original=44 source=environment]
+name: Bash:toolu_01WyQXnXcU3u2D87rFVsNmp7
+excerpt:
+Python 2.7.3
+sha256: c6d9bd2d561b074688a302920b8e73838fd3f7b4043465431748a1e3b85691fe
+truncated: false
+
+[ADP ACTION current=17 original=45: code_action bash]
+payload:
+python3 test_issue.py
+sha256: 791de3d98b1987decd219c1f9d89b32086a85eb09712ba1596dfb516dfdc3320
+truncated: false
+
+[ADP OBSERVATION current=18 original=46 source=environment]
+name: Bash:toolu_01UMEVwh3C15iJbNxv6k3YPx
+excerpt:
+Testing the fix for through_fields hashing issue...
+[PASS] Model checks passed successfully!
+
+Test completed successfully - the fix works!
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 8cedff468f9f15967456135523b0fab9b2803728aefaae016250805120a85ba6
+truncated: false
+
+[ADP ACTION current=19 original=47: api_action Write]
+path: test_hashable.py
+payload:
+{
+  "content_sha256": "247413d2a2f0dea4b902fec868c6d8d9ea5dcdc4431e958599d8f6dd4bf68519",
+  "file_path": "./swebench_9_15/testbed/test_hashable.py"
+}
+sha256: 6108e59fc2df0a55ee752362caee6f9c81da1523d04795ea5e97733d73f1477e
+truncated: false
+
+[ADP ACTION current=20 original=49: code_action bash]
+payload:
+python3 test_hashable.py
+sha256: 01fe984cf01fcfbfa67b6c2b65c0c15558bf86db6cfde5858cfa4c6842098386
+truncated: false
+
+[ADP OBSERVATION current=21 original=50 source=environment]
+name: Bash:toolu_01EKvoTdANoPE2ykR5oHcLBv
+excerpt:
+Testing ManyToManyRel.identity hashing with through_fields...
+through_fields type: <class 'list'>
+through_fields value: ['child', 'parent']
+Identity obtained successfully: <class 'tuple'>
+Hash computed successfully: 5396427358378542560
+ManyToManyRel hash computed successfully: 5396427358378542560
+ManyToManyRel added to set successfully
+Containment check works correctly
+
+[PASS] All hashing tests passed successfully!
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 990afec506ea605245682fcac6315d12966d7832fd9d2dede43f93c36c8ef9e1
+truncated: false
+
+[ADP ACTION current=22 original=51: code_action bash]
+payload:
+cd testbed && python3 tests/runtests.py --settings=test_sqlite many_to_many -v 2 2>&1 | head -50
+sha256: be9106737bb99f78e81c51b34379fc3ce0765056e898660b4d7b7a6cc1f12ef8
+truncated: false
+
+[ADP ACTION current=23 original=53: code_action bash]
+payload:
+python3 tests/runtests.py --settings=test_sqlite many_to_many -v 2 2>&1 | head -100
+sha256: 7aecbaf7d6849190aa098d23e790c116e98af202d5d5f498db016417cd9139bd
+truncated: false
+
+[ADP OBSERVATION current=24 original=54 source=environment]
+name: Bash:toolu_015wLictnAA4iE85REWEwi4H
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django'
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Importing application many_to_many
+Found 30 test(s).
+Skipping setup of unused database(s): other.
+Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+Operations to perform:
+  Synchronize unmigrated apps: auth, contenttypes, many_to_many, messages, sessions, staticfiles
+  Apply all migrations: admin, sites
+Synchronizing apps without migrations:
+  Creating tables...
+    Creating table django_content_type
+    Creating table auth_permission
+    Creating table auth_group
+    Creating table auth_user
+    Creating table django_session
+    Creating table many_to_many_publication
+    Creating table many_to_many_tag
+    Creating table many_to_many_article
+    Creating table many_to_many_user
+    Creating table many_to_many_userarticle
+    Creating table many_to_many_inheritedarticlea
+    Creating table many_to_many_inheritedarticleb
+    Running deferred SQL...
+Running migrations:
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying sites.0001_initial... OK
+  Applying sites.0002_alter_domain_unique... OK
+System check identified no issues (0 silenced).
+test_add (many_to_many.tests.ManyToManyTests) ... ok
+test_add_after_prefetch (many_to_many.tests.ManyToManyTests) ... ok
+test_add_existing_different_type (many_to_many.tests.ManyToManyTests) ... skipped 'Database has feature(s) supports_ignore_conflicts'
+test_add_remove_invalid_type (many_to_many.t
+sha256: c9ff212edf1d13878000527e9cdb66e7f4b4b5b6d2bd9ab6936ce7bcc9c92aa8
+truncated: true
+
+[ADP ACTION current=25 original=55: code_action bash]
+payload:
+python3 tests/runtests.py --settings=test_sqlite m2m_through -v 2 2>&1 | tail -30
+sha256: fb62c08b172c88c40c9dea821affe239f2fbd2f0daaebf90cb6793307518fa68
+truncated: false
+
+[ADP OBSERVATION current=26 original=56 source=environment]
+name: Bash:toolu_01C5tztjkZmqU4CYzXe2VyU9
+excerpt:
+test_get_or_create_on_m2m_with_intermediate_model_value_required_fails (m2m_through.tests.M2mThroughTests) ... ok
+test_order_by_relational_field_through_model (m2m_through.tests.M2mThroughTests) ... ok
+test_query_first_model_by_intermediate_model_attribute (m2m_through.tests.M2mThroughTests) ... ok
+test_query_model_by_attribute_name_of_related_model (m2m_through.tests.M2mThroughTests) ... ok
+test_query_model_by_custom_related_name (m2m_through.tests.M2mThroughTests) ... ok
+test_query_model_by_intermediate_can_return_non_unique_queryset (m2m_through.tests.M2mThroughTests) ... ok
+test_query_model_by_related_model_name (m2m_through.tests.M2mThroughTests) ... ok
+test_query_second_model_by_intermediate_model_attribute (m2m_through.tests.M2mThroughTests) ... ok
+test_remove_on_m2m_with_intermediate_model (m2m_through.tests.M2mThroughTests) ... ok
+test_remove_on_m2m_with_intermediate_model_multiple (m2m_through.tests.M2mThroughTests) ... ok
+test_remove_on_reverse_m2m_with_intermediate_model (m2m_through.tests.M2mThroughTests) ... ok
+test_retrieve_intermediate_items (m2m_through.tests.M2mThroughTests) ... ok
+test_retrieve_reverse_intermediate_items (m2m_through.tests.M2mThroughTests) ... ok
+test_set_on_m2m_with_intermediate_model (m2m_through.tests.M2mThroughTests) ... ok
+test_set_on_m2m_with_intermediate_model_callable_through_default (m2m_through.tests.M2mThroughTests) ... ok
+test_set_on_m2m_with_intermediate_model_value_required (m2m_through.tests.M2mThroughTests) ... ok
+test_set_on_m2m_with_intermediate_model_value_required_fails (m2m_through.tests.M2mThroughTests) ... ok
+test_set_on_reverse_m2m_with_intermediate_model (m2m_through.tests.M2mThroughTests) ... ok
+test_through_fields (m2m_through.tests.M2mThroughTests)
+Relations with intermediary tables with multiple FKs ... ok
+test_update_or_create_on_m2m_with_intermediate_model_value_required (m2m_through.tests.M2mThroughTests) ... ok
+test_update_or_create_on_m2m_with_intermediate_model_value_required_fails (m2m_through.t
+sha256: 43ccbebd52eb9f5cee13edbc0bbb66fe46091ad4a77679a76dca69def5809183
+truncated: true

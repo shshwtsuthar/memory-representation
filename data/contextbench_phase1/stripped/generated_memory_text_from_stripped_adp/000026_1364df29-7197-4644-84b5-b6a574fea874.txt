@@ -1,0 +1,419 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 1364df29-7197-4644-84b5-b6a574fea874
+- repo: sympy/sympy
+- instance_id: sympy__sympy-17022
+- base_commit: f91de695585c1fbc7d4f49ee061f64fcb1c2c4d8
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Lambdify misinterprets some matrix expressions
+Using lambdify on an expression containing an identity matrix gives us an unexpected result:
+
+```python
+>>> import numpy as np
+>>> n = symbols('n', integer=True)
+>>> A = MatrixSymbol("A", n, n)
+>>> a = np.array([[1, 2], [3, 4]])
+>>> f = lambdify(A, A + Identity(n))
+>>> f(a)
+array([[1.+1.j, 2.+1.j],
+       [3.+1.j, 4.+1.j]])
+```
+
+Instead, the output should be  `array([[2, 2], [3, 5]])`, since we're adding an identity matrix to the array. Inspecting the globals and source code of `f` shows us why we get the result:
+
+```python
+>>> import inspect
+>>> print(inspect.getsource(f))
+def _lambdifygenerated(A):
+    return (I + A)
+>>> f.__globals__['I']
+1j
+```
+
+The code printer prints `I`, which is currently being interpreted as a Python built-in complex number. The printer should support printing identity matrices, and signal an error for unsupported expressions that might be misinterpreted.
+
+FILES INSPECTED
+---------------
+- sympy/__init__.py [Read: 1]
+- sympy/utilities/lambdify.py [Read: 4, Grep: 3]
+- sympy/printing/lambdarepr.py [Read: 1]
+- sympy/printing/pycode.py [Grep: 1, Read: 1]
+- sympy/matrices/expressions/matexpr.py [Grep: 1, Read: 1]
+- sympy/matrices/expressions [Grep: 1]
+- sympy/printing/str.py [Grep: 1]
+- sympy/printing/julia.py [Grep: 1]
+- sympy/printing/octave.py [Grep: 1]
+- sympy/utilities/tests [Grep: 1]
+- sympy/utilities/tests/test_lambdify.py [Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [22] Grep pattern='class.*Printer' path='sympy/utilities/lambdify.py'
+- [26] Glob glob='**/lambdarepr.py'
+- [30] Glob glob='**/pycode.py'
+- [32] Grep pattern='_print_Identity|class.*Printer' path='sympy/printing/pycode.py'
+- [39] Grep pattern='class Identity' path='sympy/matrices/expressions/matexpr.py'
+- [40] Grep pattern='class Identity' path='sympy/matrices/expressions'
+- [46] Grep pattern='def _print_Identity' path='sympy/printing/str.py'
+- [48] Grep pattern='def _print_Identity' path='sympy/printing/julia.py'
+- [50] Grep pattern='def _print_Identity' path='sympy/printing/octave.py'
+- [54] Grep pattern='Identity.*lambdify|lambdify.*Identity' path='sympy/utilities/tests'
+- [67] Grep pattern='^def lambdify' path='sympy/utilities/lambdify.py'
+- [89] Grep pattern='MatrixSymbol|free_symbols' path='sympy/utilities/lambdify.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [test] cd testbed && python ../test_issue.py
+- [test] cd testbed && python ../test_issue.py
+- [test] cd testbed && python ../test_issue.py
+- [test] python test_issue.py
+- [other/reproduction] PYTHONPATH=testbed:$PYTHONPATH python test_issue.py
+- [other/reproduction] python3 -c "import mpmath; print(mpmath.__file__)"
+- [other/reproduction] PYTHONPATH=testbed:$PYTHONPATH python3 test_issue.py
+- [diagnostic] find testbed/sympy -name "*lambdify*" -type f | head -20
+- [other/reproduction] cd testbed && python3 -c "from sympy import Identity, symbols; n = symbols('n'); print(repr(Identity(n))); print(str(Identity(n)))"
+- [diagnostic] find testbed/sympy -name "*.py" -type f -exec grep -l "class Identity" {} \; | head -10
+- [diagnostic] find ./swebench_9_15/testbed/sympy -name "*.py" -type f | xargs grep -l "class Identity" | head -10
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named sympy
+- E       AttributeError: module 'scipy' has no attribute 'special'
+- FAILED sympy/utilities/tests/test_lambdify.py::test_scipy_fns - AttributeErro...
+- Traceback (most recent call last):
+- ImportError: SymPy now depends on mpmath as an external library. See https://docs.sympy.org/latest/install.html#mpmath for more information.
+- TypeError: 'Symbol' object cannot be interpreted as an integer
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Test Output after action #2]
+  Exit code 1
+    File "../test_issue.py", line 34
+      print(f"f.__globals__['I'] = {f.__globals__['I']}")
+                                                       ^
+  SyntaxError: invalid syntax
+- [Test Output after action #4]
+  Exit code 1
+    File "../test_issue.py", line 39
+  SyntaxError: Non-ASCII character '\xe2' in file ../test_issue.py on line 39, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+- [Test Output after action #6]
+  Exit code 1
+  Traceback (most recent call last):
+    File "../test_issue.py", line 6, in <module>
+      from sympy import symbols, lambdify, MatrixSymbol, Identity
+  ImportError: No module named sympy
+- [Test Output after action #8]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 6, in <module>
+      from sympy import symbols, lambdify, MatrixSymbol, Identity
+  ImportError: No module named sympy
+- [Read Result after action #12]
+       1→"""
+       2→SymPy is a Python library for symbolic mathematics. It aims to become a
+       3→full-featured computer algebra system (CAS) while keeping the code as simple
+       4→as possible in order to be comprehensible and easily extensible.  SymPy is
+       5→written entirely in Python. It depends on mpmath, and other external libraries
+       6→may be optionally for things like plotting support.
+       7→
+       8→See the webpage for more information and documentation:
+       9→
+      10→    https://sympy.org
+      11→
+      12→"""
+      13→
+      14→
+      15→from __future__ import absolute_import, print_function
+      16→del absolute_import, print_function
+      17→
+      18→try:
+      19→    import mpmath
+      20→except ImportError:
+      21→    raise ImportError("SymPy now depends on mpmath as an external library. "
+      22→    "See https://docs.sympy.org/latest/install.html#mpmath for more information.")
+      23→
+      24→del mpmath
+      25→
+      26→from sympy.release import __version__
+      27→
+      28→if 'dev' in __version__:
+      29→    def enable_warnings():
+      30→        import warnings
+      31→        warnings.filterwarnings('default',   '.*',   DeprecationWarning, module='sympy.*')
+      32→        del warn
+  [... truncated ...]
+- [Diagnostic Output after action #18]
+  testbed/sympy/utilities/lambdify.py
+  testbed/sympy/utilities/tests/test_lambdify.py
+  testbed/sympy/utilities/__pycache__/lambdify.cpython-38.pyc
+  testbed/sympy/plotting/__pycache__/experimental_lambdify.cpython-38.pyc
+  testbed/sympy/plotting/experimental_lambdify.py
+- [Read Result after action #20]
+       1→"""
+       2→This module provides convenient functions to transform sympy expressions to
+       3→lambda functions which can be used to calculate numerical values very fast.
+       4→"""
+       5→
+       6→from __future__ import print_function, division
+       7→
+       8→import inspect
+       9→import keyword
+      10→import re
+      11→import textwrap
+      12→import linecache
+      13→
+      14→from sympy.core.compatibility import (exec_, is_sequence, iterable,
+      15→    NotIterable, string_types, range, builtins, PY3)
+      16→from sympy.utilities.misc import filldedent
+      17→from sympy.utilities.decorator import doctest_depends_on
+      18→
+      19→__doctest_requires__ = {('lambdify',): ['numpy', 'tensorflow']}
+      20→
+      21→# Default namespaces, letting us define translations that can't be defined
+      22→# by simple variable maps, like I => 1j
+      23→MATH_DEFAULT = {}
+      24→MPMATH_DEFAULT = {}
+      25→NUMPY_DEFAULT = {"I": 1j}
+      26→SCIPY_DEFAULT = {"I": 1j}
+      27→TENSORFLOW_DEFAULT = {}
+      28→SYMPY_DEFAULT = {}
+      29→NUMEXPR_DEFAULT = {}
+      30→
+      31→# These are the namespaces the lambda functions will use.
+      32→# These are separate from the names above because they are modified
+      33→#
+  [... truncated ...]
+- [Grep Result after action #22]
+  940:class _EvaluatorPrinter(object):
+  1100:class _TensorflowEvaluatorPrinter(_EvaluatorPrinter):
+- [Read Result after action #24]
+     940→class _EvaluatorPrinter(object):
+     941→    def __init__(self, printer=None, dummify=False):
+     942→        self._dummify = dummify
+     943→
+     944→        #XXX: This has to be done here because of circular imports
+     945→        from sympy.printing.lambdarepr import LambdaPrinter
+     946→
+     947→        if printer is None:
+     948→            printer = LambdaPrinter()
+     949→
+     950→        if inspect.isfunction(printer):
+     951→            self._exprrepr = printer
+     952→        else:
+     953→            if inspect.isclass(printer):
+     954→                printer = printer()
+     955→
+     956→            self._exprrepr = printer.doprint
+     957→
+     958→            if hasattr(printer, '_print_Symbol'):
+     959→                symbolrepr = printer._print_Symbol
+     960→
+     961→            if hasattr(printer, '_print_Dummy'):
+     962→                dummyrepr = printer._print_Dummy
+     963→
+     964→        # Used to print the generated function arguments in a standard way
+     965→        self._argrepr = LambdaPrinter().doprint
+     966→
+     967→    def doprint(self, funcname, args, expr):
+     968→        """Returns the function definition code as a string."""
+     969→        from sympy import D
+  [... truncated ...]
+- [Glob Result after action #26]
+  ./swebench_9_15/testbed/sympy/printing/lambdarepr.py
+- [Read Result after action #28]
+       1→from __future__ import print_function, division
+       2→from .pycode import (
+       3→    PythonCodePrinter,
+       4→    MpmathPrinter,  # MpmathPrinter is imported for backward compatibility
+       5→    NumPyPrinter  # NumPyPrinter is imported for backward compatibility
+       6→)
+       7→from sympy.utilities import default_sort_key
+       8→
+       9→
+      10→class LambdaPrinter(PythonCodePrinter):
+      11→    """
+      12→    This printer converts expressions into strings that can be used by
+      13→    lambdify.
+      14→    """
+      15→    printmethod = "_lambdacode"
+      16→
+      17→
+      18→    def _print_And(self, expr):
+      19→        result = ['(']
+      20→        for arg in sorted(expr.args, key=default_sort_key):
+      21→            result.extend(['(', self._print(arg), ')'])
+      22→            result.append(' and ')
+      23→        result = result[:-1]
+      24→        result.append(')')
+      25→        return ''.join(result)
+      26→
+      27→    def _print_Or(self, expr):
+      28→        result = ['(']
+      29→        for arg in sorted(expr.args, key=default_sort_key):
+      30→            result.extend(['(', self._print(arg), ')'])
+      31→            result.append(' or ')
+      32→        result
+  [... truncated ...]
+- [Glob Result after action #30]
+  ./swebench_9_15/testbed/sympy/printing/pycode.py
+- [Grep Result after action #32]
+  78:class AbstractPythonCodePrinter(CodePrinter):
+  350:class PythonCodePrinter(AbstractPythonCodePrinter):
+  407:class MpmathPrinter(PythonCodePrinter):
+  478:class NumPyPrinter(PythonCodePrinter):
+  709:class SciPyPrinter(NumPyPrinter):
+  746:class SymPyPrinter(PythonCodePrinter):
+- [Diagnostic Output after action #37]
+  ./swebench_9_15/testbed/sympy/functions/elementary/miscellaneous.py
+  ./swebench_9_15/testbed/sympy/physics/quantum/operator.py
+  ./swebench_9_15/testbed/sympy/physics/quantum/gate.py
+  ./swebench_9_15/testbed/sympy/categories/baseclasses.py
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py
+- [Grep Result after action #40]
+  sympy/matrices/expressions/matexpr.py:808:class Identity(MatrixExpr):
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-809-    """The Matrix Identity I - multiplicative identity
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-810-
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-811-    Examples
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-812-    ========
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-813-
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-814-    >>> from sympy.matrices import Identity, MatrixSymbol
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-815-    >>> A = MatrixSymbol('A', 3, 5)
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-816-    >>> I = Identity(3)
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-817-    >>> I*A
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-818-    A
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-819-    """
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-820-
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-821-    is_Identity = True
+  ./swebench_9_15/testb
+  [... truncated ...]
+- [Read Result after action #42]
+     808→class Identity(MatrixExpr):
+     809→    """The Matrix Identity I - multiplicative identity
+     810→
+     811→    Examples
+     812→    ========
+     813→
+     814→    >>> from sympy.matrices import Identity, MatrixSymbol
+     815→    >>> A = MatrixSymbol('A', 3, 5)
+     816→    >>> I = Identity(3)
+     817→    >>> I*A
+     818→    A
+     819→    """
+     820→
+     821→    is_Identity = True
+     822→
+     823→    def __new__(cls, n):
+     824→        return super(Identity, cls).__new__(cls, _sympify(n))
+     825→
+     826→    @property
+     827→    def rows(self):
+     828→        return self.args[0]
+     829→
+     830→    @property
+     831→    def cols(self):
+     832→        return self.args[0]
+     833→
+     834→    @property
+     835→    def shape(self):
+     836→        return (self.args[0], self.args[0])
+     837→
+     838→    @property
+     839→    def is_square(self):
+     840→        return True
+     841→
+     842→    def _eval_transpose(self):
+     843→        return self
+     844→
+     845→    def _eval_trace(self):
+     846→        return self.rows
+     847→
+     848→    def _eval_inverse(self):
+     849→        return self
+     850→
+     851→    def conjugate(self):
+     852→        return self
+     853→
+     854→    def _entry(self, i, j, **kwargs)
+  [... truncated ...]
+- [Diagnostic Output after action #44]
+  sympy/printing//str.py:    def _print_Identity(self, expr):
+  sympy/printing//str.py:    def _print_IdentityMorphism(self, morphism):
+  sympy/printing//mathml.py:    def _print_Identity(self, I):
+  Binary file sympy/printing//__pycache__/latex.cpython-38.pyc matches
+  Binary file sympy/printing//__pycache__/julia.cpython-38.pyc matches
+  Binary file sympy/printing//__pycache__/octave.cpython-38.pyc matches
+  Binary file sympy/printing//__pycache__/mathml.cpython-38.pyc matches
+  Binary file sympy/printing//__pycache__/str.cpython-38.pyc matches
+  Binary file sympy/printing//pretty/__pycache__/pretty.cpython-38.pyc matches
+  sympy/printing//pretty/pretty.py:    def _print_Identity(self, expr):
+  sympy/printing//pretty/pretty.py:    def _print_IdentityMorphism(self, morphism):
+  sympy/printing//latex.py:    def _print_Identity(self, I):
+  sympy/printing//latex.py:    def _print_IdentityMorphism(self, morphism):
+  sympy/printing//julia.py:    def _print_Identity(self, expr):
+  sympy/printing//octave.py:    def _print_Identity(self, expr):
+- [Grep Result after action #46]
+  723:    def _print_Identity(self, expr):
+  724-        return "I"
+  725-
+  726-    def _print_ZeroMatrix(self, expr):
+  727-        return "0"
+  728-
+  --
+  805:    def _print_IdentityMorphism(self, morphism):
+  806-        return 'IdentityMorphism(%s)' % morphism.domain
+  807-
+  808-    def _print_NamedMorphism(self, morphism):
+  809-        return 'NamedMorphism(%s, %s, "%s")' % \
+  810-               (morphism.domain, morphism.codomain, morphism.name)
+- [Grep Result after action #48]
+  402:    def _print_Identity(self, expr):
+  403-        return "eye(%s)" % self._print(expr.shape[0])
+  404-
+  405-
+  406-    # Note: as of 2015, Julia doesn't have spherical Bessel functions
+  407-    def _print_jn(self, expr):
+- [Grep Result after action #50]
+  396:    def _print_Identity(self, expr):
+  397-        shape = expr.shape
+  398-        if len(shape) == 2 and shape[0] == shape[1]:
+  399-            shape = [shape[0]]
+  400-        s = ", ".join(self._print(n) for n in shape)
+  401-        return "eye(" + s + ")"
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/printing/pycode.py
+  Tool: Edit action #58
+  old_text_sha256: fa4eb256b3cecefbd4dc11f3341026760bb6cfea2abc617bf48ea18326bde6d1
+  new_text_sha256: 2b1b130627161d56890cd74602e3447c5dd57964f6019356ba39f94a34d583ac
+- sympy/printing/pycode.py
+  Tool: Edit action #93
+  old_text_sha256: 17b4d1278a658fbefde486b3d88fb9db07ffbd7040dfcd12c9661c578aac7f4f
+  new_text_sha256: a73f72e2a7ab508161529870b372b11746521518eba7e103916a39775433117a
+- swebench_9_15/SOLUTION_SUMMARY.md
+  Tool: Write action #120
+  new_text_sha256: 486e0bfa53ef3b1a7e183e4c0b2bf8d7068758e71c5404d04a382be20b08f0b4
+- swebench_9_15/test_fix.py
+  Tool: Write action #94
+  new_text_sha256: 25fa98af15f0a6c93eaa9c650385bf00bec61356ff8265e8dd84668076828278
+- sympy/utilities/tests/test_lambdify.py
+  Tool: Edit action #111
+  old_text_sha256: 4224151ac90e9eb4ae5e5146fed2d64f95a6157b624bdfa848802524bea49a56
+  new_text_sha256: 8265f647c3bdb51a187949885e92d0aaa4b7221815b25c3bcef4ef8a1c546431
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

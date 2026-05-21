@@ -1,0 +1,330 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 0495ed04-941e-4592-af9b-dd7e5e61ecb2
+- repo: django/django
+- instance_id: django__django-16379
+- base_commit: 1d0fa848e084cad62d0bb6bde3b51e4862558e57
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-16379
+base_commit: 1d0fa848e084cad62d0bb6bde3b51e4862558e57
+problem_statement:
+FileBasedCache has_key is susceptible to race conditions
+Description
+
+        (last modified by Marti Raudsepp)
+
+I received the exception from Django's cache framework:
+FileNotFoundError: [Errno 2] No such file or directory: '/app/var/cache/d729e4cf4ba88cba5a0f48e0396ec48a.djcache'
+[...]
+ File "django/core/cache/backends/base.py", line 229, in get_or_set
+    self.add(key, default, timeout=timeout, version=version)
+ File "django/core/cache/backends/filebased.py", line 26, in add
+    if self.has_key(key, version):
+ File "django/core/cache/backends/filebased.py", line 94, in has_key
+    with open(fname, "rb") as f:
+The code is:
+    def has_key(self, key, version=None):
+        fname = self._key_to_file(key, version)
+        if os.path.exists(fname):
+            with open(fname, "rb") as f:
+                return not self._is_expired(f)
+        return False
+Between the exists() check and open(), it's possible for the file to be deleted. In fact, the _is_expired() method itself deletes the file if it finds it to be expired. So if many threads race to read an expired cache at once, it's not that unlikely to hit this window.
+sha256: 46bb22d173fdb1b2178bcade22cc29d695401eb5623f8e764db65ff2c21e38df
+truncated: false
+
+[ADP ACTION current=1 original=1: code_action bash]
+payload:
+find ./swebench_9_15/testbed -type f -name "*.py" -path "*/cache/backends/filebased.py" 2>/dev/null | head -5
+sha256: d858410f0334327e67736be4c6cafedd1b7934e0a4eb60fe087e53da936b9a69
+truncated: false
+
+[ADP ACTION current=2 original=3: code_action bash]
+payload:
+
+sha256: c93f3aa890bf094b1b37fe9957880de43ce17a329e038b1aa2cbbfae2ce2b4a3
+truncated: false
+
+[ADP ACTION current=3 original=23: code_action bash]
+payload:
+find testbed -name "filebased.py" -path "*/cache/backends/*"
+sha256: d9ff4e1e6714b799766d2d899c50dce56722aa29dcf6deb060f6aeccea847d42
+truncated: false
+
+[ADP OBSERVATION current=4 original=24 source=environment]
+name: Bash:toolu_01TPkfweUYtmDCwxKXL49SZm
+excerpt:
+testbed/django/core/cache/backends/filebased.py
+sha256: 148add656ec3cff1084ecf0aa4b96667bc8a41e5fc055e7f71da56b05e850b64
+truncated: false
+
+[ADP ACTION current=5 original=25: api_action Read]
+path: django/core/cache/backends/filebased.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/core/cache/backends/filebased.py"
+}
+sha256: bfea0ecdd614f13b0c27df37b0bb2bcc072c87578601f40705d0ebe001b7c3d4
+truncated: false
+
+[ADP OBSERVATION current=6 original=26 source=environment]
+name: Read:toolu_011A79YrTpRroAb23L8UgVPK
+excerpt:
+     1→"File-based cache backend"
+     2→import glob
+     3→import os
+     4→import pickle
+     5→import random
+     6→import tempfile
+     7→import time
+     8→import zlib
+     9→
+    10→from django.core.cache.backends.base import DEFAULT_TIMEOUT, BaseCache
+    11→from django.core.files import locks
+    12→from django.core.files.move import file_move_safe
+    13→from django.utils.crypto import md5
+    14→
+    15→
+    16→class FileBasedCache(BaseCache):
+    17→    cache_suffix = ".djcache"
+    18→    pickle_protocol = pickle.HIGHEST_PROTOCOL
+    19→
+    20→    def __init__(self, dir, params):
+    21→        super().__init__(params)
+    22→        self._dir = os.path.abspath(dir)
+    23→        self._createdir()
+    24→
+    25→    def add(self, key, value, timeout=DEFAULT_TIMEOUT, version=None):
+    26→        if self.has_key(key, version):
+    27→            return False
+    28→        self.set(key, value, timeout, version)
+    29→        return True
+    30→
+    31→    def get(self, key, default=None, version=None):
+    32→        fname = self._key_to_file(key, version)
+    33→        try:
+    34→            with open(fname, "rb") as f:
+    35→                if not self._is_expired(f):
+    36→                    return pickle.loads(zlib.decompress(f.read()))
+    37→        except FileNotFoundError:
+    38→            pass
+    39→        return default
+    40→
+    41→    def _write_content(self, file, timeout, value):
+    42→        expiry = self.get_backend_timeout(timeout)
+    43→        file.write(pickle.dumps(expiry, self.pickle_protocol))
+    44→        file.write(zlib.compress(pickle.dumps(value, self.pickle_protocol)))
+    45→
+    46→    def set(self, key, value, timeout=DEFAULT_TIMEOUT, version=None):
+    47→        self._createdir()  # Cache dir can be deleted at any time.
+    48→        fname = self._key_to_file(key, version)
+    49→        self._cull()  # make some room if necessary
+    50→        fd, tmp_path = tempfile.mkstemp(dir=self._dir)
+    51→
+sha256: 356bb33a043af54072f6c1b8a8844f77d0df3bffd2b93770c6e69a07abcc6b1b
+truncated: true
+
+[ADP ACTION current=7 original=29: api_action Edit]
+path: django/core/cache/backends/filebased.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/core/cache/backends/filebased.py",
+  "new_text_sha256": "c51501c051022798d107f9779c8f5fb2ab0e4e83886be54d68fcdd84038d127c",
+  "old_text_sha256": "5972002855d8241b61c513472fb3589ba8f5d82c52cb9b55a59ff340b5946908"
+}
+sha256: eaf8c6f29fcaa2367951b79a4162ff231859116605ebbbaf508dc3bc2858a431
+truncated: false
+
+[ADP ACTION current=8 original=33: api_action Write]
+path: swebench_9_15/test_race_condition.py
+payload:
+{
+  "content_sha256": "9ecb0a2355a70caca3008da27b31e977dfa1dbeb566618afef8c2d8c2dceaf53",
+  "file_path": "./swebench_9_15/test_race_condition.py"
+}
+sha256: aaf026563e20357b79187991f5cc6aeadecaa194e541809b3296357feef236da
+truncated: false
+
+[ADP ACTION current=9 original=35: code_action bash]
+payload:
+python test_race_condition.py
+sha256: 8fb2b4a0aa6c65a5986c0d0c1e95560246420cf5bde48bcf2206b350e8f4f9d0
+truncated: false
+
+[ADP OBSERVATION current=10 original=36 source=environment]
+name: Bash:toolu_01BFyuobSKrcfZBrS7R7AzUA:error
+excerpt:
+Exit code 1
+  File "test_race_condition.py", line 56
+    print(f"FAIL: FileNotFoundError was raised {len(errors)} times")
+                                                                  ^
+SyntaxError: invalid syntax
+sha256: f7b3ec2fdf5758599a5c85c6ea87b535865140b6170a43d823f0ca4fbf74500b
+truncated: false
+
+[ADP ACTION current=11 original=37: code_action bash]
+payload:
+python --version
+sha256: 2298e41e1962c8b64cecb365e07fb2e5860e2c7d75fd8618245259010a4fff0e
+truncated: false
+
+[ADP OBSERVATION current=12 original=38 source=environment]
+name: Bash:toolu_01VLk3eAsU8wtzi7R7zR7rTo
+excerpt:
+Python 2.7.3
+sha256: c6d9bd2d561b074688a302920b8e73838fd3f7b4043465431748a1e3b85691fe
+truncated: false
+
+[ADP ACTION current=13 original=39: code_action bash]
+payload:
+python3 test_race_condition.py
+sha256: b23a5ce7e732fd5e3c792de0a95cfaa06c131d353772cef70b69995895d6445a
+truncated: false
+
+[ADP OBSERVATION current=14 original=40 source=environment]
+name: Bash:toolu_01ULRAUForqfrMfwVXGoDadi
+excerpt:
+Testing FileBasedCache.has_key race condition fix
+
+Test 1: Multiple threads checking expired key
+--------------------------------------------------
+PASS: No FileNotFoundError raised. has_key was called 10 times.
+
+Test 2: File deleted between exists() and open()
+--------------------------------------------------
+PASS: has_key returned False without raising FileNotFoundError
+
+
+✓ All tests passed!
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 50fec8c2a5a9234e2e299a617b3acbe1eff2fb9bed2ffac05bce5f3e5a3c7c08
+truncated: false
+
+[ADP ACTION current=15 original=41: code_action bash]
+payload:
+cd testbed && python3 tests/runtests.py cache.tests --verbosity=2 2>&1 | head -100
+sha256: 5711a050b68708647d1ad29b844530e40865da4f52c3ea2358a4dcbd2249b12b
+truncated: false
+
+[ADP OBSERVATION current=16 original=42 source=environment]
+name: Bash:toolu_01NpDtirGdWQABLYBYMEZjEn
+excerpt:
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Traceback (most recent call last):
+  File "tests/runtests.py", line 28, in <module>
+    from django.test.runner import get_max_test_processes, parallel_type
+  File "./swebench_9_15/testbed/django/test/runner.py", line 20, in <module>
+    import sqlparse
+ModuleNotFoundError: No module named 'sqlparse'
+sha256: a563954317da63dd1d0225afde22d129157b2ad1ca9f9f2b1eff38d1b0373f75
+truncated: false
+
+[ADP ACTION current=17 original=45: code_action bash]
+payload:
+cd testbed && python3 tests/runtests.py cache.tests.test_file_based -v 2 2>&1 | tail -50
+sha256: bfba2021e6c5cef57a238a5e5edf79d74925bf42ab769d618ee4e1abbdaeec71
+truncated: false
+
+[ADP ACTION current=18 original=47: code_action bash]
+payload:
+python3 tests/runtests.py cache.tests.test_file_based -v 2 2>&1 | tail -50
+sha256: ade09d8596eb01e456e2455044bdc80f631b698b0b84fe5c331d1895fa949f69
+truncated: false
+
+[ADP OBSERVATION current=19 original=48 source=environment]
+name: Bash:toolu_01FLUoNqoaCC57HjmaBLK9GH
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Importing application cache
+Found 1 test(s).
+Skipping setup of unused database(s): default, other.
+System check identified no issues (0 silenced).
+test_file_based (unittest.loader._FailedTest) ... ERROR
+
+======================================================================
+ERROR: test_file_based (unittest.loader._FailedTest)
+----------------------------------------------------------------------
+AttributeError: module 'cache.tests' has no attribute 'test_file_based'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (errors=1)
+sha256: d605a36d92137536320956ec23fcfac5e549145439bef06dfb62f1f173e1e119
+truncated: false
+
+[ADP ACTION current=20 original=49: code_action bash]
+payload:
+python3 testbed/tests/runtests.py cache.tests -v 2 2>&1 | tail -100
+sha256: 5ef37b70778dbaebffd10f18c23e6761c091213183825a86ff3706491ed69ded
+truncated: false
+
+[ADP OBSERVATION current=21 original=50 source=environment]
+name: Bash:toolu_01Bfn35zHUtNdGZChXhReuw9
+excerpt:
+python3: can't open file 'testbed/tests/runtests.py': [Errno 2] No such file or directory
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 9d055795595c967375b06b066a9445bbb7e2c885585c80d4a38db3780dc8e01c
+truncated: false
+
+[ADP ACTION current=22 original=55: code_action bash]
+payload:
+python3 tests/runtests.py cache -v 2 2>&1 | grep -A 5 "Ran.*test"
+sha256: a17f00d3d2c0b66869041c0c2b01ca370081b3af32fd856a950814d98acf2b98
+truncated: false
+
+[ADP OBSERVATION current=23 original=56 source=environment]
+name: Bash:toolu_01CW3eqg3U9Jfqn72wycuJw6
+excerpt:
+Ran 595 tests in 14.247s
+
+OK (skipped=183)
+Destroying test database for alias 'default' ('default_1.sqlite3')...
+Destroying test database for alias 'default' ('default_2.sqlite3')...
+Destroying test database for alias 'default' ('default_3.sqlite3')...
+sha256: d83834a6c1dc60be2f47b5e07ea33f6db5ee3d8ebfcfff8a0f10e710e1db59ef
+truncated: false

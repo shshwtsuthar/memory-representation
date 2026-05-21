@@ -1,0 +1,236 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 367a86bb-70fe-4f9b-b806-b7ded8912f97
+- repo: django/django
+- instance_id: django__django-12700
+- base_commit: d51c50d836c5cf8db5566da17963f871be554615
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Settings are cleaned insufficiently.
+Description
+
+Posting publicly after checking with the rest of the security team.
+I just ran into a case where django.views.debug.SafeExceptionReporterFilter.get_safe_settings() would return several un-cleansed values. Looking at cleanse_setting() I realized that we ​only take care of `dict`s but don't take other types of iterables into account but ​return them as-is.
+Example:
+In my settings.py I have this:
+MY_SETTING = {
+    "foo": "value",
+    "secret": "value",
+    "token": "value",
+    "something": [
+        {"foo": "value"},
+        {"secret": "value"},
+        {"token": "value"},
+    ],
+    "else": [
+        [
+            {"foo": "value"},
+            {"secret": "value"},
+            {"token": "value"},
+        ],
+        [
+            {"foo": "value"},
+            {"secret": "value"},
+            {"token": "value"},
+        ],
+    ]
+}
+On Django 3.0 and below:
+>>> import pprint
+>>> from django.views.debug import get_safe_settings
+>>> pprint.pprint(get_safe_settings()["MY_SETTING"])
+{'else': [[{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}],
+         [{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}]],
+ 'foo': 'value',
+ 'secret': '********************',
+ 'something': [{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}],
+ 'token': '********************'}
+On Django 3.1 and up:
+>>> from django.views.debug import SafeExceptionReporterFilter
+>>> import pprint
+>>> pprint.pprint(SafeExceptionReporterFilter().get_safe_settings()["MY_SETTING"])
+{'else': [[{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}],
+         [{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}]],
+ 'foo': 'value',
+ 'secret': '********************',
+ 'something': [{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}],
+ 'token': '********************'}
+
+FILES INSPECTED
+---------------
+(none)
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='**/django/views/debug.py'
+- [13] Glob glob='testbed/tests/**/*debug*.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find . -name "*.py" -path "*/django/views/debug.py" | head -5
+- [test] cd testbed && python test_issue.py
+- [other/reproduction] cd testbed && python --version
+- [test] cd testbed && python3 test_issue.py
+- [test] python3 test_issue.py
+- [test] python3 test_issue.py
+- [diagnostic] find testbed -path "*/tests/*" -name "*debug*" -o -path "*/tests/*" -name "*exception*" | grep -E "\.py$" | head -10
+- [test] cd testbed && python3 -m pytest tests/view_tests/tests/test_debug.py::ExceptionReporterFilterTests::test_cleanse_setting_basic -xvs
+- [test] python3 -m pytest tests/view_tests/tests/test_debug.py::ExceptionReporterFilterTests::test_cleanse_setting_basic -xvs
+- [test] cd testbed && python3 tests/runtests.py view_tests.tests.test_debug.ExceptionReporterFilterTests.test_cleanse_setting_basic
+- [test] python3 tests/runtests.py view_tests.tests.test_debug.ExceptionReporterFilterTests.test_cleanse_setting_basic view_tests.tests.test_debug.ExceptionReporterFilterTests.test_cleanse_setting_recurses_in_dictionary --parallel 1
+- [test] cd ./swebench_9_15 && python3 test_issue.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- E       AttributeError: 'object' object has no attribute 'DATABASES'
+- ERROR tests/view_tests/tests/test_debug.py::ExceptionReporterFilterTests::test_cleanse_setting_basic
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Test Output after action #3]
+  Exit code 1
+    File "test_issue.py", line 62
+      current_path = f"{path}.{key}" if path else key
+                                   ^
+  SyntaxError: invalid syntax
+- [Test Output after action #8]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+  Testing SafeExceptionReporterFilter.get_safe_settings()...
+
+  Current output:
+  {'else': [[{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}],
+            [{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}]],
+   'foo': 'value',
+   'secret': '********************',
+   'something': [{'foo': 'value'}, {'secret': 'value'}, {'token': 'value'}],
+   'token': '********************'}
+
+  ISSUES FOUND:
+    - Key 'something[1].secret' has value 'value' but should be cleansed
+    - Key 'something[2].token' has value 'value' but should be cleansed
+    - Key 'else[0][1].secret' has value 'value' but should be cleansed
+    - Key 'else[0][2].token' has value 'value' but should be cleansed
+    - Key 'else[1][1].secret' has value 'value' but should be cleansed
+    - Key 'else[1][2].tok
+  [... truncated ...]
+- [Test Output after action #10]
+  Testing SafeExceptionReporterFilter.get_safe_settings()...
+
+  Current output:
+  {'else': [[{'foo': 'value'},
+             {'secret': '********************'},
+             {'token': '********************'}],
+            [{'foo': 'value'},
+             {'secret': '********************'},
+             {'token': '********************'}]],
+   'foo': 'value',
+   'secret': '********************',
+   'something': [{'foo': 'value'},
+                 {'secret': '********************'},
+                 {'token': '********************'}],
+   'token': '********************'}
+
+  SUCCESS: All secrets are properly cleansed!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Glob Result after action #13]
+  ./swebench_9_15/testbed/tests/test_runner/test_debug_sql.py
+  ./swebench_9_15/testbed/tests/view_tests/templatetags/debugtags.py
+  ./swebench_9_15/testbed/tests/view_tests/tests/test_debug.py
+- [Test Output after action #16]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 1 item
+
+  tests/view_tests/tests/test_debug.py::ExceptionReporterFilterTests::test_cleanse_setting_basic ERROR
+
+  ==================================== ERRORS ====================================
+  __ ERROR at setup of ExceptionReporterFilterTests.test_cleanse_setting_basic ___
+
+  cls = <class 'view_tests.tests.test_debug.ExceptionRepo
+  [... truncated ...]
+- [Test Output after action #19]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ..
+  ----------------------------------------------------------------------
+  Ran 2 tests in 0.000s
+
+  OK
+- [Test Output after action #21]
+  Exit code 2
+  python3: can't open file 'test_issue.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+SOURCE EDIT EVIDENCE
+--------------------
+(none)
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

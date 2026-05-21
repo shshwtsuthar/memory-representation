@@ -1,0 +1,358 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 12b6997d-13ae-40fd-b4c6-b44d52019b29
+- repo: pytest-dev/pytest
+- instance_id: pytest-dev__pytest-7373
+- base_commit: 7b77fc086aab8b3a8ebc890200371884555eea1e
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: pytest-dev/pytest
+instance_id: pytest-dev__pytest-7373
+base_commit: 7b77fc086aab8b3a8ebc890200371884555eea1e
+problem_statement:
+Incorrect caching of skipif/xfail string condition evaluation
+Version: pytest 5.4.3, current master
+
+pytest caches the evaluation of the string in e.g. `@pytest.mark.skipif("sys.platform == 'win32'")`. The caching key is only the string itself (see `cached_eval` in `_pytest/mark/evaluate.py`). However, the evaluation also depends on the item's globals, so the caching can lead to incorrect results. Example:
+
+```py
+# test_module_1.py
+import pytest
+
+skip = True
+
+@pytest.mark.skipif("skip")
+def test_should_skip():
+    assert False
+```
+
+```py
+# test_module_2.py
+import pytest
+
+skip = False
+
+@pytest.mark.skipif("skip")
+def test_should_not_skip():
+    assert False
+```
+
+Running `pytest test_module_1.py test_module_2.py`.
+
+Expected: `test_should_skip` is skipped, `test_should_not_skip` is not skipped.
+
+Actual: both are skipped.
+
+---
+
+I think the most appropriate fix is to simply remove the caching, which I don't think is necessary really, and inline `cached_eval` into `MarkEvaluator._istrue`.
+sha256: b727ccb436e2aca57470774b409430d2c59a4e2ca539a33024c410682ba9c73e
+truncated: false
+
+[ADP ACTION current=1 original=3: api_action Glob]
+payload:
+{
+  "pattern": "**/_pytest/mark/evaluate.py"
+}
+sha256: 80f8fab532ec747197e1f56f2348eef0a25ba5c011ded51385e2dee20227e9c5
+truncated: false
+
+[ADP ACTION current=2 original=5: code_action bash]
+payload:
+ls -la testbed 2>&1 | head -20
+sha256: b3a973725a05b163a37db519ce2dbfc09fed000211a741cfa23f11c05a88f795
+truncated: false
+
+[ADP ACTION current=3 original=29: api_action Read]
+path: src/_pytest/mark/evaluate.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/src/_pytest/mark/evaluate.py"
+}
+sha256: 3988076aec8f2d3a76dc967c143cbe6026e21dc903a9fbc4df09d5bda9904f96
+truncated: false
+
+[ADP OBSERVATION current=4 original=30 source=environment]
+name: Read:toolu_0163NmHiKQYpyr5sADcBeP4k
+excerpt:
+     1→import os
+     2→import platform
+     3→import sys
+     4→import traceback
+     5→from typing import Any
+     6→from typing import Dict
+     7→from typing import List
+     8→from typing import Optional
+     9→
+    10→from ..outcomes import fail
+    11→from ..outcomes import TEST_OUTCOME
+    12→from .structures import Mark
+    13→from _pytest.config import Config
+    14→from _pytest.nodes import Item
+    15→from _pytest.store import StoreKey
+    16→
+    17→
+    18→evalcache_key = StoreKey[Dict[str, Any]]()
+    19→
+    20→
+    21→def cached_eval(config: Config, expr: str, d: Dict[str, object]) -> Any:
+    22→    default = {}  # type: Dict[str, object]
+    23→    evalcache = config._store.setdefault(evalcache_key, default)
+    24→    try:
+    25→        return evalcache[expr]
+    26→    except KeyError:
+    27→        import _pytest._code
+    28→
+    29→        exprcode = _pytest._code.compile(expr, mode="eval")
+    30→        evalcache[expr] = x = eval(exprcode, d)
+    31→        return x
+    32→
+    33→
+    34→class MarkEvaluator:
+    35→    def __init__(self, item: Item, name: str) -> None:
+    36→        self.item = item
+    37→        self._marks = None  # type: Optional[List[Mark]]
+    38→        self._mark = None  # type: Optional[Mark]
+    39→        self._mark_name = name
+    40→
+    41→    def __bool__(self) -> bool:
+    42→        # don't cache here to prevent staleness
+    43→        return bool(self._get_marks())
+    44→
+    45→    def wasvalid(self) -> bool:
+    46→        return not hasattr(self, "exc")
+    47→
+    48→    def _get_marks(self) -> List[Mark]:
+    49→        return list(self.item.iter_markers(name=self._mark_name))
+    50→
+    51→    def invalidraise(self, exc) -> Optional[bool]:
+    52→        raises = self.get("raises")
+    53→        if not raises:
+    54→            return None
+    55→        return not isinstance(exc, raises)
+    56→
+    57→    def istrue(self) -> bool:
+    58→        try:
+    59→            return self._istrue(
+sha256: f5ca5dc76568247e4967a478d7d9cad7e62bdbf7aaa2c5f204e0575246627504
+truncated: true
+
+[ADP ACTION current=5 original=33: api_action Grep]
+path: swebench_9_15/testbed
+payload:
+{
+  "output_mode": "files_with_matches",
+  "path": "./swebench_9_15/testbed",
+  "pattern": "cached_eval"
+}
+sha256: 8aeadd8382ddfaa6e1680812f83df574ed5cb6f9b59e7bc1944c0c99046bbd80
+truncated: false
+
+[ADP OBSERVATION current=6 original=34 source=environment]
+name: Grep:toolu_01BBEqeAai8cDpJCVDSycXT4
+excerpt:
+Found 1 file
+src/_pytest/mark/evaluate.py
+sha256: 357d1163124e3a1073e25cde1a0b82045d4edbfbe0ceffe140a6234ba3981500
+truncated: false
+
+[ADP ACTION current=7 original=35: api_action Grep]
+path: src/_pytest/mark/evaluate.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/src/_pytest/mark/evaluate.py",
+  "pattern": "cached_eval"
+}
+sha256: 9c152d0465f6232f21755780b5a5668ee35fc6bbbf9f1d2ba6b2f6f254d2dfc9
+truncated: false
+
+[ADP OBSERVATION current=8 original=36 source=environment]
+name: Grep:toolu_01M4hrTktM6FJjBqZKURKT6X
+excerpt:
+21:def cached_eval(config: Config, expr: str, d: Dict[str, object]) -> Any:
+101:                        result = cached_eval(self.item.config, expr, d)
+sha256: 0d4529a492f0a6a878173cdf2ba732b3f6b48bdf08da442334caa2cbd859d806
+truncated: false
+
+[ADP ACTION current=9 original=37: api_action Edit]
+path: src/_pytest/mark/evaluate.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/src/_pytest/mark/evaluate.py",
+  "new_text_sha256": "ad9538b0aac108161067be389e3cb6f5939e75ae629b1b5ee10b6816757c4f4d",
+  "old_text_sha256": "43efa3a83fd6dbec35843af3bf3372e436a09357205f86750520ef955e1da247"
+}
+sha256: f54389ecb3111a3aa222a2036272ea1ac6860faba5f0a5525c5ba17cc9a25968
+truncated: false
+
+[ADP ACTION current=10 original=39: api_action Edit]
+path: src/_pytest/mark/evaluate.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/src/_pytest/mark/evaluate.py",
+  "new_text_sha256": "60f9ea6a32ec540739117cf17e7395c4a42943d3ac9ce426aba809f6504b5e6e",
+  "old_text_sha256": "f14de67485e93a984e7775566855950be8c2027a094a42a36fcc6dbe093fe3a5"
+}
+sha256: c05e6c6e62e6e991d831114bbc498c58a629b8daee5fb17da6dc0c773c46c6a1
+truncated: false
+
+[ADP ACTION current=11 original=41: api_action Grep]
+path: src/_pytest/mark/evaluate.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/src/_pytest/mark/evaluate.py",
+  "pattern": "StoreKey"
+}
+sha256: f2a9d5ce413b8a9818e25208fa213701018101ed703e62cf6f0792f393f48cc5
+truncated: false
+
+[ADP OBSERVATION current=12 original=42 source=environment]
+name: Grep:toolu_01ShBXKwB6DzpghKH4q8cMAJ
+excerpt:
+15:from _pytest.store import StoreKey
+sha256: f46ae3c252ce7b989bfd1661400d3d937331d5b806cf952661038c63421a7f73
+truncated: false
+
+[ADP ACTION current=13 original=43: api_action Edit]
+path: src/_pytest/mark/evaluate.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/src/_pytest/mark/evaluate.py",
+  "new_text_sha256": "d010c00b30f338fcf1d383c761a5480f3a1c4776a825e9129c0e14d51eba0d71",
+  "old_text_sha256": "bb13ba147bbffae099a571f9e7de629182719e7ec68058adf95a94d63e7e8d69"
+}
+sha256: be4d9df8c6bf2fbc8263ccd230afbdb767c249f036b90d40f2d1c49600514889
+truncated: false
+
+[ADP ACTION current=14 original=45: api_action Read]
+path: src/_pytest/mark/evaluate.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/src/_pytest/mark/evaluate.py",
+  "limit": 110
+}
+sha256: 75847957c9547605d3942c247c5482a763c3858baa6e1bcbecb0f489b7a7bfd7
+truncated: false
+
+[ADP OBSERVATION current=15 original=46 source=environment]
+name: Read:toolu_019sDV2S5FMZLEz5bduR5Zhq
+excerpt:
+     1→import os
+     2→import platform
+     3→import sys
+     4→import traceback
+     5→from typing import Any
+     6→from typing import Dict
+     7→from typing import List
+     8→from typing import Optional
+     9→
+    10→from ..outcomes import fail
+    11→from ..outcomes import TEST_OUTCOME
+    12→from .structures import Mark
+    13→from _pytest.config import Config
+    14→from _pytest.nodes import Item
+    15→
+    16→
+    17→class MarkEvaluator:
+    18→    def __init__(self, item: Item, name: str) -> None:
+    19→        self.item = item
+    20→        self._marks = None  # type: Optional[List[Mark]]
+    21→        self._mark = None  # type: Optional[Mark]
+    22→        self._mark_name = name
+    23→
+    24→    def __bool__(self) -> bool:
+    25→        # don't cache here to prevent staleness
+    26→        return bool(self._get_marks())
+    27→
+    28→    def wasvalid(self) -> bool:
+    29→        return not hasattr(self, "exc")
+    30→
+    31→    def _get_marks(self) -> List[Mark]:
+    32→        return list(self.item.iter_markers(name=self._mark_name))
+    33→
+    34→    def invalidraise(self, exc) -> Optional[bool]:
+    35→        raises = self.get("raises")
+    36→        if not raises:
+    37→            return None
+    38→        return not isinstance(exc, raises)
+    39→
+    40→    def istrue(self) -> bool:
+    41→        try:
+    42→            return self._istrue()
+    43→        except TEST_OUTCOME:
+    44→            self.exc = sys.exc_info()
+    45→            if isinstance(self.exc[1], SyntaxError):
+    46→                # TODO: Investigate why SyntaxError.offset is Optional, and if it can be None here.
+    47→                assert self.exc[1].offset is not None
+    48→                msg = [" " * (self.exc[1].offset + 4) + "^"]
+    49→                msg.append("SyntaxError: invalid syntax")
+    50→            else:
+    51→                msg = traceback.format_exception_only(*self.exc[:2])
+    52→            fail(
+    53→                "Error
+sha256: 8c79c08360042c437350c419078b1cc6e80d51b764273d41da35ad78398a0cc6
+truncated: true
+
+[ADP ACTION current=16 original=49: api_action Write]
+path: test_module_1.py
+payload:
+{
+  "content_sha256": "2c28e06d1403c8128716662177d31fc429ed10be62298760d7605f4f306b239c",
+  "file_path": "./swebench_9_15/testbed/test_module_1.py"
+}
+sha256: a1b31bb62888219c6e60cc6f293c9c0790ca47163050e9275ff8554a364c3005
+truncated: false
+
+[ADP ACTION current=17 original=51: api_action Write]
+path: test_module_2.py
+payload:
+{
+  "content_sha256": "77c2bea782038b59964abe72094bbe293030a7dc39543f906793719a449febc0",
+  "file_path": "./swebench_9_15/testbed/test_module_2.py"
+}
+sha256: 825b1b28c70e3222fca7f7d04cefa77561fa008e65740624efb9ec7cce3f8f50
+truncated: false
+
+[ADP ACTION current=18 original=53: code_action bash]
+payload:
+pytest test_module_1.py test_module_2.py -v
+sha256: 31ce86c38775120b071fc46970e86fb93d4347a32050092cd00cdbca3278bad9
+truncated: false
+
+[ADP OBSERVATION current=19 original=54 source=environment]
+name: Bash:toolu_018jK1AVY5hhChbDqxxw14p2:error
+excerpt:
+Exit code 1
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-5.4.1.dev522+g7b77fc086, py-1.10.0, pluggy-0.13.1 -- /opt/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: ./swebench_9_15/testbed, configfile: pyproject.toml
+plugins: anyio-3.6.2
+collecting ... collected 2 items
+
+test_module_1.py::test_should_skip SKIPPED                               [ 50%]
+test_module_2.py::test_should_not_skip FAILED                            [100%]
+
+=================================== FAILURES ===================================
+_____________________________ test_should_not_skip _____________________________
+
+    @pytest.mark.skipif("skip")
+    def test_should_not_skip():
+>       assert False
+E       assert False
+
+test_module_2.py:7: AssertionError
+=========================== short test summary info ============================
+FAILED test_module_2.py::test_should_not_skip - assert False
+========================= 1 failed, 1 skipped in 0.02s =========================
+sha256: abc4139a57bb3770007666a82d53a44981b2256d49454f799d833e1d7c25c829
+truncated: false

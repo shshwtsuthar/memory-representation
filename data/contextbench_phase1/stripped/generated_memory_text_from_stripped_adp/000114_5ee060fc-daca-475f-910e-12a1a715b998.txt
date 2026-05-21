@@ -1,0 +1,287 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 5ee060fc-daca-475f-910e-12a1a715b998
+- repo: django/django
+- instance_id: django__django-11848
+- base_commit: f0adf3b9b7a19cdee05368ff0c0c2d087f011180
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+django.utils.http.parse_http_date two digit year check is incorrect
+Description
+
+        (last modified by Ad Timmering)
+
+RFC 850 does not mention this, but in RFC 7231 (and there's something similar in RFC 2822), there's the following quote:
+Recipients of a timestamp value in rfc850-date format, which uses a
+two-digit year, MUST interpret a timestamp that appears to be more
+than 50 years in the future as representing the most recent year in
+the past that had the same last two digits.
+Current logic is hard coded to consider 0-69 to be in 2000-2069, and 70-99 to be 1970-1999, instead of comparing versus the current year.
+
+FILES INSPECTED
+---------------
+- django/utils/http.py [Read: 2]
+- tests/utils_tests/test_http.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Glob glob='**/utils/http.py'
+- [2] Grep pattern='parse_http_date'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find . -name "http.py" -type f | head -20
+- [diagnostic] ls -la testbed 2>&1 || echo "Testbed not found"
+- [diagnostic] find testbed -name "http.py" -path "*/utils/*" | head -5
+- [test] python test_issue.py
+- [other/reproduction] python --version && python3 --version
+- [test] python3 test_issue.py
+- [diagnostic] find testbed -name "*test*http*.py" -path "*/tests/*" | grep -E "(test_|tests\.)" | head -5
+- [test] cd testbed && python -m pytest tests/utils_tests/test_http.py::HttpDateProcessingTests -v
+- [test] cd testbed && python tests/runtests.py utils_tests.test_http.HttpDateProcessingTests -v2
+- [test] cd testbed && python3 tests/runtests.py utils_tests.test_http.HttpDateProcessingTests -v2
+- [test] python3 test_rfc7231.py
+- [test] cd ./swebench_9_15 && python3 test_rfc7231.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #5]
+  testbed/django/utils/http.py
+- [Read Result after action #7]
+       1→import base64
+       2→import calendar
+       3→import datetime
+       4→import re
+       5→import unicodedata
+       6→import warnings
+       7→from binascii import Error as BinasciiError
+       8→from email.utils import formatdate
+       9→from urllib.parse import (
+      10→    ParseResult, SplitResult, _coerce_args, _splitnetloc, _splitparams, quote,
+      11→    quote_plus, scheme_chars, unquote, unquote_plus,
+      12→    urlencode as original_urlencode, uses_params,
+      13→)
+      14→
+      15→from django.core.exceptions import TooManyFieldsSent
+      16→from django.utils.datastructures import MultiValueDict
+      17→from django.utils.deprecation import RemovedInDjango40Warning
+      18→from django.utils.functional import keep_lazy_text
+      19→
+      20→# based on RFC 7232, Appendix C
+      21→ETAG_MATCH = re.compile(r'''
+      22→    \A(      # start of string and capture group
+      23→    (?:W/)?  # optional weak indicator
+      24→    "        # opening quote
+      25→    [^"]*    # any sequence of non-quote characters
+      26→    "        # end quote
+      27→    )\Z      # end of string and capture group
+      28→''', re.X)
+      29→
+      30→MONTHS = 'jan feb mar apr may jun jul aug sep oct nov dec'.split()
+      3
+  [... truncated ...]
+- [Test Output after action #10]
+  Exit code 1
+    File "test_issue.py", line 21
+      print(f"Current year: {current_year}")
+                                          ^
+  SyntaxError: invalid syntax
+- [Test Output after action #14]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+  Current year: 2025
+
+  ✗ Two-digit year 25 parsed as 2001, expected 2025
+  ✗ Error parsing two-digit year 75: 'Sunday, 75-Jan-01 00:00:00 GMT' is not a valid date
+  ✗ Error parsing two-digit year 76: 'Sunday, 76-Jan-01 00:00:00 GMT' is not a valid date
+
+  Testing specific edge cases:
+  ✗ Error parsing year '69': 'Sunday, 69-Jan-01 00:00:00 GMT' is not a valid date
+  ✗ Error parsing year '70': 'Sunday, 70-Jan-01 00:00:00 GMT' is not a valid date
+
+  Some tests failed! ✗
+- [Read Result after action #16]
+      36→__T = r'(?P<hour>\d{2}):(?P<min>\d{2}):(?P<sec>\d{2})'
+      37→RFC1123_DATE = re.compile(r'^\w{3}, %s %s %s %s GMT$' % (__D, __M, __Y, __T))
+      38→RFC850_DATE = re.compile(r'^\w{6,9}, %s-%s-%s %s GMT$' % (__D, __M, __Y2, __T))
+      39→ASCTIME_DATE = re.compile(r'^\w{3} %s %s %s %s$' % (__M, __D2, __T, __Y))
+      40→
+
+- [Diagnostic Output after action #18]
+  testbed/tests/utils_tests/test_http.py
+  testbed/tests/sitemaps_tests/test_http.py
+  testbed/tests/sitemaps_tests/test_https.py
+  testbed/tests/servers/test_basehttp.py
+- [Read Result after action #20]
+       1→import unittest
+       2→from datetime import datetime
+       3→
+       4→from django.test import SimpleTestCase, ignore_warnings
+       5→from django.utils.datastructures import MultiValueDict
+       6→from django.utils.deprecation import RemovedInDjango40Warning
+       7→from django.utils.http import (
+       8→    base36_to_int, escape_leading_slashes, http_date, int_to_base36,
+       9→    is_safe_url, is_same_domain, parse_etags, parse_http_date, quote_etag,
+      10→    url_has_allowed_host_and_scheme, urlencode, urlquote, urlquote_plus,
+      11→    urlsafe_base64_decode, urlsafe_base64_encode, urlunquote, urlunquote_plus,
+      12→)
+      13→
+      14→
+      15→class URLEncodeTests(SimpleTestCase):
+      16→    cannot_encode_none_msg = (
+      17→        "Cannot encode None for key 'a' in a query string. Did you mean to "
+      18→        "pass an empty string or omit the value?"
+      19→    )
+      20→
+      21→    def test_tuples(self):
+      22→        self.assertEqual(urlencode((('a', 1), ('b', 2), ('c', 3))), 'a=1&b=2&c=3')
+      23→
+      24→    def test_dict(self):
+      25→        result = urlencode({'a': 1, 'b': 2, 'c': 3})
+      26→        # Dictionaries are treated as unordered.
+      27→        self.asser
+  [... truncated ...]
+- [Test Output after action #22]
+  Exit code 1
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #24]
+  Exit code 1
+    File "tests/runtests.py", line 18
+      ) from e
+           ^
+  SyntaxError: invalid syntax
+- [Test Output after action #26]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Importing application utils_tests
+  Skipping setup of unused database(s): default, other.
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  test_http_date (utils_tests.test_http.HttpDateProcessingTests) ... ok
+  test_parsing_asctime (utils_tests.test_http.HttpDateProcessingTests) ... ok
+  test_parsing_rfc1123 (utils_tests.test_http.HttpDateProcessingTests) ... ok
+  test_parsing_rfc850 (utils_tests.test_http.HttpDateProcessingTests) ... ok
+  test_parsing_year_less_than_70 (utils_tests.test_http.HttpDateProcessingTests) ... ok
+
+  ----------------------------------------------------------------------
+  Ran 5 tests in 0.000s
+
+  OK
+- [Test Output after action #29]
+  Exit code 2
+  python3: can't open file 'test_rfc7231.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #31]
+  Current year: 2025
+
+  Test 1: Two-digit year '94'
+    Expected: 1994
+    Got: 1994
+    ✓ PASS
+
+  Test 2: Two-digit year '25' (current year)
+    Expected: 2025
+    Got: 2025
+    ✓ PASS
+
+  Test 3: Two-digit year '75' (50 years in future)
+    Expected: 2075
+    Got: 2075
+    ✓ PASS
+
+  Test 4: Two-digit year '76' (51 years in future)
+    Expected: 1976 (wrapped to past)
+    Got: 1976
+    ✓ PASS
+
+  All RFC 7231 tests passed! ✓
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #33]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Importing application utils_tests
+  Skipping setup of unused database(s): default, other.
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  test_http_date (utils_tests.test_http.HttpDateProcessingTests) ... ok
+  test_parsing_asctime (utils_tests.test_http.HttpDateProcessingTests) ... ok
+  test_parsing_rfc1123 (utils_tests.test_http.HttpDateProcessingTests) ... ok
+  test_parsing_rfc850 (utils_tests.test_http.HttpDateProcessingTests) ... ok
+  test_parsing_year_less_than_70 (utils_tests.test_http.HttpDateProcessingTests) ... ok
+
+  ----------------------------------------------------------------------
+  Ran 5 tests in 0.000s
+
+  OK
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/utils/http.py
+  Tool: Edit action #9
+  old_text_sha256: 571317d82375e4a3a404abd227e523b6fd11f1fad9992fca63556174c5d4145b
+  new_text_sha256: 2205ce4a86be69d1d4a609c344b4db26ee4a8fca1efe373822b2e8779ac92cf4
+- swebench_9_15/test_rfc7231.py
+  Tool: Write action #28
+  new_text_sha256: 53c80926d426bd139b75fe1b3bd0097e2811e709c820e24d1980eb00b367a45e
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

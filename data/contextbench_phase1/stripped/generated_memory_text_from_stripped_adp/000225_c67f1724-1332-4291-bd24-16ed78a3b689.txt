@@ -1,0 +1,241 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: c67f1724-1332-4291-bd24-16ed78a3b689
+- repo: sympy/sympy
+- instance_id: sympy__sympy-24909
+- base_commit: d3b4158dea271485e3daa11bf82e69b8dab348ce
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Bug with milli prefix
+What happened:
+```
+In [1]: from sympy.physics.units import milli, W
+In [2]: milli*W == 1
+Out[2]: True
+In [3]: W*milli
+Out[3]: watt*Prefix(milli, m, -3, 10)
+```
+What I expected to happen: milli*W should evaluate to milli watts / mW
+
+`milli*W` or more generally `milli` times some unit evaluates to the number 1. I have tried this with Watts and Volts, I'm not sure what other cases this happens. I'm using sympy version 1.11.1-1 on Arch Linux with Python 3.10.9. If you cannot reproduce I would be happy to be of any assitance.
+
+FILES INSPECTED
+---------------
+- sympy/physics/units/prefixes.py [Read: 2]
+- sympy/physics/units/quantities.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+(none)
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction] cd testbed && python3 -c "from sympy.physics.units import milli, W; print('milli*W ==', milli*W); print('milli*W == 1:', milli*W == 1); print('W*milli ==', W*milli)"
+- [diagnostic] find testbed/sympy/physics/units -name "*.py" | grep -E "(prefix|unit)" | head -20
+- [diagnostic] find testbed -type d -name "units" | head -5
+- [diagnostic] find sympy -type d -name "units" | head -5
+- [diagnostic] ls -la sympy/physics/units/
+- [other/reproduction] python3 -c "from sympy.physics.units import W; print('W.scale_factor:', W.scale_factor)"
+- [other/reproduction] python3 -c "from sympy.physics.units import milli, W; print('milli.scale_factor:', milli.scale_factor); print('W.scale_factor:', W.scale_factor); print('fact:', milli.scale_factor * W.scale_factor)"
+- [diagnostic] grep -n "__rmul__\|__mul__" sympy/physics/units/quantities.py
+- [diagnostic] grep -n "__rmul__" sympy/physics/units/prefixes.py
+- [other/reproduction] python3 -c "from sympy.physics.units import milli, W; print('milli*W ==', milli*W); print('milli*W == 1:', milli*W == 1); print('W*milli ==', W*milli)"
+- [other/reproduction] python3 -c "
+from sympy.physics.units import milli, W, V, kilo, mega
+print('Testing milli prefix:')
+print('  milli*W =', milli*W)
+print('  milli*V =', milli*V)
+print()
+print('Testing other prefixes:')
+print('  kilo*W =', kilo*W)
+print('  mega*V =', mega*V)
+print()
+print('Testing prefix combinations:')
+print('  milli*kilo =', milli*kilo)
+print('  kilo*milli =', kilo*milli)
+"
+- [other/reproduction] python3 -c "
+from sympy.physics.units import milli, kilo
+# Test if division has the same issue
+# kilo/milli should be mega (10^3 / 10^-3 = 10^6)
+# But if there's a unit with scale_factor that creates fact=1, it would fail
+print('kilo/milli =', kilo/milli)
+print('milli/kilo =', milli/kilo)
+"
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #5]
+  sympy/physics/units
+- [Diagnostic Output after action #7]
+  total 152
+  drwxr-xr-x@ 12 user  staff    384 19 Dec 04:38 .
+  drwxr-xr-x@ 21 user  staff    672 19 Dec 04:38 ..
+  -rw-r--r--@  1 user  staff  12386 19 Dec 04:38 __init__.py
+  drwxr-xr-x@  8 user  staff    256 19 Dec 04:38 __pycache__
+  drwxr-xr-x@  6 user  staff    192 19 Dec 04:38 definitions
+  -rw-r--r--@  1 user  staff  20911 19 Dec 04:38 dimensions.py
+  -rw-r--r--@  1 user  staff   6224 19 Dec 04:38 prefixes.py
+  -rw-r--r--@  1 user  staff   4671 19 Dec 04:38 quantities.py
+  drwxr-xr-x@ 10 user  staff    320 19 Dec 04:38 systems
+  drwxr-xr-x@ 10 user  staff    320 19 Dec 04:38 tests
+  -rw-r--r--@  1 user  staff   7618 19 Dec 04:38 unitsystem.py
+  -rw-r--r--@  1 user  staff   9602 19 Dec 04:38 util.py
+- [Read Result after action #9]
+       1→"""
+       2→Module defining unit prefixe class and some constants.
+       3→
+       4→Constant dict for SI and binary prefixes are defined as PREFIXES and
+       5→BIN_PREFIXES.
+       6→"""
+       7→from sympy.core.expr import Expr
+       8→from sympy.core.sympify import sympify
+       9→
+      10→
+      11→class Prefix(Expr):
+      12→    """
+      13→    This class represent prefixes, with their name, symbol and factor.
+      14→
+      15→    Prefixes are used to create derived units from a given unit. They should
+      16→    always be encapsulated into units.
+      17→
+      18→    The factor is constructed from a base (default is 10) to some power, and
+      19→    it gives the total multiple or fraction. For example the kilometer km
+      20→    is constructed from the meter (factor 1) and the kilo (10 to the power 3,
+      21→    i.e. 1000). The base can be changed to allow e.g. binary prefixes.
+      22→
+      23→    A prefix multiplied by something will always return the product of this
+      24→    other object times the factor, except if the other object:
+      25→
+      26→    - is a prefix and they can be combined into a new prefix;
+      27→    - defines multiplication with prefixes (which is the case for the
+  [... truncated ...]
+- [Read Result after action #11]
+       1→"""
+       2→Physical quantities.
+       3→"""
+       4→
+       5→from sympy.core.expr import AtomicExpr
+       6→from sympy.core.symbol import Symbol
+       7→from sympy.core.sympify import sympify
+       8→from sympy.physics.units.dimensions import _QuantityMapper
+       9→from sympy.physics.units.prefixes import Prefix
+      10→
+      11→
+      12→class Quantity(AtomicExpr):
+      13→    """
+      14→    Physical quantity: can be a unit of measure, a constant or a generic quantity.
+      15→    """
+      16→
+      17→    is_commutative = True
+      18→    is_real = True
+      19→    is_number = False
+      20→    is_nonzero = True
+      21→    is_physical_constant = False
+      22→    _diff_wrt = True
+      23→
+      24→    def __new__(cls, name, abbrev=None,
+      25→                latex_repr=None, pretty_unicode_repr=None,
+      26→                pretty_ascii_repr=None, mathml_presentation_repr=None,
+      27→                is_prefixed=False,
+      28→                **assumptions):
+      29→
+      30→        if not isinstance(name, Symbol):
+      31→            name = Symbol(name)
+      32→
+      33→        if abbrev is None:
+      34→            abbrev = name
+      35→        elif isinstance(abbrev, str):
+      36→            abbrev
+  [... truncated ...]
+- [Read Result after action #24]
+      99→    def __truediv__(self, other):
+     100→        if not hasattr(other, "scale_factor"):
+     101→            return super().__truediv__(other)
+     102→
+     103→        fact = self.scale_factor / other.scale_factor
+     104→
+     105→        if fact == 1:
+     106→            return 1
+     107→        elif isinstance(other, Prefix):
+     108→            for p in PREFIXES:
+     109→                if PREFIXES[p].scale_factor == fact:
+     110→                    return PREFIXES[p]
+     111→            return fact
+     112→
+     113→        return self.scale_factor / other
+
+- [Test Output after action #29]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pyproject.toml
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 4 items
+
+  sympy/physics/units/tests/test_prefixes.py::test_prefix_operations PASSED [ 25%]
+  sympy/physics/units/tests/test_prefixes.py::test_prefix_unit PASSED      [ 50%]
+  sympy/physics/units/tests/test_prefixes.py::test_bases PASSED            [ 75%]
+  sympy/physics/units/tests/test_prefixes.py::test_repr PASSED             [100%]
+
+  ============================== 4 passed in 0.45s ===============================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module
+  [... truncated ...]
+- [Diagnostic Output after action #33]
+  milli*W = watt/1000
+  milli*V = volt/1000
+  kilo*W = 1000*watt
+  mega*V = 1000000*volt
+
+  All tests passed!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/physics/units/prefixes.py
+  Tool: Edit action #19
+  old_text_sha256: f544b890e990fc47c59b7fa9ed32eddf9c80b26f8deddb8e533eeebda28a8f09
+  new_text_sha256: 232b143ba430b058430bb9875142e1db96bc2b39ae224aab7e1cf84c4b773f73
+- sympy/physics/units/prefixes.py
+  Tool: Edit action #28
+  old_text_sha256: ffaa18ef71f9c31009f7c955bd9a301e4bce3fb04f2ce7aeb70660ec3aafe450
+  new_text_sha256: 4dc5fa21271894fed3e0c27615779d5f9e65a7656bc89a7651f4f76d831012f6
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

@@ -1,0 +1,395 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 0c18eb7c-4d20-437d-b84d-eba8c511ef4b
+- repo: django/django
+- instance_id: django__django-13401
+- base_commit: 453967477e3ddae704cd739eac2449c0e13d464c
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Abstract model field should not be equal across models
+Description
+
+Consider the following models:
+class A(models.Model):
+    class Meta:
+        abstract = True
+    myfield = IntegerField()
+class B(A):
+    pass
+class C(A):
+    pass
+If I pull the fields of B and C into a shared set, one will be de-duplicated away, because they compare as equal. I found this surprising, though in practice using a list was sufficient for my need. The root of the issue is that they compare equal, as fields only consider self.creation_counter when comparing for equality.
+len({B._meta.get_field('myfield'), C._meta.get_field('myfield')}) == 1
+B._meta.get_field('myfield') == C._meta.get_field('myfield')
+We should adjust __eq__ so that if the field.model is different, they will compare unequal. Similarly, it is probably wise to adjust __hash__ and __lt__ to match.
+When adjusting __lt__, it may be wise to order first by self.creation_counter so that cases not affected by this equality collision won't be re-ordered. In my experimental branch, there was one test that broke if I ordered them by model first.
+I brought this up on IRC django-dev to check my intuitions, and those conversing with me there seemed to agree that the current behavior is not intuitive.
+
+FILES INSPECTED
+---------------
+- django/db/models [Grep: 1]
+- django/db/models/fields/__init__.py [Grep: 4, Read: 5]
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='**/fields/__init__.py'
+- [3] Glob glob='**/models/fields.py'
+- [4] Glob glob='**/fields.py'
+- [7] Grep pattern='class Field' path='django/db/models'
+- [9] Grep pattern='def __eq__|def __hash__|def __lt__' path='django/db/models/fields/__init__.py'
+- [13] Grep pattern='self\\.model' path='django/db/models/fields/__init__.py'
+- [26] Grep pattern='^@total_ordering|^class Field' path='django/db/models/fields/__init__.py'
+- [32] Grep pattern='self\\.model\\s*=' path='django/db/models/fields/__init__.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la testbed 2>/dev/null || echo "testbed directory does not exist"
+- [test] cd testbed && python test_issue.py
+- [test] cd testbed && python test_issue.py
+- [test] cd testbed && python3 test_issue.py
+- [test] cd testbed && python3 test_issue.py
+- [diagnostic] cd testbed && grep -n "^@total_ordering\|^class Field" django/db/models/fields/__init__.py | head -20
+- [diagnostic] grep -n "^@total_ordering\|^class Field" ./swebench_9_15/testbed/django/db/models/fields/__init__.py | head -20
+- [test] python3 test_issue.py
+- [test] python3 -m pytest tests/model_fields/test_field.py -xvs 2>&1 | head -100
+- [diagnostic] find ./swebench_9_15/testbed -type d -name "tests" | head -5
+- [diagnostic] ls ./swebench_9_15/testbed/tests/ | grep -i field | head -10
+- [test] python3 ./swebench_9_15/testbed/tests/runtests.py model_fields --verbosity=2 2>&1 | tail -100
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- RuntimeError: Model class __main__.B doesn't declare an explicit app_label and isn't in an application in INSTALLED_APPS.
+- ERROR: file or directory not found: tests/model_fields/test_field.py
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #5]
+  testbed directory does not exist
+- [Grep Result after action #7]
+  Found 4 files
+  testbed/django/db/models/lookups.py
+  testbed/django/db/models/fields/mixins.py
+  testbed/django/db/models/fields/files.py
+  testbed/django/db/models/fields/__init__.py
+- [Grep Result after action #9]
+  516:    def __eq__(self, other):
+  522:    def __lt__(self, other):
+  528:    def __hash__(self):
+- [Read Result after action #11]
+     515→
+     516→    def __eq__(self, other):
+     517→        # Needed for @total_ordering
+     518→        if isinstance(other, Field):
+     519→            return self.creation_counter == other.creation_counter
+     520→        return NotImplemented
+     521→
+     522→    def __lt__(self, other):
+     523→        # This is needed because bisect does not take a comparison function.
+     524→        if isinstance(other, Field):
+     525→            return self.creation_counter < other.creation_counter
+     526→        return NotImplemented
+     527→
+     528→    def __hash__(self):
+     529→        return hash(self.creation_counter)
+     530→
+     531→    def __deepcopy__(self, memodict):
+     532→        # We don't have to deepcopy very much here, since most things are not
+     533→        # intended to be altered after initial creation.
+     534→        obj = copy.copy(self)
+
+- [Read Result after action #14]
+     760→        for every subclass of cls, even if cls is not an abstract model.
+     761→        """
+     762→        self.set_attributes_from_name(name)
+     763→        self.model = cls
+     764→        cls._meta.add_field(self, private=private_only)
+     765→        if self.column:
+     766→            # Don't override classmethods with the descriptor. This means that
+     767→            # if you have a classmethod and a field with the same name, then
+     768→            # such fields can't be deferred (we don't have a check for this).
+     769→            if not getattr(cls, self.attname, None):
+     770→                setattr(cls, self.attname, self.descriptor_class(self))
+     771→        if self.choices is not None:
+     772→            # Don't override a get_FOO_display() method defined explicitly on
+     773→            # this class, but don't check methods derived from inheritance, to
+     774→            # allow overriding inherited choices. For more complex inheritance
+     775→            # structures users should override contribute_to_class().
+     776→            if 'get_%s_display' % self.name not in cls.__dict__:
+     777→                setattr(
+     778→                    cls,
+     779→
+  [... truncated ...]
+- [Test Output after action #16]
+  Exit code 1
+    File "test_issue.py", line 43
+      print(f"B._meta.get_field('myfield') = {b_field}")
+                                                      ^
+  SyntaxError: invalid syntax
+- [Test Output after action #18]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 3, in <module>
+      import django
+    File "./swebench_9_15/testbed/django/__init__.py", line 1, in <module>
+      from django.utils.version import get_version
+    File "./swebench_9_15/testbed/django/utils/version.py", line 71, in <module>
+      @functools.lru_cache()
+  AttributeError: 'module' object has no attribute 'lru_cache'
+- [Test Output after action #20]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "test_issue.py", line 32, in <module>
+      class B(A):
+    File "./swebench_9_15/testbed/django/db/models/base.py", line 113, in __new__
+      raise RuntimeError(
+  RuntimeError: Model class __main__.B doesn't declare an explicit app_label and isn't in an application in INSTALLED_APPS.
+- [Test Output after action #22]
+  Testing field equality issue:
+  B._meta.get_field('myfield'): test.B.myfield
+  C._meta.get_field('myfield'): test.C.myfield
+  B.myfield.model: <class '__main__.B'>
+  C.myfield.model: <class '__main__.C'>
+  B.myfield.creation_counter: 46
+  C.myfield.creation_counter: 46
+
+  B._meta.get_field('myfield') == C._meta.get_field('myfield'): True
+  Expected: False (fields from different models should not be equal)
+
+  len({B._meta.get_field('myfield'), C._meta.get_field('myfield')}): 1
+  Expected: 2 (both fields should be in the set)
+
+  hash(B._meta.get_field('myfield')): 46
+  hash(C._meta.get_field('myfield')): 46
+  Expected: Different hashes for fields from different models
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Read Result after action #24]
+       1→import collections.abc
+       2→import copy
+       3→import datetime
+       4→import decimal
+       5→import operator
+       6→import uuid
+       7→import warnings
+       8→from base64 import b64decode, b64encode
+       9→from functools import partialmethod, total_ordering
+      10→
+      11→from django import forms
+      12→from django.apps import apps
+      13→from django.conf import settings
+      14→from django.core import checks, exceptions, validators
+      15→from django.db import connection, connections, router
+      16→from django.db.models.constants import LOOKUP_SEP
+      17→from django.db.models.query_utils import DeferredAttribute, RegisterLookupMixin
+      18→from django.utils import timezone
+      19→from django.utils.datastructures import DictWrapper
+      20→from django.utils.dateparse import (
+      21→    parse_date, parse_datetime, parse_duration, parse_time,
+      22→)
+      23→from django.utils.duration import duration_microseconds, duration_string
+      24→from django.utils.functional import Promise, cached_property
+      25→from django.utils.ipv6 import clean_ipv6_address
+      26→from django.utils.itercompat import is_iterable
+      27→from django.utils.text import capfirst
+      28→from django.utils.tr
+  [... truncated ...]
+- [Diagnostic Output after action #28]
+  84:@total_ordering
+  85:class Field(RegisterLookupMixin):
+- [Read Result after action #30]
+     100→        'invalid_choice': _('Value %(value)r is not a valid choice.'),
+     101→        'null': _('This field cannot be null.'),
+     102→        'blank': _('This field cannot be blank.'),
+     103→        'unique': _('%(model_name)s with this %(field_label)s '
+     104→                    'already exists.'),
+     105→        # Translators: The 'lookup_type' is one of 'date', 'year' or 'month'.
+     106→        # Eg: "Title must be unique for pub_date year"
+     107→        'unique_for_date': _("%(field_label)s must be unique for "
+     108→                             "%(date_field_label)s %(lookup_type)s."),
+     109→    }
+     110→    system_check_deprecated_details = None
+     111→    system_check_removed_details = None
+     112→
+     113→    # Field flags
+     114→    hidden = False
+     115→
+     116→    many_to_many = None
+     117→    many_to_one = None
+     118→    one_to_many = None
+     119→    one_to_one = None
+     120→    related_model = None
+     121→
+     122→    descriptor_class = DeferredAttribute
+     123→
+     124→    # Generic field type description, usually overridden by subclasses
+     125→    def _description(self):
+     126→        return _('Field of type: %(field_type)s') % {
+     127→            'fiel
+  [... truncated ...]
+- [Grep Result after action #32]
+  763:        self.model = cls
+
+  [Showing results with pagination = limit: 10, offset: 0]
+- [Read Result after action #34]
+     131→    def __init__(self, verbose_name=None, name=None, primary_key=False,
+     132→                 max_length=None, unique=False, blank=False, null=False,
+     133→                 db_index=False, rel=None, default=NOT_PROVIDED, editable=True,
+     134→                 serialize=True, unique_for_date=None, unique_for_month=None,
+     135→                 unique_for_year=None, choices=None, help_text='', db_column=None,
+     136→                 db_tablespace=None, auto_created=False, validators=(),
+     137→                 error_messages=None):
+     138→        self.name = name
+     139→        self.verbose_name = verbose_name  # May be set by set_attributes_from_name
+     140→        self._verbose_name = verbose_name  # Store original for deconstruction
+     141→        self.primary_key = primary_key
+     142→        self.max_length, self._unique = max_length, unique
+     143→        self.blank, self.null = blank, null
+     144→        self.remote_field = rel
+     145→        self.is_relation = self.remote_field is not None
+     146→        self.default = default
+     147→        self.editable = editable
+     148→        self.serialize = serialize
+     149→        self.unique_for_date = unique_for_date
+     150
+  [... truncated ...]
+- [Test Output after action #37]
+  Testing field equality issue:
+  B._meta.get_field('myfield'): test.B.myfield
+  C._meta.get_field('myfield'): test.C.myfield
+  B.myfield.model: <class '__main__.B'>
+  C.myfield.model: <class '__main__.C'>
+  B.myfield.creation_counter: 46
+  C.myfield.creation_counter: 46
+
+  B._meta.get_field('myfield') == C._meta.get_field('myfield'): False
+  Expected: False (fields from different models should not be equal)
+
+  len({B._meta.get_field('myfield'), C._meta.get_field('myfield')}): 2
+  Expected: 2 (both fields should be in the set)
+
+  hash(B._meta.get_field('myfield')): 8118327226035883717
+  hash(C._meta.get_field('myfield')): 9043214173936444269
+  Expected: Different hashes for fields from different models
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #39]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 0 items
+
+  ============================ no tests ran in 0.24s =============================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ERROR: file or directory not found: tests/model_fields/test_field.py
+- [Diagnostic Output after action #41]
+  ./swebench_9_15/testbed/tests
+  ./swebench_9_15/testbed/tests/forms_tests/tests
+  ./swebench_9_15/testbed/tests/view_tests/tests
+  ./swebench_9_15/testbed/tests/test_runner_apps/sample/tests
+- [Diagnostic Output after action #43]
+  distinct_on_fields
+  field_deconstruction
+  field_defaults
+  field_subclassing
+  model_fields
+  update_only_fields
+- [Test Output after action #45]
+  Field.formfield() sets disabled for fields with choices. ... ok
+  test_show_hidden_initial (model_fields.tests.BasicFieldTests)
+  Fields with choices respect show_hidden_initial as a kwarg to ... ok
+  test_check (model_fields.tests.ChoicesTests) ... ok
+  test_choices (model_fields.tests.ChoicesTests) ... ok
+  test_flatchoices (model_fields.tests.ChoicesTests) ... ok
+  test_formfield (model_fields.tests.ChoicesTests) ... ok
+  test_invalid_choice (model_fields.tests.ChoicesTests) ... ok
+  test_blank_in_choices (model_fields.tests.GetChoicesTests) ... ok
+  test_blank_in_grouped_choices (model_fields.tests.GetChoicesTests) ... ok
+  test_empty_choices (model_fields.tests.GetChoicesTests) ... ok
+  test_lazy_strings_not_evaluated (model_fields.tests.GetChoicesTests) ... ok
+  test_choices_and_field_display (model_fields.tests.GetFieldDisplayTests)
+  get_choices() interacts with get_FIELD_display() to return the expected ... ok
+  test_empty_iterator_choices (model_fields.tests.GetFieldDisplayTests)
+  get_choices() works with empty iterators. ... ok
+  test_get_FIELD_display_translated (model_fields.tests.GetFieldDisplayTests)
+  A translated display value is coerced to str. ... ok
+  test_iterator_choices (model_fields.tests.Get
+  [... truncated ...]
+- [Test Output after action #47]
+  Remainder of file ignored
+  Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+  test_unique (model_inheritance.tests.InheritanceUniqueTests) ... ok
+  test_unique_together (model_inheritance.tests.InheritanceUniqueTests) ... ok
+  test_exclude_inherited_on_null (model_inheritance.tests.ModelInheritanceDataTests) ... ok
+  test_filter_inherited_model (model_inheritance.tests.ModelInheritanceDataTests) ... ok
+  test_filter_inherited_on_null (model_inheritance.tests.ModelInheritanceDataTests) ... ok
+  test_filter_on_parent_returns_object_of_parent_type (model_inheritance.tests.ModelInheritanceDataTests) ... ok
+  test_inherited_does_not_exist_exception (model_inheritance.tests.ModelInheritanceDataTests) ... ok
+  test_inherited_multiple_objects_returned_exception (model_inheritance.tests.ModelInheritanceDataTests) ... ok
+  test_parent_cache_reuse (model_inheritance.tests.ModelInheritanceDataTests) ... ok
+  test_parent_child_one_to_one_link (model_inheritance.tests.ModelInheritanceDataTests) ... ok
+  test_parent_child_one_to_one_link_on_nonrelated_objects (model_inheritance.tests.ModelInheritanceDataTests) ... ok
+  test_parent_fields_available_for_filtering_in_child_mod
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/models/fields/__init__.py
+  Tool: Edit action #36
+  old_text_sha256: ed850ff98734b7fb5af85b5cb400e3e5e062307691e6a9d3cbdea6989a5b504c
+  new_text_sha256: aa29a4e6e456f7b5749a2d37c2cee1d9cc04fef3612f49c1aac027f8d9895713
+- test_comprehensive.py
+  Tool: Write action #49
+  new_text_sha256: a154480f8f0a7c4ccc055bd0a6a699c9bb1defa89057ca20f8cf099a3304d7f3
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

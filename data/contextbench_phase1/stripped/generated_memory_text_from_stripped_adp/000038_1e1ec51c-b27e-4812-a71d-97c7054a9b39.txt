@@ -1,0 +1,308 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 1e1ec51c-b27e-4812-a71d-97c7054a9b39
+- repo: django/django
+- instance_id: django__django-12286
+- base_commit: 979f61abd322507aafced9627702362e541ec34e
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+translation.E004 shouldn't be raised on sublanguages when a base language is available.
+Description
+
+According to Django documentation:
+If a base language is available but the sublanguage specified is not, Django uses the base language. For example, if a user specifies de-at (Austrian German) but Django only has de available, Django uses de.
+However, when using Django 3.0.2, if my settings.py has
+LANGUAGE_CODE = "de-at"
+I get this error message:
+SystemCheckError: System check identified some issues:
+ERRORS:
+?: (translation.E004) You have provided a value for the LANGUAGE_CODE setting that is not in the LANGUAGES setting.
+If using
+LANGUAGE_CODE = "es-ar"
+Django works fine (es-ar is one of the translations provided out of the box).
+
+FILES INSPECTED
+---------------
+- django/core/checks/translation.py [Read: 1]
+- tests/check_framework/test_translation.py [Read: 2]
+- django/utils/translation/trans_real.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Grep pattern='translation\\.E004'
+- [2] Grep pattern='LANGUAGE_CODE setting that is not in the LANGUAGES'
+- [4] Grep pattern='translation\\.E004' path='testbed'
+- [5] Grep pattern='LANGUAGE_CODE setting that is not in the LANGUAGES' path='testbed'
+- [6] Grep pattern='translation\\.E004'
+- [8] Grep pattern='LANGUAGE_CODE setting that is not in the LANGUAGES'
+- [14] Grep pattern='def get_supported_language_variant'
+- [16] Grep pattern='base language'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [test] python -m pytest tests/check_framework/test_translation.py -xvs
+- [test] python tests/runtests.py check_framework.test_translation -v 2
+- [test] python3 tests/runtests.py check_framework.test_translation -v 2
+- [diagnostic] pwd && ls -la tests/runtests.py 2>&1 | head -5
+- [test] cd ./swebench_9_15/testbed && python3 tests/runtests.py check_framework.test_translation -v 2
+- [test] python3 test_issue.py
+- [test] python3 test_issue_negative.py
+- [test] python3 tests/runtests.py check_framework.test_translation.TranslationCheckTests -v 2
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #6]
+  docs/ref/checks.txt:471:* **translation.E004**: You have provided a value for the
+  django/core/checks/translation.py:24:    id='translation.E004',
+  tests/check_framework/test_translation.py:85:                Error(msg, id='translation.E004'),
+- [Grep Result after action #8]
+  No matches found
+- [Read Result after action #10]
+       1→from django.conf import settings
+       2→from django.utils.translation.trans_real import language_code_re
+       3→
+       4→from . import Error, Tags, register
+       5→
+       6→E001 = Error(
+       7→    'You have provided an invalid value for the LANGUAGE_CODE setting: {!r}.',
+       8→    id='translation.E001',
+       9→)
+      10→
+      11→E002 = Error(
+      12→    'You have provided an invalid language code in the LANGUAGES setting: {!r}.',
+      13→    id='translation.E002',
+      14→)
+      15→
+      16→E003 = Error(
+      17→    'You have provided an invalid language code in the LANGUAGES_BIDI setting: {!r}.',
+      18→    id='translation.E003',
+      19→)
+      20→
+      21→E004 = Error(
+      22→    'You have provided a value for the LANGUAGE_CODE setting that is not in '
+      23→    'the LANGUAGES setting.',
+      24→    id='translation.E004',
+      25→)
+      26→
+      27→
+      28→@register(Tags.translation)
+      29→def check_setting_language_code(app_configs, **kwargs):
+      30→    """Error if LANGUAGE_CODE setting is invalid."""
+      31→    tag = settings.LANGUAGE_CODE
+      32→    if not isinstance(tag, str) or not language_code_re.match(tag):
+      33→        return [Error(E001.msg.format(tag), id=E001.id)]
+      3
+  [... truncated ...]
+- [Read Result after action #12]
+       1→from django.core.checks import Error
+       2→from django.core.checks.translation import (
+       3→    check_language_settings_consistent, check_setting_language_code,
+       4→    check_setting_languages, check_setting_languages_bidi,
+       5→)
+       6→from django.test import SimpleTestCase
+       7→
+       8→
+       9→class TranslationCheckTests(SimpleTestCase):
+      10→
+      11→    def setUp(self):
+      12→        self.valid_tags = (
+      13→            'en',              # language
+      14→            'mas',             # language
+      15→            'sgn-ase',         # language+extlang
+      16→            'fr-CA',           # language+region
+      17→            'es-419',          # language+region
+      18→            'zh-Hans',         # language+script
+      19→            'ca-ES-valencia',  # language+region+variant
+      20→            # FIXME: The following should be invalid:
+      21→            'sr@latin',        # language+script
+      22→        )
+      23→        self.invalid_tags = (
+      24→            None,              # invalid type: None.
+      25→            123,               # invalid type: int.
+      26→            b'en',             # invalid type: bytes.
+      27→            'eü',
+  [... truncated ...]
+- [Grep Result after action #14]
+  django/utils/translation/__init__.py:296:def get_supported_language_variant(lang_code, *, strict=False):
+  django/utils/translation/trans_null.py:63:def get_supported_language_variant(lang_code, strict=False):
+  django/utils/translation/trans_real.py:395:def get_supported_language_variant(lang_code, strict=False):
+- [Grep Result after action #16]
+  docs/topics/i18n/translation.txt:2020:* If a base language is available but the sublanguage specified is not,
+  docs/topics/i18n/translation.txt:2021:  Django uses the base language. For example, if a user specifies ``de-at``
+  docs/topics/i18n/translation.txt:2131:Using a non-English base language
+  docs/topics/i18n/translation.txt:2139:  will also need to provide a translation for the base language to include all
+  docs/topics/i18n/translation.txt:2140:  plural forms if the plural rules for the base language are different from
+- [Read Result after action #18]
+     390→    """
+     391→    return dict(settings.LANGUAGES)
+     392→
+     393→
+     394→@functools.lru_cache(maxsize=1000)
+     395→def get_supported_language_variant(lang_code, strict=False):
+     396→    """
+     397→    Return the language code that's listed in supported languages, possibly
+     398→    selecting a more generic variant. Raise LookupError if nothing is found.
+     399→
+     400→    If `strict` is False (the default), look for a country-specific variant
+     401→    when neither the language code nor its generic variant is found.
+     402→
+     403→    lru_cache should have a maxsize to prevent from memory exhaustion attacks,
+     404→    as the provided language codes are taken from the HTTP request. See also
+     405→    <https://www.djangoproject.com/weblog/2007/oct/26/security-fix/>.
+     406→    """
+     407→    if lang_code:
+     408→        # If 'fr-ca' is not supported, try special fallback or language-only 'fr'.
+     409→        possible_lang_codes = [lang_code]
+     410→        try:
+     411→            possible_lang_codes.extend(LANG_INFO[lang_code]['fallback'])
+     412→        except KeyError:
+     413→            pass
+     414→        generic_lang_code = lang_code.split('-')[0]
+     415→        pos
+  [... truncated ...]
+- [Read Result after action #21]
+      77→
+      78→    def test_inconsistent_language_settings(self):
+      79→        msg = (
+      80→            'You have provided a value for the LANGUAGE_CODE setting that is '
+      81→            'not in the LANGUAGES setting.'
+      82→        )
+      83→        with self.settings(LANGUAGE_CODE='fr', LANGUAGES=[('en', 'English')]):
+      84→            self.assertEqual(check_language_settings_consistent(None), [
+      85→                Error(msg, id='translation.E004'),
+      86→            ])
+      87→
+
+- [Test Output after action #24]
+  Exit code 1
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #26]
+  Exit code 1
+    File "tests/runtests.py", line 18
+      ) from e
+           ^
+  SyntaxError: invalid syntax
+- [Test Output after action #28]
+  Exit code 2
+  python3: can't open file 'tests/runtests.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #31]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Importing application check_framework
+  Skipping setup of unused database(s): default, other.
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  test_inconsistent_language_settings (check_framework.test_translation.TranslationCheckTests) ... ok
+  test_invalid_language_code (check_framework.test_translation.TranslationCheckTests) ... ok
+  test_invalid_languages (check_framework.test_translation.TranslationCheckTests) ... ok
+  test_invalid_languages_bidi (check_framework.test_translation.TranslationCheckTests) ... ok
+  test_language_code_with_base_language_fallback (check_framework.test_translation.TranslationCheckTests) ... ok
+  test_language_code_without_base_language_fallback (check_framework.test_translation.Tran
+  [... truncated ...]
+- [Test Output after action #33]
+  Testing with LANGUAGE_CODE='de-at' and base language 'de' in LANGUAGES...
+  LANGUAGE_CODE: de-at
+  LANGUAGES: [('de', 'German'), ('en', 'English')]
+
+  ✓ No errors! The fix works correctly.
+    translation.E004 is NOT raised when base language is available.
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #36]
+  Testing with LANGUAGE_CODE='de-at' and NO base language 'de' in LANGUAGES...
+  LANGUAGE_CODE: de-at
+  LANGUAGES: [('fr', 'French'), ('en', 'English')]
+
+  ✓ Correct! translation.E004 is raised as expected:
+    - translation.E004: You have provided a value for the LANGUAGE_CODE setting that is not in the LANGUAGES setting.
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #38]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Importing application check_framework
+  Skipping setup of unused database(s): default, other.
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  test_inconsistent_language_settings (check_framework.test_translation.TranslationCheckTests) ... ok
+  test_invalid_language_code (check_framework.test_translation.TranslationCheckTests) ... ok
+  test_invalid_languages (check_framework.test_translation.TranslationCheckTests) ... ok
+  test_invalid_languages_bidi (check_framework.test_translation.TranslationCheckTests) ... ok
+  test_language_code_with_base_language_fallback (check_framework.test_translation.TranslationCheckTests) ... ok
+  test_language_code_without_base_language_fallback (check_framework.test_translation.Tran
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/core/checks/translation.py
+  Tool: Edit action #20
+  old_text_sha256: 8e0a3826768d021bec5cfe9f7e89a4510b3edae95a78d9c2cbb6a74171ae4feb
+  new_text_sha256: 6d177caefe8a9af9461df773e82bec251ee96ff7d25814bc49c9020dfbd09596
+- tests/check_framework/test_translation.py
+  Tool: Edit action #23
+  old_text_sha256: b348903d40c83b39f0b07806cfa752047afc5cdd028755cc1e3fcebcbe765884
+  new_text_sha256: 15527e96c54211d091beab10c262d204f22f1e332b1e5568711465c67d7c1b89
+- test_issue_negative.py
+  Tool: Write action #35
+  new_text_sha256: 2cde71a4d9a55fb7b322531057df9a3f3dd42adfe85ac52a6b19dda9d0fad428
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

@@ -1,0 +1,557 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: d03b4702-a250-49c8-abdd-aafc02a28080
+- repo: pydata/xarray
+- instance_id: pydata__xarray-4094
+- base_commit: a64cf2d5476e7bbda099b34c40b7be1880dbd39a
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+to_unstacked_dataset broken for single-dim variables
+<!-- A short summary of the issue, if appropriate -->
+
+
+#### MCVE Code Sample
+
+```python
+arr = xr.DataArray(
+     np.arange(3),
+     coords=[("x", [0, 1, 2])],
+ )
+data = xr.Dataset({"a": arr, "b": arr})
+stacked = data.to_stacked_array('y', sample_dims=['x'])
+unstacked = stacked.to_unstacked_dataset('y')
+# MergeError: conflicting values for variable 'y' on objects to be combined. You can skip this check by specifying compat='override'.
+```
+
+#### Expected Output
+A working roundtrip.
+
+#### Problem Description
+I need to stack a bunch of variables and later unstack them again, however this doesn't work if the variables only have a single dimension.
+
+#### Versions
+
+<details><summary>Output of <tt>xr.show_versions()</tt></summary>
+
+INSTALLED VERSIONS
+------------------
+commit: None
+python: 3.7.3 (default, Mar 27 2019, 22:11:17)
+[GCC 7.3.0]
+python-bits: 64
+OS: Linux
+OS-release: 4.15.0-96-generic
+machine: x86_64
+processor: x86_64
+byteorder: little
+LC_ALL: None
+LANG: en_GB.UTF-8
+LOCALE: en_GB.UTF-8
+libhdf5: 1.10.4
+libnetcdf: 4.6.2
+
+xarray: 0.15.1
+pandas: 1.0.3
+numpy: 1.17.3
+scipy: 1.3.1
+netCDF4: 1.4.2
+pydap: None
+h5netcdf: None
+h5py: 2.10.0
+Nio: None
+zarr: None
+cftime: 1.0.4.2
+nc_time_axis: None
+PseudoNetCDF: None
+rasterio: None
+cfgrib: None
+iris: None
+bottleneck: None
+dask: 2.10.1
+distributed: 2.10.0
+matplotlib: 3.1.1
+cartopy: None
+seaborn: 0.10.0
+numbagg: None
+setuptools: 41.0.0
+pip: 19.0.3
+conda: 4.8.3
+pytest: 5.3.5
+IPython: 7.9.0
+sphinx: None
+
+
+</details>
+
+FILES INSPECTED
+---------------
+- xarray/core/dataarray.py [Read: 2]
+- xarray/core/dataset.py [Read: 1]
+- xarray/tests [Grep: 1]
+- xarray/tests/test_dataset.py [Read: 1, Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [2] Grep pattern='to_unstacked_dataset'
+- [7] Grep pattern='def to_unstacked_dataset' path='testbed'
+- [9] Grep pattern='def to_unstacked_dataset' path='testbed'
+- [13] Grep pattern='def to_stacked_array' path='testbed'
+- [15] Grep pattern='def to_stacked_array' path='testbed'
+- [32] Grep pattern='to_unstacked_dataset' path='testbed' glob='test*.py'
+- [34] Grep pattern='def test.*unstacked' path='xarray/tests'
+- [44] Grep pattern='def create_test_stacked_array' path='xarray/tests/test_dataset.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] cd ./swebench_9_15/testbed && find . -name "*.py" -type f | head -20
+- [test] python test_issue.py
+- [test] python3 test_issue.py
+- [test] python3 test_debug.py
+- [test] python3 test_issue.py
+- [test] python3 test_roundtrip.py
+- [test] python3 test_roundtrip.py
+- [test] cd testbed && python3 -m pytest xarray/tests/test_dataset.py::TestDataset::test_to_stacked_array_to_unstacked_dataset -xvs
+- [test] cd testbed && pytest xarray/tests/test_dataset.py::TestDataset::test_to_stacked_array_to_unstacked_dataset -xvs
+- [test] python3 -c "import pytest; pytest.main(['-xvs', 'testbed/xarray/tests/test_dataset.py::TestDataset::test_to_stacked_array_to_unstacked_dataset'])"
+- [test] python3 test_existing_tests.py
+- [other/reproduction] rm test_issue.py test_debug.py test_roundtrip.py test_existing_tests.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- ERROR: MergeError: conflicting values for variable 'y' on objects to be combined. You can skip this check by specifying compat='override'.
+- Traceback (most recent call last):
+- ValueError: One or more of the specified variables cannot be found in this dataset
+- ModuleNotFoundError: No module named 'pytest'
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Test Output after action #3]
+  Exit code 1
+    File "test_issue.py", line 24
+      print(f"Error during unstacking: {type(e).__name__}: {e}")
+                                                              ^
+  SyntaxError: invalid syntax
+- [Test Output after action #5]
+  Original dataset:
+  <xarray.Dataset>
+  Dimensions:  (x: 3)
+  Coordinates:
+    * x        (x) int64 0 1 2
+  Data variables:
+      a        (x) int64 0 1 2
+      b        (x) int64 0 1 2
+
+  Stacked array:
+  <xarray.DataArray 'a' (x: 3, y: 2)>
+  array([[0, 0],
+         [1, 1],
+         [2, 2]])
+  Coordinates:
+    * x         (x) int64 0 1 2
+    * y         (y) MultiIndex
+    - variable  (y) object 'a' 'b'
+
+  Error during unstacking: MergeError: conflicting values for variable 'y' on objects to be combined. You can skip this check by specifying compat='override'.
+- [Grep Result after action #7]
+  Found 1 file
+  testbed/xarray/core/dataarray.py
+- [Grep Result after action #9]
+  testbed/xarray/core/dataarray.py:1901:    def to_unstacked_dataset(self, dim, level=0):
+  ./swebench_9_15/testbed/xarray/core/dataarray.py-1902-        """Unstack DataArray expanding to Dataset along a given level of a
+  ./swebench_9_15/testbed/xarray/core/dataarray.py-1903-        stacked coordinate.
+  ./swebench_9_15/testbed/xarray/core/dataarray.py-1904-
+  ./swebench_9_15/testbed/xarray/core/dataarray.py-1905-        This is the inverse operation of Dataset.to_stacked_array.
+  ./swebench_9_15/testbed/xarray/core/dataarray.py-1906-
+  ./swebench_9_15/testbed/xarray/core/dataarray.py-1907-        Parameters
+  ./swebench_9_15/testbed/xarray/core/dataarray.py-1908-        ----------
+  testbed/xarray/core/dataarray.py-1909-        dim : str
+  ./swebench_9_15/testbed/xarray/core/dataarray.py-1910-            Name of existing dimension to unstack
+  testbed/xarray/core/dataarray.py-1911-        level : int or str
+  ./swebench_9_15/testbed/xarray/core/dataarray.py-1912-            The MultiIndex level to expand to a dataset along. Can either be
+  ./swebench_9_15/testbed/xarray/core/dataarray.py-1913-            the integer index of the level or its name.
+  testbed/xarray/core/dataarray.py-1914-        label : int,
+  [... truncated ...]
+- [Read Result after action #11]
+    1901→    def to_unstacked_dataset(self, dim, level=0):
+    1902→        """Unstack DataArray expanding to Dataset along a given level of a
+    1903→        stacked coordinate.
+    1904→
+    1905→        This is the inverse operation of Dataset.to_stacked_array.
+    1906→
+    1907→        Parameters
+    1908→        ----------
+    1909→        dim : str
+    1910→            Name of existing dimension to unstack
+    1911→        level : int or str
+    1912→            The MultiIndex level to expand to a dataset along. Can either be
+    1913→            the integer index of the level or its name.
+    1914→        label : int, default 0
+    1915→            Label of the level to expand dataset along. Overrides the label
+    1916→            argument if given.
+    1917→
+    1918→        Returns
+    1919→        -------
+    1920→        unstacked: Dataset
+    1921→
+    1922→        Examples
+    1923→        --------
+    1924→        >>> import xarray as xr
+    1925→        >>> arr = xr.DataArray(
+    1926→        ...     np.arange(6).reshape(2, 3),
+    1927→        ...     coords=[("x", ["a", "b"]), ("y", [0, 1, 2])],
+    1928→        ... )
+    1929→        >>> data = xr.Dataset({"a": arr, "b": arr.isel(y=0)})
+    1930→        >>> data
+    1931
+  [... truncated ...]
+- [Grep Result after action #13]
+  Found 1 file
+  testbed/xarray/core/dataset.py
+- [Grep Result after action #15]
+  testbed/xarray/core/dataset.py:3370:    def to_stacked_array(
+  ./swebench_9_15/testbed/xarray/core/dataset.py-3371-        self,
+  testbed/xarray/core/dataset.py-3372-        new_dim: Hashable,
+  testbed/xarray/core/dataset.py-3373-        sample_dims: Sequence[Hashable],
+  testbed/xarray/core/dataset.py-3374-        variable_dim: str = "variable",
+  testbed/xarray/core/dataset.py-3375-        name: Hashable = None,
+  testbed/xarray/core/dataset.py-3376-    ) -> "DataArray":
+  ./swebench_9_15/testbed/xarray/core/dataset.py-3377-        """Combine variables of differing dimensionality into a DataArray
+  ./swebench_9_15/testbed/xarray/core/dataset.py-3378-        without broadcasting.
+  ./swebench_9_15/testbed/xarray/core/dataset.py-3379-
+  ./swebench_9_15/testbed/xarray/core/dataset.py-3380-        This method is similar to Dataset.to_array but does not broadcast the
+  ./swebench_9_15/testbed/xarray/core/dataset.py-3381-        variables.
+  ./swebench_9_15/testbed/xarray/core/dataset.py-3382-
+  ./swebench_9_15/testbed/xarray/core/dataset.py-3383-        Parameters
+  ./swebench_9_15/testbed/xarray/core/dataset.py-3384-        ----------
+  testbed/xarray/core/dataset.py-3385-        new_dim : Hashable
+  ./swebench_
+  [... truncated ...]
+- [Read Result after action #17]
+    3443→        stacking_dims = tuple(dim for dim in self.dims if dim not in sample_dims)
+    3444→
+    3445→        for variable in self:
+    3446→            dims = self[variable].dims
+    3447→            dims_include_sample_dims = set(sample_dims) <= set(dims)
+    3448→            if not dims_include_sample_dims:
+    3449→                raise ValueError(
+    3450→                    "All variables in the dataset must contain the "
+    3451→                    "dimensions {}.".format(dims)
+    3452→                )
+    3453→
+    3454→        def ensure_stackable(val):
+    3455→            assign_coords = {variable_dim: val.name}
+    3456→            for dim in stacking_dims:
+    3457→                if dim not in val.dims:
+    3458→                    assign_coords[dim] = None
+    3459→
+    3460→            expand_dims = set(stacking_dims).difference(set(val.dims))
+    3461→            expand_dims.add(variable_dim)
+    3462→            # must be list for .expand_dims
+    3463→            expand_dims = list(expand_dims)
+    3464→
+    3465→            return (
+    3466→                val.assign_coords(**assign_coords)
+    3467→                .expand_dims(expand_dims)
+    3468→                .stack({new_dim: (variable_dim,) +
+  [... truncated ...]
+- [Test Output after action #19]
+  Original dataset:
+  <xarray.Dataset>
+  Dimensions:  (x: 3)
+  Coordinates:
+    * x        (x) int64 0 1 2
+  Data variables:
+      a        (x) int64 0 1 2
+      b        (x) int64 0 1 2
+
+  Stacked array:
+  <xarray.DataArray 'a' (x: 3, y: 2)>
+  array([[0, 0],
+         [1, 1],
+         [2, 2]])
+  Coordinates:
+    * x         (x) int64 0 1 2
+    * y         (y) MultiIndex
+    - variable  (y) object 'a' 'b'
+  Stacked coords:
+  Coordinates:
+    * x         (x) int64 0 1 2
+    * y         (y) MultiIndex
+    - variable  (y) object 'a' 'b'
+
+  MultiIndex:
+  MultiIndex([('a',),
+              ('b',)],
+             names=['variable'])
+  MultiIndex levels:
+  [['a', 'b']]
+  MultiIndex names:
+  ['variable']
+
+  level_number: 0
+  variables: Index(['a', 'b'], dtype='object', name='variable')
+  variable_dim: variable
+
+
+  Processing variable 'a':
+    After sel: <xarray.DataArray 'a' (x: 3)>
+  array([0, 1, 2])
+  Coordinates:
+    * x        (x) int64 0 1 2
+      y        object ('a',)
+    Coords: Coordinates:
+    * x        (x) int64 0 1 2
+      y        object ('a',)
+    After squeeze: <xarray.DataArray 'a' (x: 3)>
+  array([0, 1, 2])
+  Coordinates:
+    * x        (x) int64 0 1 2
+      y        object ('a',)
+    Coords after squeeze: Coordinates:
+    * x        (x) int64 0 1 2
+      y        object (
+  [... truncated ...]
+- [Read Result after action #21]
+    1953→        idx = self.indexes[dim]
+    1954→        if not isinstance(idx, pd.MultiIndex):
+    1955→            raise ValueError(f"'{dim}' is not a stacked coordinate")
+    1956→
+    1957→        level_number = idx._get_level_number(level)
+    1958→        variables = idx.levels[level_number]
+    1959→        variable_dim = idx.names[level_number]
+    1960→
+    1961→        # pull variables out of datarray
+    1962→        data_dict = {}
+    1963→        for k in variables:
+    1964→            data_dict[k] = self.sel({variable_dim: k}).squeeze(drop=True)
+    1965→
+    1966→        # unstacked dataset
+    1967→        return Dataset(data_dict)
+    1968→
+    1969→    def transpose(self, *dims: Hashable, transpose_coords: bool = True) -> "DataArray":
+    1970→        """Return a new DataArray object with transposed dimensions.
+    1971→
+    1972→        Parameters
+
+- [Test Output after action #24]
+  Original dataset:
+  <xarray.Dataset>
+  Dimensions:  (x: 3)
+  Coordinates:
+    * x        (x) int64 0 1 2
+  Data variables:
+      a        (x) int64 0 1 2
+      b        (x) int64 0 1 2
+
+  Stacked array:
+  <xarray.DataArray 'a' (x: 3, y: 2)>
+  array([[0, 0],
+         [1, 1],
+         [2, 2]])
+  Coordinates:
+    * x         (x) int64 0 1 2
+    * y         (y) MultiIndex
+    - variable  (y) object 'a' 'b'
+
+  Unstacked dataset (SUCCESS):
+  <xarray.Dataset>
+  Dimensions:  (x: 3)
+  Coordinates:
+    * x        (x) int64 0 1 2
+  Data variables:
+      a        (x) int64 0 1 2
+      b        (x) int64 0 1 2
+- [Test Output after action #27]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_roundtrip.py", line 40, in <module>
+      unstacked2 = stacked2.to_unstacked_dataset(dim="z")
+    File "./swebench_9_15/testbed/xarray/core/dataarray.py", line 1964, in to_unstacked_dataset
+      data_dict[k] = self.sel({variable_dim: k}).squeeze(drop=True).reset_coords(dim, drop=True)
+    File "./swebench_9_15/testbed/xarray/core/dataarray.py", line 748, in reset_coords
+      dataset = self.coords.to_dataset().reset_coords(names, drop)
+    File "./swebench_9_15/testbed/xarray/core/dataset.py", line 1453, in reset_coords
+      self._assert_all_in_dataset(names)
+    File "./swebench_9_15/testbed/xarray/core/dataset.py", line 3693, in _assert_all_in_dataset
+      raise ValueError(
+  ValueError: One or more of the specified variables cannot be found in this dataset
+
+  Test 1: Single-dimension variables
+  Original dataset:
+  <xarray.Dataset>
+  Dimensions:  (x: 3)
+  Coordinates:
+    * x        (x) int64 0 1 2
+  Data variables:
+      a        (x) int64 0 1 2
+      b        (x) int64 0 1 2
+
+  Stacked array:
+  <xarray.DataArray 'a' (x: 3, y: 2)>
+  array([[0, 0],
+         [1, 1],
+         [2, 2]])
+  Coordinates:
+    * x         (x) int64 0 1 2
+    * y         (y) MultiIndex
+    - variab
+  [... truncated ...]
+- [Test Output after action #30]
+  Test 1: Single-dimension variables
+  Original dataset:
+  <xarray.Dataset>
+  Dimensions:  (x: 3)
+  Coordinates:
+    * x        (x) int64 0 1 2
+  Data variables:
+      a        (x) int64 0 1 2
+      b        (x) int64 0 1 2
+
+  Stacked array:
+  <xarray.DataArray 'a' (x: 3, y: 2)>
+  array([[0, 0],
+         [1, 1],
+         [2, 2]])
+  Coordinates:
+    * x         (x) int64 0 1 2
+    * y         (y) MultiIndex
+    - variable  (y) object 'a' 'b'
+
+  Unstacked dataset:
+  <xarray.Dataset>
+  Dimensions:  (x: 3)
+  Coordinates:
+    * x        (x) int64 0 1 2
+  Data variables:
+      a        (x) int64 0 1 2
+      b        (x) int64 0 1 2
+
+  Roundtrip successful: True
+
+  ============================================================
+  Test 2: Multi-dimension variables
+  Original dataset:
+  <xarray.Dataset>
+  Dimensions:  (x: 2, y: 3)
+  Coordinates:
+    * x        (x) <U1 'a' 'b'
+    * y        (y) int64 0 1 2
+  Data variables:
+      a        (x, y) int64 0 1 2 3 4 5
+      b        (x) int64 0 3
+
+  Stacked array:
+  <xarray.DataArray 'a' (x: 2, z: 4)>
+  array([[0, 1, 2, 0],
+         [3, 4, 5, 3]])
+  Coordinates:
+    * x         (x) <U1 'a' 'b'
+    * z         (z) MultiIndex
+    - variable  (z) object 'a' 'a' 'a' 'b'
+    - y         (z) float64 0.0 1.0 2.0 nan
+
+  Unstacked dataset:
+  <xarray.Dat
+  [... truncated ...]
+- [Grep Result after action #32]
+  Found 3 files
+  testbed/xarray/tests/test_units.py
+  testbed/xarray/tests/test_dataset.py
+  testbed/xarray/tests/test_dataarray.py
+- [Grep Result after action #34]
+  testbed/xarray/tests/test_dataarray.py:2132:    def test_to_unstacked_dataset_raises_value_error(self):
+  testbed/xarray/tests/test_dataset.py:3033:    def test_to_stacked_array_to_unstacked_dataset(self):
+  testbed/xarray/tests/test_dataset.py:3048:    def test_to_stacked_array_to_unstacked_dataset_different_dimension(self):
+  testbed/xarray/tests/test_units.py:3481:    def test_to_unstacked_dataset(self, dtype):
+- [Test Output after action #36]
+  Exit code 1
+  /opt/anaconda3/bin/python3: No module named pytest
+- [Test Output after action #38]
+  Exit code 1
+  Traceback (most recent call last):
+    File "/opt/anaconda3/bin/pytest", line 5, in <module>
+      from pytest import main
+  ModuleNotFoundError: No module named 'pytest'
+- [Test Output after action #40]
+  Exit code 1
+  Traceback (most recent call last):
+    File "<string>", line 1, in <module>
+  ModuleNotFoundError: No module named 'pytest'
+- [Read Result after action #42]
+    3033→    def test_to_stacked_array_to_unstacked_dataset(self):
+    3034→        # make a two dimensional dataset
+    3035→        a, b = create_test_stacked_array()
+    3036→        D = xr.Dataset({"a": a, "b": b})
+    3037→        sample_dims = ["x"]
+    3038→        y = D.to_stacked_array("features", sample_dims).transpose("x", "features")
+    3039→
+    3040→        x = y.to_unstacked_dataset("features")
+    3041→        assert_identical(D, x)
+    3042→
+    3043→        # test on just one sample
+    3044→        x0 = y[0].to_unstacked_dataset("features")
+    3045→        d0 = D.isel(x=0)
+    3046→        assert_identical(d0, x0)
+    3047→
+    3048→    def test_to_stacked_array_to_unstacked_dataset_different_dimension(self):
+    3049→        # test when variables have different dimensionality
+    3050→        a, b = create_test_stacked_array()
+    3051→        sample_dims = ["x"]
+    3052→        D = xr.Dataset({"a": a, "b": b.isel(y=0)})
+    3053→
+    3054→        y = D.to_stacked_array("features", sample_dims)
+    3055→        x = y.to_unstacked_dataset("features")
+    3056→        assert_identical(D, x)
+    3057→
+    3058→    def test_update(self):
+    3059→        data = create_test_data(seed=0)
+    3060→        expected = data
+  [... truncated ...]
+- [Grep Result after action #44]
+  162:def create_test_stacked_array():
+  163-    x = DataArray(pd.Index(np.r_[:10], name="x"))
+  164-    y = DataArray(pd.Index(np.r_[:20], name="y"))
+  165-    a = x * y
+  166-    b = x * y * y
+  167-    return a, b
+  168-
+  169-
+  170-class InaccessibleVariableDataStore(backends.InMemoryDataStore):
+  171-    def __init__(self):
+  172-        super().__init__()
+  173-        self._indexvars = set()
+  174-
+  175-    def store(self, variables, *args, **kwargs):
+  176-        super().store(variables, *args, **kwargs)
+  177-        for k, v in variables.items():
+
+SOURCE EDIT EVIDENCE
+--------------------
+- xarray/core/dataarray.py
+  Tool: Edit action #23
+  old_text_sha256: ab6d2d3526859adb534c85db238c385f74397a3aac337cb6339a2027db91a383
+  new_text_sha256: 047d313355a979ba01643709b67fd7cfa8a24d0e5916b85e0746d6737a41f733
+- xarray/core/dataarray.py
+  Tool: Edit action #29
+  old_text_sha256: 047d313355a979ba01643709b67fd7cfa8a24d0e5916b85e0746d6737a41f733
+  new_text_sha256: 455af00b96c82415da450295508153c418655541bdcf44363f80f663b3030c43
+- swebench_9_15/test_roundtrip.py
+  Tool: Write action #26
+  new_text_sha256: bae00d54fa37458386a28793aca7614a47452a81cd06b412877ba12794387e97
+- swebench_9_15/test_existing_tests.py
+  Tool: Write action #46
+  new_text_sha256: abc2c230a803075a6f5a6b9400273509a70217c86bd48fcd6117178edb73232e
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

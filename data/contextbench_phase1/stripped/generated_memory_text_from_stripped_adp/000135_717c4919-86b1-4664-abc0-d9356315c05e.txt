@@ -1,0 +1,436 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 717c4919-86b1-4664-abc0-d9356315c05e
+- repo: sphinx-doc/sphinx
+- instance_id: sphinx-doc__sphinx-8474
+- base_commit: 3ea1ec84cc610f7a9f4f6b354e264565254923ff
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+v3.3 upgrade started generating "WARNING: no number is assigned for table" warnings
+We've updated to Sphinx 3.3 in our documentation, and suddenly the following warning started popping up in our builds when we build either `singlehtml` or `latex`.:
+
+`WARNING: no number is assigned for table:`
+
+I looked through the changelog but it didn't seem like there was anything related to `numref` that was changed, but perhaps I missed something? Could anyone point me to a change in the numref logic so I can figure out where these warnings are coming from?
+
+FILES INSPECTED
+---------------
+- sphinx/domains/std.py [Read: 5]
+- tests/test_build_html.py [Read: 3, Grep: 1]
+- sphinx/builders/singlehtml.py [Read: 1]
+- tests/roots/test-numfig/index.rst [Read: 1]
+- tests/roots/test-numfig/foo.rst [Read: 1]
+- tests/roots/test-numfig/bar.rst [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [2] Grep pattern='no number is assigned for table' path='testbed'
+- [3] Grep pattern='no number is assigned for table'
+- [5] Grep pattern='no number is assigned'
+- [11] Grep pattern='def get_fignumber'
+- [20] Grep pattern='toc_fignumbers'
+- [41] Grep pattern='def test_numfig_with_singlehtml' path='tests/test_build_html.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15 -name "*8474*" -o -name "instance*" 2>/dev/null | head -20
+- [other/reproduction] git tag | grep "v3\.3"
+- [diagnostic] git diff v3.2.0..v3.3.0 -- sphinx/domains/std.py | head -200
+- [diagnostic] grep -n "name = " sphinx/builders/singlehtml.py
+- [diagnostic] grep -n "master_doc" sphinx/domains/std.py | head -10
+- [diagnostic] find . -type d -name "test-numfig" 2>/dev/null | head -5
+- [diagnostic] find tests/roots -name "*numfig*" 2>/dev/null
+- [diagnostic] ls -la tests/roots/test-numfig/
+- [diagnostic] grep -r "singlehtml" tests/ --include="*.py" | grep -i "def test" | head -10
+- [test] python -m pytest tests/test_build_html.py::test_numfig_with_singlehtml -xvs 2>&1 | head -100
+- [other/reproduction] cd tests/roots/test-numfig && python -m sphinx -b singlehtml -D numfig=True . _build/singlehtml 2>&1 | grep -i "warning\|error"
+- [diagnostic] cd /tmp/test_numref && cat > index.rst << 'EOF'
+Test
+====
+
+.. toctree::
+
+   page1
+
+See :numref:`mytable`.
+EOF
+
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- ERROR: file or directory not found: tests/test_build_html.py::test_numfig_with_singlehtml
+- Traceback (most recent call last):
+- ImportError: cannot import name 'environmentfilter' from 'jinja2' (/opt/anaconda3/lib/python3.8/site-packages/jinja2/__init__.py)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #3]
+  No matches found
+- [Grep Result after action #5]
+  sphinx/domains/std.py:855:            logger.warning(__("no number is assigned for %s: %s"), figtype, labelid,
+  tests/test_build_html.py:663:    assert 'index.rst:55: WARNING: no number is assigned for section: index' in warnings
+  tests/test_build_html.py:771:    assert 'index.rst:55: WARNING: no number is assigned for section: index' in warnings
+  tests/test_build_html.py:876:    assert 'index.rst:55: WARNING: no number is assigned for section: index' in warnings
+  tests/test_build_html.py:982:    assert 'index.rst:55: WARNING: no number is assigned for section: index' in warnings
+  sphinx/locale/tr/LC_MESSAGES/sphinx.po:2249:msgid "no number is assigned for %s: %s"
+  sphinx/locale/ta/LC_MESSAGES/sphinx.po:2247:msgid "no number is assigned for %s: %s"
+  sphinx/locale/eu/LC_MESSAGES/sphinx.po:2248:msgid "no number is assigned for %s: %s"
+  sphinx/locale/hi_IN/LC_MESSAGES/sphinx.po:2246:msgid "no number is assigned for %s: %s"
+  sphinx/locale/cy/LC_MESSAGES/sphinx.po:2248:msgid "no number is assigned for %s: %s"
+  sphinx/locale/lt/LC_MESSAGES/sphinx.po:2247:msgid "no number is assigned for %s: %s"
+  sphinx/locale/ru/LC_MESSAGES/sphinx.po:2252:msgid "no number is assigned for %s: %s"
+  sphinx/locale/fa/LC
+  [... truncated ...]
+- [Read Result after action #7]
+     840→
+     841→        target_node = env.get_doctree(docname).ids.get(labelid)
+     842→        figtype = self.get_enumerable_node_type(target_node)
+     843→        if figtype is None:
+     844→            return None
+     845→
+     846→        if figtype != 'section' and env.config.numfig is False:
+     847→            logger.warning(__('numfig is disabled. :numref: is ignored.'), location=node)
+     848→            return contnode
+     849→
+     850→        try:
+     851→            fignumber = self.get_fignumber(env, builder, figtype, docname, target_node)
+     852→            if fignumber is None:
+     853→                return contnode
+     854→        except ValueError:
+     855→            logger.warning(__("no number is assigned for %s: %s"), figtype, labelid,
+     856→                           location=node)
+     857→            return contnode
+     858→
+     859→        try:
+     860→            if node['refexplicit']:
+     861→                title = contnode.astext()
+     862→            else:
+     863→                title = env.config.numfig_format.get(figtype, '')
+     864→
+     865→            if figname is None and '{name}' in title:
+     866→                logger.warning(__('the link has no caption: %s'), tit
+  [... truncated ...]
+- [Read Result after action #9]
+     820→            # reference to named label; the final node will
+     821→            # contain the section name after the label
+     822→            docname, labelid, sectname = self.labels.get(target, ('', '', ''))
+     823→        if not docname:
+     824→            return None
+     825→
+     826→        return self.build_reference_node(fromdocname, builder,
+     827→                                         docname, labelid, sectname, 'ref')
+     828→
+     829→    def _resolve_numref_xref(self, env: "BuildEnvironment", fromdocname: str,
+     830→                             builder: "Builder", typ: str, target: str,
+     831→                             node: pending_xref, contnode: Element) -> Element:
+     832→        if target in self.labels:
+     833→            docname, labelid, figname = self.labels.get(target, ('', '', ''))
+     834→        else:
+     835→            docname, labelid = self.anonlabels.get(target, ('', ''))
+     836→            figname = None
+     837→
+     838→        if not docname:
+     839→            return None
+     840→
+     841→        target_node = env.get_doctree(docname).ids.get(labelid)
+     842→        figtype = self.get_enumerable_node_type(target_node)
+     843→        if figtype is
+  [... truncated ...]
+- [Grep Result after action #11]
+  sphinx/domains/std.py:1058:    def get_fignumber(self, env: "BuildEnvironment", builder: "Builder",
+- [Read Result after action #13]
+    1058→    def get_fignumber(self, env: "BuildEnvironment", builder: "Builder",
+    1059→                      figtype: str, docname: str, target_node: Element) -> Tuple[int, ...]:
+    1060→        if figtype == 'section':
+    1061→            if builder.name == 'latex':
+    1062→                return tuple()
+    1063→            elif docname not in env.toc_secnumbers:
+    1064→                raise ValueError  # no number assigned
+    1065→            else:
+    1066→                anchorname = '#' + target_node['ids'][0]
+    1067→                if anchorname not in env.toc_secnumbers[docname]:
+    1068→                    # try first heading which has no anchor
+    1069→                    return env.toc_secnumbers[docname].get('')
+    1070→                else:
+    1071→                    return env.toc_secnumbers[docname].get(anchorname)
+    1072→        else:
+    1073→            try:
+    1074→                figure_id = target_node['ids'][0]
+    1075→                return env.toc_fignumbers[docname][figtype][figure_id]
+    1076→            except (KeyError, IndexError) as exc:
+    1077→                # target_node is found, but fignumber is not assigned.
+    1078→                # Maybe it is defined in orphan
+  [... truncated ...]
+- [Read Result after action #15]
+     660→
+     661→    warnings = warning.getvalue()
+     662→    assert 'index.rst:47: WARNING: numfig is disabled. :numref: is ignored.' not in warnings
+     663→    assert 'index.rst:55: WARNING: no number is assigned for section: index' in warnings
+     664→    assert 'index.rst:56: WARNING: invalid numfig_format: invalid' in warnings
+     665→    assert 'index.rst:57: WARNING: invalid numfig_format: Fig %s %s' in warnings
+     666→
+     667→
+     668→@pytest.mark.parametrize("fname,expect", flat_dict({
+     669→    'index.html': [
+     670→        (".//div[@class='figure align-default']/p[@class='caption']/"
+     671→         "span[@class='caption-number']", '^Fig. 9 $', True),
+     672→        (".//div[@class='figure align-default']/p[@class='caption']/"
+     673→         "span[@class='caption-number']", '^Fig. 10 $', True),
+     674→        (".//table/caption/span[@class='caption-number']",
+     675→         '^Table 9 $', True),
+     676→        (".//table/caption/span[@class='caption-number']",
+     677→         '^Table 10 $', True),
+     678→        (".//div[@class='code-block-caption']/"
+     679→         "span[@class='caption-number']", '^Listing 9 $', True),
+
+- [Grep Result after action #20]
+  Found 6 files
+  sphinx/environment/collectors/toctree.py
+  sphinx/environment/__init__.py
+  sphinx/domains/std.py
+  sphinx/domains/math.py
+  sphinx/builders/singlehtml.py
+  sphinx/builders/html/__init__.py
+- [Read Result after action #22]
+       1→"""
+       2→    sphinx.builders.singlehtml
+       3→    ~~~~~~~~~~~~~~~~~~~~~~~~~~
+       4→
+       5→    Single HTML builders.
+       6→
+       7→    :copyright: Copyright 2007-2020 by the Sphinx team, see AUTHORS.
+       8→    :license: BSD, see LICENSE for details.
+       9→"""
+      10→
+      11→from os import path
+      12→from typing import Any, Dict, List, Tuple, Union
+      13→
+      14→from docutils import nodes
+      15→from docutils.nodes import Node
+      16→
+      17→from sphinx.application import Sphinx
+      18→from sphinx.builders.html import StandaloneHTMLBuilder
+      19→from sphinx.deprecation import RemovedInSphinx40Warning, deprecated_alias
+      20→from sphinx.environment.adapters.toctree import TocTree
+      21→from sphinx.locale import __
+      22→from sphinx.util import logging, progress_message
+      23→from sphinx.util.console import darkgreen  # type: ignore
+      24→from sphinx.util.nodes import inline_all_toctrees
+      25→
+      26→logger = logging.getLogger(__name__)
+      27→
+      28→
+      29→class SingleFileHTMLBuilder(StandaloneHTMLBuilder):
+      30→    """
+      31→    A StandaloneHTMLBuilder subclass that puts the whole document tree on one
+      32→    HTML page.
+      33→    """
+      34→    name
+  [... truncated ...]
+- [Read Result after action #24]
+    1058→    def get_fignumber(self, env: "BuildEnvironment", builder: "Builder",
+    1059→                      figtype: str, docname: str, target_node: Element) -> Tuple[int, ...]:
+    1060→        if figtype == 'section':
+    1061→            if builder.name == 'latex':
+    1062→                return tuple()
+    1063→            elif docname not in env.toc_secnumbers:
+    1064→                raise ValueError  # no number assigned
+    1065→            else:
+    1066→                anchorname = '#' + target_node['ids'][0]
+    1067→                if anchorname not in env.toc_secnumbers[docname]:
+    1068→                    # try first heading which has no anchor
+    1069→                    return env.toc_secnumbers[docname].get('')
+    1070→                else:
+    1071→                    return env.toc_secnumbers[docname].get(anchorname)
+    1072→        else:
+    1073→            try:
+    1074→                figure_id = target_node['ids'][0]
+    1075→                return env.toc_fignumbers[docname][figtype][figure_id]
+    1076→            except (KeyError, IndexError) as exc:
+    1077→                # target_node is found, but fignumber is not assigned.
+    1078→                # Maybe it is defined in orphan
+  [... truncated ...]
+- [Diagnostic Output after action #26]
+  34:    name = 'singlehtml'
+  57:        fname = self.config.master_doc + self.out_suffix
+- [Diagnostic Output after action #29]
+  ./tests/roots/test-numfig
+- [Diagnostic Output after action #31]
+  tests/roots/test-latex-numfig
+  tests/roots/test-numfig
+- [Diagnostic Output after action #33]
+  total 48
+  drwxr-xr-x@   8 user  staff   256 26 Nov 19:20 .
+  drwxr-xr-x@ 122 user  staff  3904 26 Nov 19:20 ..
+  -rw-r--r--@   1 user  staff   710 26 Nov 19:20 bar.rst
+  -rw-r--r--@   1 user  staff   259 26 Nov 19:20 baz.rst
+  -rw-r--r--@   1 user  staff    30 26 Nov 19:20 conf.py
+  -rw-r--r--@   1 user  staff   912 26 Nov 19:20 foo.rst
+  -rw-r--r--@   1 user  staff  1024 26 Nov 19:20 index.rst
+  -rw-r--r--@   1 user  staff   120 26 Nov 19:20 rimg.png
+- [Read Result after action #35]
+       1→.. _index:
+       2→
+       3→test-tocdepth
+       4→=============
+       5→
+       6→.. toctree::
+       7→   :numbered:
+       8→
+       9→   foo
+      10→   bar
+      11→
+      12→.. _fig1:
+      13→
+      14→.. figure:: rimg.png
+      15→
+      16→   should be Fig.1
+      17→
+      18→.. figure:: rimg.png
+      19→
+      20→   should be Fig.2
+      21→
+      22→.. _table-1:
+      23→
+      24→.. csv-table:: should be Table 1
+      25→   :header-rows: 0
+      26→
+      27→   hello,world
+      28→
+      29→.. csv-table:: should be Table 2
+      30→   :header-rows: 0
+      31→
+      32→   hello,world
+      33→
+      34→.. _CODE_1:
+      35→
+      36→.. code-block:: python
+      37→   :caption: should be List 1
+      38→
+      39→   print('hello world')
+      40→
+      41→.. code-block:: python
+      42→   :caption: should be List 2
+      43→
+      44→   print('hello world')
+      45→
+      46→
+      47→* Fig.1 is :numref:`fig1`
+      48→* Fig.2.2 is :numref:`Figure%s <fig22>`
+      49→* Table.1 is :numref:`table-1`
+      50→* Table.2.2 is :numref:`Table:%s <table22>`
+      51→* List.1 is :numref:`CODE_1`
+      52→* List.2.2 is :numref:`Code-%s <CODE22>`
+      53→* Section.1 is :numref:`foo`
+      54→* Section.2.1 is :numref:`bar_a`
+      55→* Unnumbered section is :numref:`index`
+  [... truncated ...]
+- [Diagnostic Output after action #37]
+  tests//test_toctree.py:def test_singlehtml_toctree(app, status, warning):
+  tests//test_api_translator.py:def test_singlehtml_set_translator_for_singlehtml(app, status, warning):
+  tests//test_build_html.py:def test_tocdepth_singlehtml(app, cached_etree_parse, fname, expect):
+  tests//test_build_html.py:def test_numfig_with_singlehtml(app, cached_etree_parse, fname, expect):
+- [Read Result after action #39]
+       1→"""
+       2→    test_build_html
+       3→    ~~~~~~~~~~~~~~~
+       4→
+       5→    Test the HTML builder and check output against XPath.
+       6→
+       7→    :copyright: Copyright 2007-2020 by the Sphinx team, see AUTHORS.
+       8→    :license: BSD, see LICENSE for details.
+       9→"""
+      10→
+      11→import os
+      12→import re
+      13→from distutils.version import LooseVersion
+      14→from itertools import chain, cycle
+      15→
+      16→import pygments
+      17→import pytest
+      18→from html5lib import HTMLParser
+      19→
+      20→from sphinx.builders.html import validate_html_extra_path, validate_html_static_path
+      21→from sphinx.errors import ConfigError
+      22→from sphinx.testing.util import strip_escseq
+      23→from sphinx.util import docutils, md5
+      24→from sphinx.util.inventory import InventoryFile
+      25→
+      26→ENV_WARNINGS = """\
+      27→%(root)s/autodoc_fodder.py:docstring of autodoc_fodder.MarkupError:\\d+: \
+      28→WARNING: Explicit markup ends without a blank line; unexpected unindent.
+      29→%(root)s/index.rst:\\d+: WARNING: Encoding 'utf-8-sig' used for reading included \
+      30→file '%(root)s/wrongenc.inc' seems to be wrong, try giving an :encoding: option
+      31→%(root)s/inde
+  [... truncated ...]
+- [Grep Result after action #41]
+  1156:def test_numfig_with_singlehtml(app, cached_etree_parse, fname, expect):
+  1157-    app.build()
+  1158-    check_xpath(cached_etree_parse(app.outdir / fname), fname, *expect)
+  1159-
+  1160-
+  1161-@pytest.mark.parametrize("fname,expect", flat_dict({
+  1162-    'index.html': [
+  1163-        (".//div[@class='figure align-default']/p[@class='caption']"
+  1164-         "/span[@class='caption-number']", "Fig. 1", True),
+  1165-        (".//div[@class='figure align-default']/p[@class='caption']"
+  1166-         "/span[@class='caption-number']", "Fig. 2", True),
+  1167-        (".//div[@class='figure align-default']/p[@class='caption']"
+  1168-         "/span[@class='caption-number']", "Fig. 3", True),
+  1169-        (".//div//span[@class='caption-number']", "No.1 ", True),
+  1170-        (".//div//span[@class='caption-number']", "No.2 ", True),
+  1171-        (".//li/p/a/span", 'Fig. 1', True),
+  1172-        (".//li/p/a/span", 'Fig. 2', True),
+  1173-        (".//li/p/a/span", 'Fig. 3', True),
+  1174-        (".//li/p/a/span", 'No.1', True),
+  1175-        (".//li/p/a/span", 'No.2', True),
+  1176-    ],
+  1177-}))
+  1178-@pytest.mark.skipif(docutils.__version_info__ < (0, 13),
+  1179-                    reason='docutils-0.13
+  [... truncated ...]
+- [Read Result after action #43]
+    1100→        (".//li/p/a/span", '^Fig.1 should be Fig.1$', True),
+    1101→        (".//li/p/a/span", '^Sect.1 Foo$', True),
+    1102→        (".//div[@class='figure align-default']/p[@class='caption']/"
+    1103→         "span[@class='caption-number']", '^Fig. 1.1 $', True),
+    1104→        (".//div[@class='figure align-default']/p[@class='caption']/"
+    1105→         "span[@class='caption-number']", '^Fig. 1.2 $', True),
+    1106→        (".//div[@class='figure align-default']/p[@class='caption']/"
+    1107→         "span[@class='caption-number']", '^Fig. 1.3 $', True),
+    1108→        (".//div[@class='figure align-default']/p[@class='caption']/"
+    1109→         "span[@class='caption-number']", '^Fig. 1.4 $', True),
+    1110→        (".//table/caption/span[@class='caption-number']",
+    1111→         '^Table 1.1 $', True),
+    1112→        (".//table/caption/span[@class='caption-number']",
+    1113→         '^Table 1.2 $', True),
+    1114→        (".//table/caption/span[@class='caption-number']",
+    1115→         '^Table 1.3 $', True),
+    1116→        (".//table/caption/span[@class='caption-number']",
+    1117→         '^Table 1.4 $', True),
+    1118→        (".//div[@class='code-block-caption']/"
+    1119→
+  [... truncated ...]
+- [Test Output after action #45]
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sphinx/domains/std.py
+  Tool: Edit action #54
+  old_text_sha256: 34af1f0fed365c69724cef0b55c0f543dade82301576134e200a48bbd6fe5fda
+  new_text_sha256: 53569cb8f95979d301a800ab9f41543bf69576ff9d71ef17e048e7bff462b155
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

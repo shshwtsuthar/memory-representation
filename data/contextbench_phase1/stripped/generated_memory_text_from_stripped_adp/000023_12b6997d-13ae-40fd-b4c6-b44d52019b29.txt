@@ -1,0 +1,213 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 12b6997d-13ae-40fd-b4c6-b44d52019b29
+- repo: pytest-dev/pytest
+- instance_id: pytest-dev__pytest-7373
+- base_commit: 7b77fc086aab8b3a8ebc890200371884555eea1e
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Incorrect caching of skipif/xfail string condition evaluation
+Version: pytest 5.4.3, current master
+
+pytest caches the evaluation of the string in e.g. `@pytest.mark.skipif("sys.platform == 'win32'")`. The caching key is only the string itself (see `cached_eval` in `_pytest/mark/evaluate.py`). However, the evaluation also depends on the item's globals, so the caching can lead to incorrect results. Example:
+
+```py
+# test_module_1.py
+import pytest
+
+skip = True
+
+@pytest.mark.skipif("skip")
+def test_should_skip():
+    assert False
+```
+
+```py
+# test_module_2.py
+import pytest
+
+skip = False
+
+@pytest.mark.skipif("skip")
+def test_should_not_skip():
+    assert False
+```
+
+Running `pytest test_module_1.py test_module_2.py`.
+
+Expected: `test_should_skip` is skipped, `test_should_not_skip` is not skipped.
+
+Actual: both are skipped.
+
+---
+
+I think the most appropriate fix is to simply remove the caching, which I don't think is necessary really, and inline `cached_eval` into `MarkEvaluator._istrue`.
+
+FILES INSPECTED
+---------------
+- src/_pytest/mark/evaluate.py [Read: 2, Grep: 2]
+- swebench_9_15/testbed [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Glob glob='**/_pytest/mark/evaluate.py'
+- [5] Grep pattern='cached_eval' path='swebench_9_15/testbed'
+- [7] Grep pattern='cached_eval' path='src/_pytest/mark/evaluate.py'
+- [11] Grep pattern='StoreKey' path='src/_pytest/mark/evaluate.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [test] pytest test_module_1.py test_module_2.py -v
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- E       assert False
+- FAILED test_module_2.py::test_should_not_skip - assert False
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #3]
+       1→import os
+       2→import platform
+       3→import sys
+       4→import traceback
+       5→from typing import Any
+       6→from typing import Dict
+       7→from typing import List
+       8→from typing import Optional
+       9→
+      10→from ..outcomes import fail
+      11→from ..outcomes import TEST_OUTCOME
+      12→from .structures import Mark
+      13→from _pytest.config import Config
+      14→from _pytest.nodes import Item
+      15→from _pytest.store import StoreKey
+      16→
+      17→
+      18→evalcache_key = StoreKey[Dict[str, Any]]()
+      19→
+      20→
+      21→def cached_eval(config: Config, expr: str, d: Dict[str, object]) -> Any:
+      22→    default = {}  # type: Dict[str, object]
+      23→    evalcache = config._store.setdefault(evalcache_key, default)
+      24→    try:
+      25→        return evalcache[expr]
+      26→    except KeyError:
+      27→        import _pytest._code
+      28→
+      29→        exprcode = _pytest._code.compile(expr, mode="eval")
+      30→        evalcache[expr] = x = eval(exprcode, d)
+      31→        return x
+      32→
+      33→
+      34→class MarkEvaluator:
+      35→    def __init__(self, item: Item, name: str) -> None:
+      36→        self.item = item
+      37→        self._marks = None  # type: Optional[L
+  [... truncated ...]
+- [Grep Result after action #5]
+  Found 1 file
+  src/_pytest/mark/evaluate.py
+- [Grep Result after action #7]
+  21:def cached_eval(config: Config, expr: str, d: Dict[str, object]) -> Any:
+  101:                        result = cached_eval(self.item.config, expr, d)
+- [Grep Result after action #11]
+  15:from _pytest.store import StoreKey
+- [Read Result after action #14]
+       1→import os
+       2→import platform
+       3→import sys
+       4→import traceback
+       5→from typing import Any
+       6→from typing import Dict
+       7→from typing import List
+       8→from typing import Optional
+       9→
+      10→from ..outcomes import fail
+      11→from ..outcomes import TEST_OUTCOME
+      12→from .structures import Mark
+      13→from _pytest.config import Config
+      14→from _pytest.nodes import Item
+      15→
+      16→
+      17→class MarkEvaluator:
+      18→    def __init__(self, item: Item, name: str) -> None:
+      19→        self.item = item
+      20→        self._marks = None  # type: Optional[List[Mark]]
+      21→        self._mark = None  # type: Optional[Mark]
+      22→        self._mark_name = name
+      23→
+      24→    def __bool__(self) -> bool:
+      25→        # don't cache here to prevent staleness
+      26→        return bool(self._get_marks())
+      27→
+      28→    def wasvalid(self) -> bool:
+      29→        return not hasattr(self, "exc")
+      30→
+      31→    def _get_marks(self) -> List[Mark]:
+      32→        return list(self.item.iter_markers(name=self._mark_name))
+      33→
+      34→    def invalidraise(self, exc) -> Optional[bool]:
+      35→        raises = self.get("raises")
+      36→
+  [... truncated ...]
+- [Test Output after action #18]
+  Exit code 1
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-5.4.1.dev522+g7b77fc086, py-1.10.0, pluggy-0.13.1 -- /opt/anaconda3/bin/python
+  cachedir: .pytest_cache
+  rootdir: ./swebench_9_15/testbed, configfile: pyproject.toml
+  plugins: anyio-3.6.2
+  collecting ... collected 2 items
+
+  test_module_1.py::test_should_skip SKIPPED                               [ 50%]
+  test_module_2.py::test_should_not_skip FAILED                            [100%]
+
+  =================================== FAILURES ===================================
+  _____________________________ test_should_not_skip _____________________________
+
+      @pytest.mark.skipif("skip")
+      def test_should_not_skip():
+  >       assert False
+  E       assert False
+
+  test_module_2.py:7: AssertionError
+  =========================== short test summary info ============================
+  FAILED test_module_2.py::test_should_not_skip - assert False
+  ========================= 1 failed, 1 skipped in 0.02s =========================
+
+SOURCE EDIT EVIDENCE
+--------------------
+- src/_pytest/mark/evaluate.py
+  Tool: Edit action #9
+  old_text_sha256: 43efa3a83fd6dbec35843af3bf3372e436a09357205f86750520ef955e1da247
+  new_text_sha256: ad9538b0aac108161067be389e3cb6f5939e75ae629b1b5ee10b6816757c4f4d
+- src/_pytest/mark/evaluate.py
+  Tool: Edit action #10
+  old_text_sha256: f14de67485e93a984e7775566855950be8c2027a094a42a36fcc6dbe093fe3a5
+  new_text_sha256: 60f9ea6a32ec540739117cf17e7395c4a42943d3ac9ce426aba809f6504b5e6e
+- src/_pytest/mark/evaluate.py
+  Tool: Edit action #13
+  old_text_sha256: bb13ba147bbffae099a571f9e7de629182719e7ec68058adf95a94d63e7e8d69
+  new_text_sha256: d010c00b30f338fcf1d383c761a5480f3a1c4776a825e9129c0e14d51eba0d71
+- test_module_1.py
+  Tool: Write action #16
+  new_text_sha256: 2c28e06d1403c8128716662177d31fc429ed10be62298760d7605f4f306b239c
+- test_module_2.py
+  Tool: Write action #17
+  new_text_sha256: 77c2bea782038b59964abe72094bbe293030a7dc39543f906793719a449febc0
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

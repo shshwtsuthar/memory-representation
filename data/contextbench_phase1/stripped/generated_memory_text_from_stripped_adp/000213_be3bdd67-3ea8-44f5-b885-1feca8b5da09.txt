@@ -1,0 +1,354 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: be3bdd67-3ea8-44f5-b885-1feca8b5da09
+- repo: sympy/sympy
+- instance_id: sympy__sympy-15011
+- base_commit: b7c5ba2bf3ffd5cf453b25af7c8ddd9a639800cb
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+lambdify does not work with certain MatrixSymbol names even with dummify=True
+`lambdify` is happy with curly braces in a symbol name and with `MatrixSymbol`s, but not with both at the same time, even if `dummify` is `True`.
+
+Here is some basic code that gives the error.
+```
+import sympy as sy
+curlyx = sy.symbols("{x}")
+v = sy.MatrixSymbol("v", 2, 1)
+curlyv = sy.MatrixSymbol("{v}", 2, 1)
+```
+
+The following two lines of code work:
+```
+curlyScalarId = sy.lambdify(curlyx, curlyx)
+vectorId = sy.lambdify(v,v)
+```
+
+The following two lines of code give a `SyntaxError`:
+```
+curlyVectorId = sy.lambdify(curlyv, curlyv)
+curlyVectorIdDummified = sy.lambdify(curlyv, curlyv, dummify=True)
+```
+
+FILES INSPECTED
+---------------
+- sympy/utilities/lambdify.py [Read: 2]
+- sympy/printing/lambdarepr.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [13] Glob glob='**/lambdify.py'
+- [19] Glob glob='**/lambdarepr.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] cd ./swebench_9_15/testbed && find . -type f -name "*.py" | grep -E "(lambdify|lambda)" | head -20
+- [test] cd testbed && python ../test_issue.py
+- [test] cd testbed && python ../test_issue.py
+- [other/reproduction] cd testbed && python --version
+- [test] cd testbed && python ../test_issue.py
+- [test] python ../test_issue.py
+- [test] python3 ../test_issue.py
+- [diagnostic] find . -name "lambdify.py" -type f
+- [other/reproduction] python3 -c "from sympy import MatrixSymbol, Symbol; from sympy.core.symbol import Symbol as S2; v = MatrixSymbol('{v}', 2, 1); print('Is Symbol:', isinstance(v, Symbol)); print('Type:', type(v)); print('MRO:', [c.__name__ for c in type(v).__mro__])"
+- [test] python3 ../debug_test.py
+- [test] python3 ../test_issue.py
+- [test] python3 ../comprehensive_test.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named sympy
+- FAIL: curlyVectorId failed: invalid syntax (<lambdifygenerated-3>, line 1)
+- FAIL: curlyVectorIdDummified failed: invalid syntax (<lambdifygenerated-4>, line 1)
+- FAIL: name 'a' is not defined
+- FAIL: unhashable type: 'list'
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Test Output after action #2]
+  Exit code 1
+    File "../test_issue.py", line 11
+  SyntaxError: Non-ASCII character '\xe2' in file ../test_issue.py on line 11, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+- [Test Output after action #4]
+  Exit code 1
+    File "../test_issue.py", line 13
+      print(f"FAIL: curlyScalarId failed: {e}")
+                                             ^
+  SyntaxError: invalid syntax
+- [Test Output after action #9]
+  Exit code 1
+  Traceback (most recent call last):
+    File "../test_issue.py", line 1, in <module>
+      import sympy as sy
+  ImportError: No module named sympy
+- [Test Output after action #11]
+  Testing curly scalar...
+  PASS: curlyScalarId works
+
+  Testing regular matrix symbol...
+  PASS: vectorId works
+
+  Testing curly matrix symbol...
+  FAIL: curlyVectorId failed: invalid syntax (<lambdifygenerated-3>, line 1)
+
+  Testing curly matrix symbol with dummify=True...
+  FAIL: curlyVectorIdDummified failed: invalid syntax (<lambdifygenerated-4>, line 1)
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/solvers/diophantine.py:3188: SyntaxWarning: "is" with a literal. Did you mean "=="?
+    if feasible is 1:  # it's prime and k == 2
+- [Glob Result after action #13]
+  ./swebench_9_15/testbed/sympy/utilities/lambdify.py
+- [Diagnostic Output after action #15]
+  ./sympy/utilities/lambdify.py
+- [Read Result after action #17]
+       1→"""
+       2→This module provides convenient functions to transform sympy expressions to
+       3→lambda functions which can be used to calculate numerical values very fast.
+       4→"""
+       5→
+       6→from __future__ import print_function, division
+       7→
+       8→from functools import wraps
+       9→import inspect
+      10→import keyword
+      11→import re
+      12→import textwrap
+      13→import linecache
+      14→
+      15→from sympy.core.compatibility import (exec_, is_sequence, iterable,
+      16→    NotIterable, string_types, range, builtins, integer_types, PY3)
+      17→from sympy.utilities.decorator import doctest_depends_on
+      18→
+      19→# These are the namespaces the lambda functions will use.
+      20→MATH = {}
+      21→MPMATH = {}
+      22→NUMPY = {}
+      23→TENSORFLOW = {}
+      24→SYMPY = {}
+      25→NUMEXPR = {}
+      26→
+      27→# Default namespaces, letting us define translations that can't be defined
+      28→# by simple variable maps, like I => 1j
+      29→# These are separate from the names above because the above names are modified
+      30→# throughout this file, whereas these should remain unmodified.
+      31→MATH_DEFAULT = {}
+      32→MPMATH_DEFAULT = {}
+      33→NUMPY_DEFAULT = {"I": 1j}
+      34→TE
+  [... truncated ...]
+- [Glob Result after action #19]
+  ./swebench_9_15/testbed/sympy/printing/lambdarepr.py
+- [Read Result after action #21]
+       1→from __future__ import print_function, division
+       2→from distutils.version import LooseVersion as V
+       3→
+       4→from .str import StrPrinter
+       5→from .pycode import (
+       6→    PythonCodePrinter,
+       7→    MpmathPrinter,  # MpmathPrinter is imported for backward compatibility
+       8→    NumPyPrinter  # NumPyPrinter is imported for backward compatibility
+       9→)
+      10→from sympy.external import import_module
+      11→from sympy.utilities import default_sort_key
+      12→
+      13→class LambdaPrinter(PythonCodePrinter):
+      14→    """
+      15→    This printer converts expressions into strings that can be used by
+      16→    lambdify.
+      17→    """
+      18→    printmethod = "_lambdacode"
+      19→
+      20→
+      21→    def _print_And(self, expr):
+      22→        result = ['(']
+      23→        for arg in sorted(expr.args, key=default_sort_key):
+      24→            result.extend(['(', self._print(arg), ')'])
+      25→            result.append(' and ')
+      26→        result = result[:-1]
+      27→        result.append(')')
+      28→        return ''.join(result)
+      29→
+      30→    def _print_Or(self, expr):
+      31→        result = ['(']
+      32→        for arg in sorted(expr.args, key=defaul
+  [... truncated ...]
+- [Test Output after action #25]
+  str(curlyv): {v}
+  curlyv.name: {v}
+  Is Symbol: False
+  Has name attribute: True
+  Is '{v}' a safe ident? None
+  Is 'v' a safe ident? True
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Read Result after action #27]
+     704→    def _preprocess(self, args, expr):
+     705→        """Preprocess args, expr to replace arguments that do not map
+     706→        to valid Python identifiers.
+     707→
+     708→        Returns string form of args, and updated expr.
+     709→        """
+     710→        from sympy import Dummy, Symbol, Function, flatten
+     711→        from sympy.matrices import DeferredVector
+     712→
+     713→        dummify = self._dummify
+     714→
+     715→        # Args of type Dummy can cause name collisions with args
+     716→        # of type Symbol.  Force dummify of everything in this
+     717→        # situation.
+     718→        if not dummify:
+     719→            dummify = any(isinstance(arg, Dummy) for arg in flatten(args))
+     720→
+     721→        argstrs = []
+     722→        for arg in args:
+     723→            if iterable(arg):
+     724→                nested_argstrs, expr = self._preprocess(arg, expr)
+     725→                argstrs.append(nested_argstrs)
+     726→            elif isinstance(arg, DeferredVector):
+     727→                argstrs.append(str(arg))
+     728→            elif isinstance(arg, Symbol):
+     729→                argrep = self._argrepr(arg)
+     730→
+     731→                if dummify or
+  [... truncated ...]
+- [Test Output after action #30]
+  Testing curly scalar...
+  PASS: curlyScalarId works
+
+  Testing regular matrix symbol...
+  PASS: vectorId works
+
+  Testing curly matrix symbol...
+  PASS: curlyVectorId works
+
+  Testing curly matrix symbol with dummify=True...
+  PASS: curlyVectorIdDummified works
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #32]
+  ============================================================
+  Comprehensive test for lambdify with MatrixSymbol fix
+  ============================================================
+
+  1. Testing basic curly brace MatrixSymbol...
+     PASS: Created lambdified function
+     Result: [[1], [2]]
+
+  2. Testing with dummify=True...
+     PASS: Created lambdified function with dummify=True
+     Result: [[1], [2]]
+
+  3. Testing MatrixSymbol in expression...
+     PASS: Created lambdified function for expression
+     Result: [[1], [2], [1], [2]]
+
+  4. Testing multiple MatrixSymbols with special characters...
+     FAIL: name 'a' is not defined
+
+  5. Testing mix of regular and curly brace symbols...
+     FAIL: unhashable type: 'list'
+
+  6. Testing other special characters in MatrixSymbol names...
+     PASS: MatrixSymbol with name '{x}'
+     PASS: MatrixSymbol with name '[y]'
+     PASS: MatrixSymbol with name '(z)'
+
+  7. Testing that regular symbols still work...
+     PASS: Regular symbols still work
+     f(2) = 4
+
+  ============================================================
+  All tests completed!
+  ============================================================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg
+  [... truncated ...]
+- [Test Output after action #35]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 83 items
+
+  sympy/utilities/tests/test_lambdify.py::test_no_args PASSED
+  sympy/utilities/tests/test_lambdify.py::test_single_arg PASSED
+  sympy/utilities/tests/test_lambdify.py::test_list_args PASSED
+  sympy/utilities/tests/test_lambdify.py::test_nested_args PASSED
+  sympy/utilities/tests/test_lambdify.py::test_str_args PASSED
+  sympy/utilities/tests/test_lambdify.py::test_own_namespace_1 PASSED
+  sympy/utilities/tests/test_lambdify.py::test_own_namespace_2 PASSED
+  sympy/utilities/tests/test_lambdify.py::test_own_module PASSED
+  sympy/utilities/tests/test_lambdify.py::test_bad_args PASSED
+  sympy/utilities/tests/test_lambdify.py::test_atoms PASSED
+  sympy/utilities/tests/test_lambdify.py::test_sympy_lambda PA
+  [... truncated ...]
+- [Test Output after action #38]
+  All tests for issue 15011 passed!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/utilities/lambdify.py
+  Tool: Edit action #29
+  old_text_sha256: eca83f7be0b649431dba2f24d0969c075fb06379907a5e26e39c37898dfb4e5a
+  new_text_sha256: ec2414412abd0c10b66d56be4d676fb2f8d539800f147b6eff3f0e5d841c86a6
+- swebench_9_15/final_verification.py
+  Tool: Write action #40
+  new_text_sha256: 84025781ee54fed7e58d2467edd27bf9c0fd4fcfb49eb4ebb0393b891e380ab3
+- swebench_9_15/test_matrixsymbol_lambdify.py
+  Tool: Write action #37
+  new_text_sha256: 4eb33074145ccfb8b1af9f6c29af285b8969e9dea0b11aecd2bfe49ce007b4ff
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

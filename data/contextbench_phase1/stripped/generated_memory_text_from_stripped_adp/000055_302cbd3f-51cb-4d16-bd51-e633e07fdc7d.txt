@@ -1,0 +1,480 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 302cbd3f-51cb-4d16-bd51-e633e07fdc7d
+- repo: scikit-learn/scikit-learn
+- instance_id: scikit-learn__scikit-learn-25638
+- base_commit: 6adb209acd63825affc884abcd85381f148fb1b0
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Support nullable pandas dtypes in `unique_labels`
+### Describe the workflow you want to enable
+
+I would like to be able to pass the nullable pandas dtypes ("Int64", "Float64", "boolean") into sklearn's `unique_labels` function. Because the dtypes become `object` dtype when converted to numpy arrays we get `ValueError: Mix type of y not allowed, got types {'binary', 'unknown'}`:
+
+Repro with sklearn 1.2.1
+```py
+    import pandas as pd
+    import pytest
+    from sklearn.utils.multiclass import unique_labels
+
+    for dtype in ["Int64", "Float64", "boolean"]:
+        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
+        y_predicted = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
+
+        with pytest.raises(ValueError, match="Mix type of y not allowed, got types"):
+            unique_labels(y_true, y_predicted)
+```
+
+### Describe your proposed solution
+
+We should get the same behavior as when `int64`, `float64`, and `bool` dtypes are used, which is no error:
+
+```python
+    import pandas as pd
+    from sklearn.utils.multiclass import unique_labels
+
+    for dtype in ["int64", "float64", "bool"]:
+        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
+        y_predicted = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
+
+        unique_labels(y_true, y_predicted)
+```
+
+### Describe alternatives you've considered, if relevant
+
+Our current workaround is to convert the data to numpy arrays with the corresponding dtype that works prior to passing it into `unique_labels`.
+
+### Additional context
+
+_No response_
+
+FILES INSPECTED
+---------------
+- sklearn/utils/multiclass.py [Read: 2, Grep: 3]
+- sklearn/utils/tests/test_multiclass.py [Read: 1, Grep: 1]
+- sklearn/utils/_array_api.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Glob glob='**/multiclass.py'
+- [2] Grep pattern='def unique_labels'
+- [4] Grep pattern='def unique_labels' path='testbed'
+- [8] Grep pattern='pandas|pd\\.' path='sklearn/utils/multiclass.py'
+- [20] Grep pattern='hasattr.*dtype|__array__|_array' path='sklearn/utils/multiclass.py'
+- [31] Glob path='testbed' glob='**/test_multiclass.py'
+- [35] Grep pattern='pandas|pd\\.|Series|DataFrame' path='sklearn/utils/tests/test_multiclass.py'
+- [44] Grep pattern='unique_values' path='sklearn/utils/multiclass.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la testbed 2>&1 || echo "No testbed found"
+- [test] cd testbed && python ../test_issue.py
+- [test] cd testbed && python test_issue.py
+- [test] python test_issue.py
+- [diagnostic] ls -la testbed/test_issue.py
+- [test] python3 testbed/test_issue.py
+- [test] python3 test_fix.py
+- [test] python3 test_fix_minimal.py
+- [test] python3 run_test.py
+- [test] python3 test_direct.py
+- [test] python3 test_direct_v2.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ModuleNotFoundError: No module named 'sklearn.__check_build._check_build'
+- ImportError: No module named 'sklearn.__check_build._check_build'
+- ModuleNotFoundError: No module named 'sklearn.utils.murmurhash'
+- ImportError: cannot import name 'murmurhash3_32' from '<unknown module name>' (unknown location)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #4]
+  Found 1 file
+  testbed/sklearn/utils/multiclass.py
+- [Read Result after action #6]
+       1→# Author: Arnaud Joly, Joel Nothman, Hamzeh Alsalhi
+       2→#
+       3→# License: BSD 3 clause
+       4→"""
+       5→Multi-class / multi-label utility function
+       6→==========================================
+       7→
+       8→"""
+       9→from collections.abc import Sequence
+      10→from itertools import chain
+      11→import warnings
+      12→
+      13→from scipy.sparse import issparse
+      14→from scipy.sparse import dok_matrix
+      15→from scipy.sparse import lil_matrix
+      16→
+      17→import numpy as np
+      18→
+      19→from .validation import check_array, _assert_all_finite
+      20→from ..utils._array_api import get_namespace
+      21→
+      22→
+      23→def _unique_multiclass(y):
+      24→    xp, is_array_api = get_namespace(y)
+      25→    if hasattr(y, "__array__") or is_array_api:
+      26→        return xp.unique_values(xp.asarray(y))
+      27→    else:
+      28→        return set(y)
+      29→
+      30→
+      31→def _unique_indicator(y):
+      32→    return np.arange(
+      33→        check_array(y, input_name="y", accept_sparse=["csr", "csc", "coo"]).shape[1]
+      34→    )
+      35→
+      36→
+      37→_FN_UNIQUE_LABELS = {
+      38→    "binary": _unique_multiclass,
+      39→    "multiclass": _unique_multiclass,
+      40→
+  [... truncated ...]
+- [Grep Result after action #8]
+  294:    sparse_pandas = y.__class__.__name__ in ["SparseSeries", "SparseArray"]
+  295:    if sparse_pandas:
+- [Test Output after action #10]
+  Exit code 2
+  python: can't open file '../test_issue.py': [Errno 2] No such file or directory
+- [Test Output after action #12]
+  Exit code 1
+    File "test_issue.py", line 12
+      print(f"  Testing dtype: {dtype}")
+                                      ^
+  SyntaxError: invalid syntax
+- [Test Output after action #14]
+  Exit code 2
+  python: can't open file 'test_issue.py': [Errno 2] No such file or directory
+- [Diagnostic Output after action #16]
+  -rw-------@ 1 user  staff  1386 26 Nov 21:31 testbed/test_issue.py
+- [Test Output after action #18]
+  Exit code 1
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 48, in <module>
+      from ._check_build import check_build  # noqa
+  ModuleNotFoundError: No module named 'sklearn.__check_build._check_build'
+
+  During handling of the above exception, another exception occurred:
+
+  Traceback (most recent call last):
+    File "testbed/test_issue.py", line 4, in <module>
+      from sklearn.utils.multiclass import unique_labels
+    File "./swebench_9_15/testbed/sklearn/__init__.py", line 81, in <module>
+      from . import __check_build  # noqa: F401
+    File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 50, in <module>
+      raise_build_error(e)
+    File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 31, in raise_build_error
+      raise ImportError(
+  ImportError: No module named 'sklearn.__check_build._check_build'
+  ___________________________________________________________________________
+  Contents of ./swebench_9_15/testbed/sklearn/__check_build:
+  __init__.py               __pycache__               _check_build.pyx
+  ___________________________________________________________________________
+  It seems that scikit-learn
+  [... truncated ...]
+- [Grep Result after action #20]
+  17-import numpy as np
+  18-
+  19:from .validation import check_array, _assert_all_finite
+  20:from ..utils._array_api import get_namespace
+  21-
+  22-
+  23-def _unique_multiclass(y):
+  24:    xp, is_array_api = get_namespace(y)
+  25:    if hasattr(y, "__array__") or is_array_api:
+  26-        return xp.unique_values(xp.asarray(y))
+  27-    else:
+  --
+  31-def _unique_indicator(y):
+  32-    return np.arange(
+  33:        check_array(y, input_name="y", accept_sparse=["csr", "csc", "coo"]).shape[1]
+  34-    )
+  35-
+  --
+  74-    array([ 1,  2,  5, 10, 11])
+  75-    """
+  76:    xp, is_array_api = get_namespace(*ys)
+  77-    if not ys:
+  78-        raise ValueError("No argument has been passed.")
+  --
+  93-        and len(
+  94-            set(
+  95:                check_array(y, accept_sparse=["csr", "csc", "coo"]).shape[1] for y in ys
+  96-            )
+  97-        )
+  --
+  107-        raise ValueError("Unknown label type: %s" % repr(ys))
+  108-
+  109:    if is_array_api:
+  110-        # array_api does not allow for mixed dtypes
+  111-        unique_ys = xp.concat([_unique_labels(y) for y in ys])
+  --
+  152-    True
+  153-    """
+  154:    xp, is_array_api = get_namespace(y)
+  155:    if hasattr(y, "__array__") or isinstance(y, Sequence) or is_array_api:
+  156-
+  [... truncated ...]
+- [Read Result after action #22]
+     280→    'multilabel-indicator'
+     281→    """
+     282→    xp, is_array_api = get_namespace(y)
+     283→    valid = (
+     284→        (isinstance(y, Sequence) or issparse(y) or hasattr(y, "__array__"))
+     285→        and not isinstance(y, str)
+     286→        or is_array_api
+     287→    )
+     288→
+     289→    if not valid:
+     290→        raise ValueError(
+     291→            "Expected array-like (array or non-string sequence), got %r" % y
+     292→        )
+     293→
+     294→    sparse_pandas = y.__class__.__name__ in ["SparseSeries", "SparseArray"]
+     295→    if sparse_pandas:
+     296→        raise ValueError("y cannot be class 'SparseSeries' or 'SparseArray'")
+     297→
+     298→    if is_multilabel(y):
+     299→        return "multilabel-indicator"
+     300→
+     301→    # DeprecationWarning will be replaced by ValueError, see NEP 34
+     302→    # https://numpy.org/neps/nep-0034-infer-dtype-is-object.html
+     303→    # We therefore catch both deprecation (NumPy < 1.24) warning and
+     304→    # value error (NumPy >= 1.24).
+     305→    with warnings.catch_warnings():
+     306→        warnings.simplefilter("error", np.VisibleDeprecationWarning)
+     307→        if not issparse(y):
+     308→            try:
+     309
+  [... truncated ...]
+- [Test Output after action #26]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_fix.py", line 16, in <module>
+      from sklearn.utils.multiclass import type_of_target, unique_labels
+    File "./swebench_9_15/testbed/sklearn/__init__.py", line 82, in <module>
+      from .base import clone
+    File "./swebench_9_15/testbed/sklearn/base.py", line 17, in <module>
+      from .utils import _IS_32BIT
+    File "./swebench_9_15/testbed/sklearn/utils/__init__.py", line 19, in <module>
+      from .murmurhash import murmurhash3_32
+  ModuleNotFoundError: No module named 'sklearn.utils.murmurhash'
+- [Test Output after action #29]
+  Testing nullable pandas dtypes...
+  ============================================================
+
+  Test 1: type_of_target with nullable pandas dtypes
+  ------------------------------------------------------------
+    dtype=Int64   , numpy_dtype=object
+    ✓ type_of_target=binary
+
+    dtype=Float64 , numpy_dtype=object
+    ✓ type_of_target=binary
+
+    dtype=boolean , numpy_dtype=object
+    ✓ type_of_target=binary
+
+  Test 2: unique_labels with nullable pandas dtypes
+  ------------------------------------------------------------
+    y_true dtype=Int64, y_predicted dtype=int64
+    ✓ unique_labels=[0 1]
+
+    y_true dtype=Float64, y_predicted dtype=int64
+    ✓ unique_labels=[0. 1.]
+
+    y_true dtype=boolean, y_predicted dtype=int64
+    ✓ unique_labels=[False  True]
+
+  Test 3: unique_labels with regular pandas dtypes (regression test)
+  ------------------------------------------------------------
+    ✓ dtype=int64    -> unique_labels=[0 1]
+    ✓ dtype=float64  -> unique_labels=[0. 1.]
+    ✓ dtype=bool     -> unique_labels=[False  True]
+
+  ============================================================
+  Testing complete!
+- [Glob Result after action #31]
+  ./swebench_9_15/testbed/sklearn/tests/test_multiclass.py
+  ./swebench_9_15/testbed/sklearn/utils/tests/test_multiclass.py
+- [Read Result after action #33]
+       0→import numpy as np
+       1→import scipy.sparse as sp
+       2→from itertools import product
+       3→import pytest
+       4→
+       5→from scipy.sparse import issparse
+       6→from scipy.sparse import csc_matrix
+       7→from scipy.sparse import csr_matrix
+       8→from scipy.sparse import coo_matrix
+       9→from scipy.sparse import dok_matrix
+      10→from scipy.sparse import lil_matrix
+      11→
+      12→from sklearn.utils._testing import assert_array_equal
+      13→from sklearn.utils._testing import assert_array_almost_equal
+      14→from sklearn.utils._testing import assert_allclose
+      15→from sklearn.utils.estimator_checks import _NotAnArray
+      16→
+      17→from sklearn.utils.multiclass import unique_labels
+      18→from sklearn.utils.multiclass import is_multilabel
+      19→from sklearn.utils.multiclass import type_of_target
+      20→from sklearn.utils.multiclass import class_distribution
+      21→from sklearn.utils.multiclass import check_classification_targets
+      22→from sklearn.utils.multiclass import _ovr_decision_function
+      23→
+      24→from sklearn.utils.metaestimators import _safe_split
+      25→from sklearn.model_selection import ShuffleSplit
+      26→from sklearn.svm import SVC
+      27→from sklea
+  [... truncated ...]
+- [Grep Result after action #35]
+  340:def test_type_of_target_pandas_sparse():
+  341:    pd = pytest.importorskip("pandas")
+  343:    y = pd.arrays.SparseArray([1, np.nan, np.nan, 1, np.nan])
+  344:    msg = "y cannot be class 'SparseSeries' or 'SparseArray'"
+- [Test Output after action #39]
+  Exit code 1
+  Traceback (most recent call last):
+    File "run_test.py", line 47, in <module>
+      from sklearn.utils import multiclass
+    File "./swebench_9_15/testbed/sklearn/__init__.py", line 82, in <module>
+      from .base import clone
+    File "./swebench_9_15/testbed/sklearn/base.py", line 17, in <module>
+      from .utils import _IS_32BIT
+    File "./swebench_9_15/testbed/sklearn/utils/__init__.py", line 19, in <module>
+      from .murmurhash import murmurhash3_32
+  ImportError: cannot import name 'murmurhash3_32' from '<unknown module name>' (unknown location)
+- [Test Output after action #42]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_direct.py", line 82, in <module>
+      result = type_of_target(y)
+    File "<string>", line 399, in type_of_target
+    File "/opt/anaconda3/lib/python3.8/site-packages/numpy/__init__.py", line 320, in __getattr__
+      raise AttributeError("module {!r} has no attribute "
+  AttributeError: module 'numpy' has no attribute 'unique_values'
+
+  ======================================================================
+  Testing nullable pandas dtypes support in scikit-learn
+  ======================================================================
+
+  Test 1: type_of_target with nullable pandas dtypes
+  ----------------------------------------------------------------------
+    Input: pd.Series with dtype=Int64
+    Converted to numpy: dtype=object
+    ✗ ERROR: module 'numpy' has no attribute 'unique_values'
+- [Grep Result after action #44]
+  26:        return xp.unique_values(xp.asarray(y))
+  112:        return xp.unique_values(unique_ys)
+  173:        labels = xp.unique_values(y.data)
+  180:        labels = xp.unique_values(y)
+  402:    if xp.unique_values(y).shape[0] > 2 or (y.ndim == 2 and len(first_row) > 1):
+- [Read Result after action #46]
+       0→"""Tools to support array_api."""
+       1→import numpy
+       2→from .._config import get_config
+       3→import scipy.special as special
+       4→
+       5→
+       6→class _ArrayAPIWrapper:
+       7→    """sklearn specific Array API compatibility wrapper
+       8→
+       9→    This wrapper makes it possible for scikit-learn maintainers to
+      10→    deal with discrepancies between different implementations of the
+      11→    Python array API standard and its evolution over time.
+      12→
+      13→    The Python array API standard specification:
+      14→    https://data-apis.org/array-api/latest/
+      15→
+      16→    Documentation of the NumPy implementation:
+      17→    https://numpy.org/neps/nep-0047-array-api-standard.html
+      18→    """
+      19→
+      20→    def __init__(self, array_namespace):
+      21→        self._namespace = array_namespace
+      22→
+      23→    def __getattr__(self, name):
+      24→        return getattr(self._namespace, name)
+      25→
+      26→    def take(self, X, indices, *, axis):
+      27→        # When array_api supports `take` we can use this directly
+      28→        # https://github.com/data-apis/array-api/issues/177
+      29→        if self._namespace.__name__ == "numpy.array_api":
+
+  [... truncated ...]
+- [Test Output after action #49]
+  ======================================================================
+  Testing nullable pandas dtypes support in scikit-learn
+  ======================================================================
+
+  Test 1: type_of_target with nullable pandas dtypes
+  ----------------------------------------------------------------------
+    Input: pd.Series with dtype=Int64
+    Converted to numpy: dtype=object
+    ✓ Result: type_of_target='binary'
+
+    Input: pd.Series with dtype=Float64
+    Converted to numpy: dtype=object
+    ✓ Result: type_of_target='binary'
+
+    Input: pd.Series with dtype=boolean
+    Converted to numpy: dtype=object
+    ✓ Result: type_of_target='binary'
+
+  Test 2: unique_labels with nullable pandas dtypes
+  ----------------------------------------------------------------------
+    Input: y_true dtype=Int64, y_predicted dtype=int64
+    ✓ Result: unique_labels=[0 1]
+
+    Input: y_true dtype=Float64, y_predicted dtype=int64
+    ✓ Result: unique_labels=[0. 1.]
+
+    Input: y_true dtype=boolean, y_predicted dtype=int64
+    ✓ Result: unique_labels=[False  True]
+
+  Test 3: unique_labels with regular pandas dtypes (regression test)
+  ----------------------------------------------------------------------
+    ✓ dtype=int64    ->
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sklearn/utils/multiclass.py
+  Tool: Edit action #24
+  old_text_sha256: 9b8e77257974696afafa895cb1722c817bb80b00c8c8e8a04117434449ff4150
+  new_text_sha256: bb683e77fae8b2c1a461bbc01880acd1496ce77ba7082697f177b23b9db33962
+- swebench_9_15/test_fix.py
+  Tool: Write action #25
+  new_text_sha256: cdd68fe37bb8239f10c63b26446e3b635712c74c1404f54cb9e949777479f140
+- swebench_9_15/test_fix_minimal.py
+  Tool: Write action #28
+  new_text_sha256: 48d05fff3859e31583260d13a3c77ec80e6a6f92899bf2c0a5f4318ac73a75e8
+- test_nullable_dtypes.py
+  Tool: Write action #37
+  new_text_sha256: 1ee8b54af1a5b1e725445ddfdc0b6b316a6e316d05e3e747fc181cb05f890983
+- swebench_9_15/run_test.py
+  Tool: Write action #38
+  new_text_sha256: cb92a83a08cf78d3202f65c464cc7b75a2152dfcb34383f041f9768c06454d4b
+- swebench_9_15/test_direct.py
+  Tool: Write action #41
+  new_text_sha256: 54b43181cffecd7a9a0afcc3351593de79f23805310b14bcd400e8abfed41618
+- swebench_9_15/test_direct_v2.py
+  Tool: Write action #48
+  new_text_sha256: fc328b45275810666139f856226fefa7e04fe30d94fc03dfe18727b92ecc7220
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

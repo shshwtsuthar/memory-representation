@@ -1,0 +1,405 @@
+STRIPPED RAW CLAUDE CODE TRAJECTORY
+This transcript was rendered from original raw JSONL using the canonical ADP strip manifest.
+
+[RAW line 2 USER]
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-15789
+base_commit: d4d5427571b4bf3a21c902276c2a00215c2a37cc
+problem_statement:
+Add an encoder parameter to django.utils.html.json_script().
+Description
+
+I have a use case where I want to customize the JSON encoding of some values to output to the template layer. It looks like django.utils.html.json_script is a good utility for that, however the JSON encoder is hardcoded to DjangoJSONEncoder. I think it would be nice to be able to pass a custom encoder class.
+By the way, django.utils.html.json_script is not documented (only its template filter counterpart is), would it be a good thing to add to the docs?
+[RAW line 5 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "pattern": "def json_script"
+}
+[RAW line 6 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "pattern": "json_script",
+  "type": "py"
+}
+[RAW line 10 TOOL Glob]
+{
+  "pattern": "**/django/utils/html.py"
+}
+[RAW line 13 TOOL Bash]
+find . -type f -name "html.py" | head -20
+[RAW line 37 TOOL Bash]
+find testbed -name "html.py" -path "*/utils/*" | head -5
+[RAW line 38 TOOL RESULT toolu_016jDYaYaFhNyWB6GcU3L2Sw]
+testbed/django/utils/html.py
+[RAW line 40 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/django/utils/html.py"
+}
+[RAW line 41 TOOL RESULT toolu_019K8ehaqL71rxG5NTPpuswa]
+     1→"""HTML utilities suitable for global use."""
+     2→
+     3→import html
+     4→import json
+     5→import re
+     6→from html.parser import HTMLParser
+     7→from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit
+     8→
+     9→from django.utils.encoding import punycode
+    10→from django.utils.functional import Promise, keep_lazy, keep_lazy_text
+    11→from django.utils.http import RFC3986_GENDELIMS, RFC3986_SUBDELIMS
+    12→from django.utils.regex_helper import _lazy_re_compile
+    13→from django.utils.safestring import SafeData, SafeString, mark_safe
+    14→from django.utils.text import normalize_newlines
+    15→
+    16→
+    17→@keep_lazy(SafeString)
+    18→def escape(text):
+    19→    """
+    20→    Return the given text with ampersands, quotes and angle brackets encoded
+    21→    for use in HTML.
+    22→
+    23→    Always escape input, even if it's already escaped and marked as such.
+    24→    This may result in double-escaping. If this is a concern, use
+    25→    conditional_escape() instead.
+    26→    """
+    27→    return SafeString(html.escape(str(text)))
+    28→
+    29→
+    30→_js_escapes = {
+    31→    ord("\\"): "\\u005C",
+    32→    ord("'"): "\\u0027",
+    33→    ord('"'): "\\u0022",
+    34→    ord(">"): "\\u003E",
+    35→    ord("<"): "\\u003C",
+    36→    ord("&"): "\\u0026",
+    37→    ord("="): "\\u003D",
+    38→    ord("-"): "\\u002D",
+    39→    ord(";"): "\\u003B",
+    40→    ord("`"): "\\u0060",
+    41→    ord("\u2028"): "\\u2028",
+    42→    ord("\u2029"): "\\u2029",
+    43→}
+    44→
+    45→# Escape every ASCII character with a value less than 32.
+    46→_js_escapes.update((ord("%c" % z), "\\u%04X" % z) for z in range(32))
+    47→
+    48→
+    49→@keep_lazy(SafeString)
+    50→def escapejs(value):
+    51→    """Hex encode characters for use in JavaScript strings."""
+    52→    return mark_safe(str(value).translate(_js_escapes))
+    53→
+    54→
+    55→_json_script_escapes = {
+    56→    ord(">"): "\\u003E",
+[... truncated ...]
+[RAW line 44 TOOL Bash]
+find testbed -name "*.py" -type f -exec grep -l "json_script" {} \; | head -20
+[RAW line 45 TOOL RESULT toolu_01BidbRot1UxtzvKCLdc4Ku1]
+testbed/tests/template_tests/filter_tests/test_json_script.py
+testbed/tests/utils_tests/test_html.py
+testbed/django/template/defaultfilters.py
+testbed/django/utils/html.py
+[RAW line 47 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/tests/utils_tests/test_html.py"
+}
+[RAW line 48 TOOL RESULT toolu_017PECdG9B2RPSLMEHFuARx6]
+     1→import os
+     2→from datetime import datetime
+     3→
+     4→from django.test import SimpleTestCase
+     5→from django.utils.functional import lazystr
+     6→from django.utils.html import (
+     7→    conditional_escape,
+     8→    escape,
+     9→    escapejs,
+    10→    format_html,
+    11→    html_safe,
+    12→    json_script,
+    13→    linebreaks,
+    14→    smart_urlquote,
+    15→    strip_spaces_between_tags,
+    16→    strip_tags,
+    17→    urlize,
+    18→)
+    19→from django.utils.safestring import mark_safe
+    20→
+    21→
+    22→class TestUtilsHtml(SimpleTestCase):
+    23→    def check_output(self, function, value, output=None):
+    24→        """
+    25→        function(value) equals output. If output is None, function(value)
+    26→        equals value.
+    27→        """
+    28→        if output is None:
+    29→            output = value
+    30→        self.assertEqual(function(value), output)
+    31→
+    32→    def test_escape(self):
+    33→        items = (
+    34→            ("&", "&amp;"),
+    35→            ("<", "&lt;"),
+    36→            (">", "&gt;"),
+    37→            ('"', "&quot;"),
+    38→            ("'", "&#x27;"),
+    39→        )
+    40→        # Substitution patterns for testing the above items.
+    41→        patterns = ("%s", "asdf%sfdsa", "%s1", "1%sb")
+    42→        for value, output in items:
+    43→            with self.subTest(value=value, output=output):
+    44→                for pattern in patterns:
+    45→                    with self.subTest(value=value, output=output, pattern=pattern):
+    46→                        self.check_output(escape, pattern % value, pattern % output)
+    47→                        self.check_output(
+    48→                            escape, lazystr(pattern % value), pattern % output
+    49→                        )
+    50→                # Check repeated values.
+    51→                self.check_output(escape, value * 2, output * 2)
+    52→        # Verify it doesn't double replace &.
+
+[... truncated ...]
+[RAW line 50 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/tests/template_tests/filter_tests/test_json_script.py"
+}
+[RAW line 51 TOOL RESULT toolu_017qt1QZf4Vc36Y9NRWm84i7]
+     1→from django.test import SimpleTestCase
+     2→
+     3→from ..utils import setup
+     4→
+     5→
+     6→class JsonScriptTests(SimpleTestCase):
+     7→    @setup({"json-tag01": '{{ value|json_script:"test_id" }}'})
+     8→    def test_basic(self):
+     9→        output = self.engine.render_to_string(
+    10→            "json-tag01", {"value": {"a": "testing\r\njson 'string\" <b>escaping</b>"}}
+    11→        )
+    12→        self.assertEqual(
+    13→            output,
+    14→            '<script id="test_id" type="application/json">'
+    15→            '{"a": "testing\\r\\njson \'string\\" '
+    16→            '\\u003Cb\\u003Eescaping\\u003C/b\\u003E"}'
+    17→            "</script>",
+    18→        )
+    19→
+    20→    @setup({"json-tag02": "{{ value|json_script }}"})
+    21→    def test_without_id(self):
+    22→        output = self.engine.render_to_string("json-tag02", {"value": {}})
+    23→        self.assertEqual(output, '<script type="application/json">{}</script>')
+    24→
+
+[RAW line 53 TOOL Bash]
+find testbed -name "*.py" -path "*/serializers/*" | grep json
+[RAW line 54 TOOL RESULT toolu_01TxXUTxQVPU8xWQtqQvWM1C]
+testbed/tests/serializers/test_jsonl.py
+testbed/tests/serializers/test_json.py
+testbed/django/core/serializers/jsonl.py
+testbed/django/core/serializers/json.py
+testbed/django/contrib/gis/serializers/geojson.py
+[RAW line 56 TOOL Bash]
+grep -A 20 "class DjangoJSONEncoder" testbed/django/core/serializers/json.py
+[RAW line 57 TOOL RESULT toolu_01Pp9mP7WUBGALACGidB3rog]
+class DjangoJSONEncoder(json.JSONEncoder):
+    """
+    JSONEncoder subclass that knows how to encode date/time, decimal types, and
+    UUIDs.
+    """
+
+    def default(self, o):
+        # See "Date Time String Format" in the ECMA-262 specification.
+        if isinstance(o, datetime.datetime):
+            r = o.isoformat()
+            if o.microsecond:
+                r = r[:23] + r[26:]
+            if r.endswith("+00:00"):
+                r = r[:-6] + "Z"
+            return r
+        elif isinstance(o, datetime.date):
+            return o.isoformat()
+        elif isinstance(o, datetime.time):
+            if is_aware(o):
+                raise ValueError("JSON can't represent timezone-aware times.")
+            r = o.isoformat()
+[RAW line 62 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/django/utils/html.py",
+  "new_text_sha256": "c42bd5b38f9fd3d2d5ca06cd5ceb92532d4fc79f6485c448330267a9add4e332",
+  "old_text_sha256": "80d2dfc897cf782129ad146e0f6c89de2b2d8630f4ae806e851475bcd40c00ba"
+}
+[RAW line 69 TOOL Bash]
+grep -A 10 "def json_script" testbed/django/template/defaultfilters.py
+[RAW line 72 TOOL Bash]
+grep "from django.utils.html import" testbed/django/template/defaultfilters.py | head -5
+[RAW line 73 TOOL RESULT toolu_01RTpRfgLjh4cMLG1npAtxwe]
+from django.utils.html import avoid_wrapping, conditional_escape, escape, escapejs
+from django.utils.html import json_script as _json_script
+from django.utils.html import linebreaks, strip_tags
+from django.utils.html import urlize as _urlize
+[RAW line 75 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/tests/utils_tests/test_html.py",
+  "new_text_sha256": "8d237192fa4d4871f6efdcd4970fe0b5a14af38299b497a9d5e60cbec3c169af",
+  "old_text_sha256": "fd94e0ff3ae57d8606fb8dfb9df6cc3f86cb5e08017aace97bcea4a0444af271"
+}
+[RAW line 82 TOOL Bash]
+cd testbed && python -m pytest tests/utils_tests/test_html.py::TestUtilsHtml::test_json_script -xvs
+[RAW line 83 TOOL RESULT toolu_019WgRDqQwHsnv9QbxFK3GxQ]
+Exit code 1
+/Applications/ADFRsuite-1.0/bin/python: No module named pytest
+[RAW line 85 TOOL Bash]
+cd testbed && python tests/runtests.py utils_tests.test_html.TestUtilsHtml.test_json_script -v 2
+[RAW line 86 TOOL RESULT toolu_01EEU32iNym1MUiT6bbcuijD]
+Exit code 1
+  File "tests/runtests.py", line 21
+    ) from e
+         ^
+SyntaxError: invalid syntax
+[RAW line 88 TOOL Bash]
+python --version
+[RAW line 89 TOOL RESULT toolu_01WxgRAAjLhg6JsAGEQyQhgs]
+Python 2.7.3
+[RAW line 91 TOOL Bash]
+python3 --version
+[RAW line 92 TOOL RESULT toolu_01Xbc49w4uWXumRqFVBQeAgp]
+Python 3.8.8
+[RAW line 94 TOOL Bash]
+cd testbed && python3 tests/runtests.py utils_tests.test_html.TestUtilsHtml.test_json_script -v 2
+[RAW line 95 TOOL RESULT toolu_01FivpvJZCVF6LstVnMzLfqF]
+Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+Importing application utils_tests
+Found 1 test(s).
+Skipping setup of unused database(s): default, other.
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+test_json_script (utils_tests.test_html.TestUtilsHtml) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+[RAW line 97 TOOL Bash]
+cd testbed && python3 tests/runtests.py utils_tests.test_html.TestUtilsHtml.test_json_script_without_id -v 2
+[RAW line 100 TOOL Bash]
+python3 tests/runtests.py utils_tests.test_html.TestUtilsHtml.test_json_script_custom_encoder -v 2
+[RAW line 101 TOOL RESULT toolu_01GdwT8QkibHPGA25dK5bWzT]
+Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+Importing application utils_tests
+Found 1 test(s).
+Skipping setup of unused database(s): default, other.
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+test_json_script_custom_encoder (utils_tests.test_html.TestUtilsHtml)
+Test json_script with a custom encoder. ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK
+[RAW line 103 TOOL Bash]
+python3 tests/runtests.py utils_tests.test_html.TestUtilsHtml -v 2 2>&1 | grep -E "(test_json|OK|FAILED)"
+[RAW line 104 TOOL RESULT toolu_01F6q4Q53Q9e2Wbw5SmErDzd]
+test_json_script (utils_tests.test_html.TestUtilsHtml) ... ok
+test_json_script_custom_encoder (utils_tests.test_html.TestUtilsHtml)
+test_json_script_without_id (utils_tests.test_html.TestUtilsHtml) ... ok
+OK
+[RAW line 106 TOOL Bash]
+python3 tests/runtests.py template_tests.filter_tests.test_json_script -v 2
+[RAW line 107 TOOL RESULT toolu_01DdRj2bQJGFQQZbmNfy6mpQ]
+Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+Importing application template_tests
+Found 2 test(s).
+Skipping setup of unused database(s): default, other.
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+test_basic (template_tests.filter_tests.test_json_script.JsonScriptTests) ... ok
+test_without_id (template_tests.filter_tests.test_json_script.JsonScriptTests) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.002s
+
+OK
+[RAW line 109 TOOL Write]
+{
+  "content_sha256": "a5ca9d127340596aec1c78ffc45f3dddab0bc8e1ab6ab8d0c6e31d819b35253a",
+  "file_path": "./swebench_9_15/testbed/test_custom_encoder.py"
+}
+[RAW line 113 TOOL Bash]
+cd testbed && python3 test_custom_encoder.py
+[RAW line 116 TOOL Bash]
+python3 testbed/test_custom_encoder.py
+[RAW line 117 TOOL RESULT toolu_016xqg2YwbkvaQa4YcTbAnnw]
+Exit code 2
+python3: can't open file 'testbed/test_custom_encoder.py': [Errno 2] No such file or directory
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+[RAW line 119 TOOL Bash]
+ls -la ./swebench_9_15/testbed/test_custom_encoder.py
+[RAW line 120 TOOL RESULT toolu_01B1MPmjA4JX9TB1EUnadbdH]
+-rw-------@ 1 user  staff  1105 10 Dec 18:08 ./swebench_9_15/testbed/test_custom_encoder.py
+[RAW line 122 TOOL Bash]
+python3 test_custom_encoder.py
+[RAW line 123 TOOL RESULT toolu_01U9aSXxPdU7HXQXp2mmvU6v]
+Test 1: Default encoder
+<script id="test_id" type="application/json">{"price": 19.99}</script>
+
+Test 2: Custom encoder with Decimal
+<script id="price_data" type="application/json">{"price": "$19.99", "tax": "$1.60"}</script>
+
+Test 3: Verify custom encoder is used
+SUCCESS: Custom encoder is working correctly!
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+[RAW line 156 TOOL Bash]
+python3 tests/runtests.py utils_tests.test_html -v 0 2>&1 | tail -5
+[RAW line 157 TOOL RESULT toolu_01T77E2hc9VrMfnLYGGDKy5X]
+System check identified no issues (0 silenced).
+----------------------------------------------------------------------
+Ran 18 tests in 0.216s
+
+OK

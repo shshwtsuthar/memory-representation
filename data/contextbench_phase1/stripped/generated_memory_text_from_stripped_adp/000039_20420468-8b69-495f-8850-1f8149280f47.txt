@@ -1,0 +1,405 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 20420468-8b69-495f-8850-1f8149280f47
+- repo: django/django
+- instance_id: django__django-11001
+- base_commit: ef082ebb84f00e38af4e8880d04e8365c2766d34
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Incorrect removal of order_by clause created as multiline RawSQL
+Description
+
+Hi.
+The SQLCompiler is ripping off one of my "order by" clause, because he "thinks" the clause was already "seen" (in SQLCompiler.get_order_by()). I'm using expressions written as multiline RawSQLs, which are similar but not the same.
+The bug is located in SQLCompiler.get_order_by(), somewhere around line computing part of SQL query without ordering:
+without_ordering = self.ordering_parts.search(sql).group(1)
+The sql variable contains multiline sql. As a result, the self.ordering_parts regular expression is returning just a line containing ASC or DESC words. This line is added to seen set, and because my raw queries have identical last lines, only the first clasue is returing from SQLCompiler.get_order_by().
+As a quick/temporal fix I can suggest making sql variable clean of newline characters, like this:
+sql_oneline = ' '.join(sql.split('\n'))
+without_ordering = self.ordering_parts.search(sql_oneline).group(1)
+Note: beware of unicode (Py2.x u'') and EOL dragons (\r).
+Example of my query:
+    return MyModel.objects.all().order_by(
+        RawSQL('''
+            case when status in ('accepted', 'verification')
+                 then 2 else 1 end''', []).desc(),
+        RawSQL('''
+            case when status in ('accepted', 'verification')
+                 then (accepted_datetime, preferred_datetime)
+                 else null end''', []).asc(),
+        RawSQL('''
+            case when status not in ('accepted', 'verification')
+                 then (accepted_datetime, preferred_datetime, created_at)
+                 else null end''', []).desc())
+The ordering_parts.search is returing accordingly:
+'                 then 2 else 1 end)'
+'                 else null end'
+'                 else null end'
+Second RawSQL with a                 else null end part is removed from query.
+The fun thing is that the issue can be solved by workaround by adding a space or any other char to the last line.
+So in case of RawSQL I can just say, that current implementation of avoiding duplicates in order by clause works only for special/rare cases (or does not work in all cases).
+The bug filed here is about wrong identification of duplicates (because it compares only last line of SQL passed to order by clause).
+Hope my notes will help you fixing the issue. Sorry for my english.
+
+FILES INSPECTED
+---------------
+- django/db/models/sql/compiler.py [Grep: 2, Read: 4]
+
+SEARCH ANCHORS
+--------------
+- [2] Grep pattern='class SQLCompiler'
+- [3] Grep pattern='SQLCompiler'
+- [6] Grep pattern='class SQLCompiler' path='testbed'
+- [8] Grep pattern='def get_order_by' path='django/db/models/sql/compiler.py'
+- [14] Grep pattern='ordering_parts' path='django/db/models/sql/compiler.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction]
+- [diagnostic] ls -la ./swebench_9_15/testbed/ 2>/dev/null || echo "No testbed directory found"
+- [test] cd testbed && python test_multiline_order_by.py
+- [other/reproduction] cd testbed && python --version
+- [other/reproduction] cd testbed && python3 --version
+- [other/reproduction] python3 --version
+- [test] cd testbed && python3 test_multiline_order_by.py
+- [test] python3 testbed/test_multiline_order_by.py
+- [diagnostic] ls -la test_multiline_order_by.py
+- [test] python3 test_multiline_order_by.py
+- [test] python3 test_multiline_order_by.py
+- [test] python3 -m pytest tests/queries/test_query.py -xvs 2>&1 | head -100
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- E   django.core.exceptions.ImproperlyConfigured: Requested setting INSTALLED_APPS, but settings are not configured. You must either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing settings.
+- ERROR tests/queries/test_query.py - django.core.exceptions.ImproperlyConfigur...
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #4]
+  No testbed directory found
+- [Grep Result after action #6]
+  Found 2 files
+  testbed/django/db/models/sql/compiler.py
+  testbed/django/db/backends/mysql/compiler.py
+- [Grep Result after action #8]
+  252:    def get_order_by(self):
+- [Read Result after action #10]
+     240→            get_select_from_parent(klass_info)
+     241→
+     242→        ret = []
+     243→        for col, alias in select:
+     244→            try:
+     245→                sql, params = self.compile(col, select_format=True)
+     246→            except EmptyResultSet:
+     247→                # Select a predicate that's always False.
+     248→                sql, params = '0', ()
+     249→            ret.append((col, (sql, params), alias))
+     250→        return ret, klass_info, annotations
+     251→
+     252→    def get_order_by(self):
+     253→        """
+     254→        Return a list of 2-tuples of form (expr, (sql, params, is_ref)) for the
+     255→        ORDER BY clause.
+     256→
+     257→        The order_by clause can alter the select clause (for example it
+     258→        can add aliases to clauses that do not yet have one, or it can
+     259→        add totally new select clauses).
+     260→        """
+     261→        if self.query.extra_order_by:
+     262→            ordering = self.query.extra_order_by
+     263→        elif not self.query.default_ordering:
+     264→            ordering = self.query.order_by
+     265→        elif self.query.order_by:
+     266→            ordering = self.query.order_by
+     2
+  [... truncated ...]
+- [Read Result after action #12]
+     330→                        True))
+     331→        result = []
+     332→        seen = set()
+     333→
+     334→        for expr, is_ref in order_by:
+     335→            resolved = expr.resolve_expression(self.query, allow_joins=True, reuse=None)
+     336→            if self.query.combinator:
+     337→                src = resolved.get_source_expressions()[0]
+     338→                # Relabel order by columns to raw numbers if this is a combined
+     339→                # query; necessary since the columns can't be referenced by the
+     340→                # fully qualified name and the simple column names may collide.
+     341→                for idx, (sel_expr, _, col_alias) in enumerate(self.select):
+     342→                    if is_ref and col_alias == src.refs:
+     343→                        src = src.source
+     344→                    elif col_alias:
+     345→                        continue
+     346→                    if src == sel_expr:
+     347→                        resolved.set_source_expressions([RawSQL('%d' % (idx + 1), ())])
+     348→                        break
+     349→                else:
+     350→                    raise DatabaseError('ORDER BY term does not match any column in the resu
+  [... truncated ...]
+- [Grep Result after action #14]
+  35:        self.ordering_parts = re.compile(r'(.*)\s(ASC|DESC)(.*)')
+  356:            without_ordering = self.ordering_parts.search(sql).group(1)
+  369:                without_ordering = self.ordering_parts.search(sql).group(1)
+- [Read Result after action #16]
+       0→import collections
+       1→import re
+       2→import warnings
+       3→from itertools import chain
+       4→
+       5→from django.core.exceptions import EmptyResultSet, FieldError
+       6→from django.db.models.constants import LOOKUP_SEP
+       7→from django.db.models.expressions import OrderBy, Random, RawSQL, Ref
+       8→from django.db.models.query_utils import QueryWrapper, select_related_descend
+       9→from django.db.models.sql.constants import (
+      10→    CURSOR, GET_ITERATOR_CHUNK_SIZE, MULTI, NO_RESULTS, ORDER_DIR, SINGLE,
+      11→)
+      12→from django.db.models.sql.query import Query, get_order_dir
+      13→from django.db.transaction import TransactionManagementError
+      14→from django.db.utils import DatabaseError, NotSupportedError
+      15→from django.utils.deprecation import RemovedInDjango31Warning
+      16→from django.utils.hashable import make_hashable
+      17→
+      18→FORCE = object()
+      19→
+      20→
+      21→class SQLCompiler:
+      22→    def __init__(self, query, connection, using):
+      23→        self.query = query
+      24→        self.connection = connection
+      25→        self.using = using
+      26→        self.quote_cache = {'*': '*'}
+      27→        # The select, klass_info, and
+  [... truncated ...]
+- [Test Output after action #19]
+  Exit code 1
+    File "test_multiline_order_by.py", line 68
+      print(f"Number of order_by clauses: {len(order_by_clauses)}")
+                                                                 ^
+  SyntaxError: invalid syntax
+- [Test Output after action #27]
+  Exit code 2
+  python3: can't open file 'testbed/test_multiline_order_by.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Diagnostic Output after action #29]
+  -rw-------@ 1 user  staff  2945 15 Dec 18:24 test_multiline_order_by.py
+- [Test Output after action #31]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+  Number of order_by clauses: 2
+
+  Order by clauses:
+
+  1. SQL: "(\n            case when status in ('accepted', 'verification')\n                 then 2 else 1 end) DESC"
+     Params: []
+
+  2. SQL: "(\n            case when status in ('accepted', 'verification')\n                 then (accepted_datetime, preferred_datetime)\n                 else null end) ASC"
+     Params: []
+
+  ❌ BUG CONFIRMED: Expected 3 order_by clauses, but got 2
+  The second and third RawSQL expressions have the same last line, so one was removed.
+- [Read Result after action #33]
+     350→                    raise DatabaseError('ORDER BY term does not match any column in the result set.')
+     351→            sql, params = self.compile(resolved)
+     352→            # Don't add the same column twice, but the order direction is
+     353→            # not taken into account so we strip it. When this entire method
+     354→            # is refactored into expressions, then we can check each part as we
+     355→            # generate it.
+     356→            without_ordering = self.ordering_parts.search(sql).group(1)
+     357→            params_hash = make_hashable(params)
+     358→            if (without_ordering, params_hash) in seen:
+     359→                continue
+     360→            seen.add((without_ordering, params_hash))
+     361→            result.append((resolved, (sql, params, is_ref)))
+     362→        return result
+     363→
+     364→    def get_extra_select(self, order_by, select):
+     365→        extra_select = []
+     366→        if self.query.distinct and not self.query.distinct_fields:
+     367→            select_sql = [t[1] for t in select]
+     368→            for expr, (sql, params, is_ref) in order_by:
+     369→                without_ordering = self.ordering_parts.search(sq
+  [... truncated ...]
+- [Test Output after action #39]
+  Number of order_by clauses: 3
+
+  Order by clauses:
+
+  1. SQL: "(\n            case when status in ('accepted', 'verification')\n                 then 2 else 1 end) DESC"
+     Params: []
+
+  2. SQL: "(\n            case when status in ('accepted', 'verification')\n                 then (accepted_datetime, preferred_datetime)\n                 else null end) ASC"
+     Params: []
+
+  3. SQL: "(\n            case when status not in ('accepted', 'verification')\n                 then (accepted_datetime, preferred_datetime, created_at)\n                 else null end) DESC"
+     Params: []
+
+  ✓ PASS: All 3 order_by clauses are present
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #41]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 0 items / 1 error
+
+  ==================================== ERRORS ====================================
+  _________________ ERROR collecting tests/queries/test_query.py _________________
+  tests/queries/test_query.py:14: in <module>
+      from .models import Author, Item, ObjectC, Ranking
+  tests/queries/models.py:9: in <module>
+      class DumbCategory(models.Model):
+  django/db/models/base.py:103: in __new__
+      app_config = apps.get_containing_app_config(module)
+  django/apps/registry.py:252: in get_containing_app_config
+      self.check_apps_ready()
+  django/apps/registry.py:134: in check_apps_ready
+      settings.INSTALLED_APPS
+  django/conf/__init__.py:76: in __getattr__
+      self._setup(name)
+  django/conf/__init__.py:57: in _setup
+      raise ImproperlyConfigured(
+  E   django.
+  [... truncated ...]
+- [Test Output after action #43]
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+  test_evaluated_queryset_as_argument (queries.tests.CloneTests)
+  #13227 -- If a queryset is already evaluated, it can still be used as a query arg ... ok
+  test_no_fields_cloning (queries.tests.CloneTests)
+  Cloning a queryset does not get out of hand. While complete ... ok
+  test_no_model_options_cloning (queries.tests.CloneTests)
+  Cloning a queryset does not get out of hand. While complete ... ok
+  test_ticket8597 (queries.tests.ComparisonTests) ... ok
+  test_in_list_limit (queries.tests.ConditionalTests) ... ok
+  test_infinite_loop (queries.tests.ConditionalTests) ... ok
+  test_null_ordering_added (queries.tests.ConditionalTests) ... skipped "Database doesn't support feature(s): require
+  [... truncated ...]
+- [Test Output after action #45]
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ----------------------------------------------------------------------
+  Ran 279 tests in 0.442s
+
+  OK (skipped=3, expected failures=2)
+  System check identified no issues (1 silenced).
+- [Test Output after action #48]
+  ======================================================================
+  Running comprehensive tests for multiline RawSQL order_by fix
+  ======================================================================
+  Test 1: Unix line endings...
+    ✓ PASS: 2 order_by clauses preserved
+
+  Test 2: Different SQL with same last line...
+    ✓ PASS: All 3 different clauses with same last line preserved
+
+  Test 3: Single-line RawSQL...
+    ✓ PASS: Single-line RawSQL works correctly
+
+  Test 4: Duplicate detection...
+    ✓ PASS: Duplicate detection still works
+
+  Test 5: Original bug report example...
+    ✓ PASS: Original bug report example works correctly
+
+  Test 6: Mixed tabs and spaces...
+    ✓ PASS: Mixed whitespace handled correctly
+
+  ======================================================================
+  ALL TESTS PASSED!
+  ======================================================================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/models/sql/compiler.py
+  Tool: Edit action #35
+  old_text_sha256: cc4bafecbd7a0c5e4d07aaadc37038a3db63b4aa3a02471473518c9f9109d94a
+  new_text_sha256: 96b4c99963873613d62f45bebd5a005a0333078a5aa9dfee8311910b81544f90
+- django/db/models/sql/compiler.py
+  Tool: Edit action #36
+  old_text_sha256: 2144a54ac8d77a3c8444544537e993e53ac856610f05ea3a0f4ecfed8f050e4b
+  new_text_sha256: f710e76b88b5d8437d0dac98158a3650578b41d9f878e9003c509c811e1f18d8
+- django/db/models/sql/compiler.py
+  Tool: Edit action #37
+  old_text_sha256: 96b4c99963873613d62f45bebd5a005a0333078a5aa9dfee8311910b81544f90
+  new_text_sha256: 602f5a57eb91284889f272fdb5f542a478c405e8e8cfe27aaa4494b5d4cba587
+- django/db/models/sql/compiler.py
+  Tool: Edit action #38
+  old_text_sha256: f710e76b88b5d8437d0dac98158a3650578b41d9f878e9003c509c811e1f18d8
+  new_text_sha256: 4d7b14cd7d326f552563a0d2870cf9558f7c9fc66b1c4f3ebedfde38844a7efb
+- test_multiline_order_by.py
+  Tool: Write action #18
+  new_text_sha256: 3563a9a03de02c23aba9b659077ca5aac15e5599424269e069f5a3277be21043
+- test_fix_comprehensive.py
+  Tool: Write action #47
+  new_text_sha256: eef15d48217d8efa2e1ec1f84a249d4a2259d547e72f89902ed2acb72ab9d42c
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

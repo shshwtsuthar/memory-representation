@@ -1,0 +1,335 @@
+STRIPPED RAW CLAUDE CODE TRAJECTORY
+This transcript was rendered from original raw JSONL using the canonical ADP strip manifest.
+
+[RAW line 3 USER]
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-14787
+base_commit: 004b4620f6f4ad87261e149898940f2dcd5757ef
+problem_statement:
+method_decorator() should preserve wrapper assignments
+Description
+
+the function that is passed to the decorator is a partial object and does not have any of the attributes expected from a function i.e. __name__, __module__ etc...
+consider the following case
+def logger(func):
+    @wraps(func)
+    def inner(*args, **kwargs):
+        try:
+            result = func(*args, **kwargs)
+        except Exception as e:
+            result = str(e)
+        finally:
+            logger.debug(f"{func.__name__} called with args: {args} and kwargs: {kwargs} resulting: {result}")
+    return inner
+class Test:
+    @method_decorator(logger)
+    def hello_world(self):
+        return "hello"
+Test().test_method()
+This results in the following exception
+AttributeError: 'functools.partial' object has no attribute '__name__'
+[RAW line 9 TOOL Bash]
+
+[RAW line 15 TOOL Bash]
+ls -la ./swebench_9_15/testbed 2>/dev/null | head -20
+[RAW line 36 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed",
+  "pattern": "def method_decorator"
+}
+[RAW line 39 TOOL Bash]
+find . -name "*.py" -type f -exec grep -l "def method_decorator" {} \;
+[RAW line 40 TOOL RESULT toolu_01NvLZxVbovxgajNTPzZ8SU4]
+./django/utils/decorators.py
+[RAW line 42 TOOL Bash]
+cd testbed && find . -name "*.py" -type f -exec grep -l "def method_decorator" {} \;
+[RAW line 51 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "pattern": "def method_decorator"
+}
+[RAW line 52 TOOL RESULT toolu_016b7nXsYmjZyv3uxDevPRjJ]
+Found 1 file
+django/utils/decorators.py
+[RAW line 54 TOOL Read]
+{
+  "file_path": "./swebench_9_15/django/utils/decorators.py"
+}
+[RAW line 60 TOOL Bash]
+ls -la django/utils/decorators.py
+[RAW line 61 TOOL RESULT toolu_0199RxBR9VQ9qZX6iEASS1F2]
+-rw-r--r--@ 1 user  staff  6834 11 Dec 01:58 django/utils/decorators.py
+[RAW line 63 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/django/utils/decorators.py"
+}
+[RAW line 64 TOOL RESULT toolu_01DZJnAaGupLaFo77eL56aJF]
+     1→"Functions that help with dynamically creating decorators for views."
+     2→
+     3→from functools import partial, update_wrapper, wraps
+     4→
+     5→
+     6→class classonlymethod(classmethod):
+     7→    def __get__(self, instance, cls=None):
+     8→        if instance is not None:
+     9→            raise AttributeError("This method is available only on the class, not on instances.")
+    10→        return super().__get__(instance, cls)
+    11→
+    12→
+    13→def _update_method_wrapper(_wrapper, decorator):
+    14→    # _multi_decorate()'s bound_method isn't available in this scope. Cheat by
+    15→    # using it on a dummy function.
+    16→    @decorator
+    17→    def dummy(*args, **kwargs):
+    18→        pass
+    19→    update_wrapper(_wrapper, dummy)
+    20→
+    21→
+    22→def _multi_decorate(decorators, method):
+    23→    """
+    24→    Decorate `method` with one or more function decorators. `decorators` can be
+    25→    a single decorator or an iterable of decorators.
+    26→    """
+    27→    if hasattr(decorators, '__iter__'):
+    28→        # Apply a list/tuple of decorators if 'decorators' is one. Decorator
+    29→        # functions are applied so that the call order is the same as the
+    30→        # order in which they appear in the iterable.
+    31→        decorators = decorators[::-1]
+    32→    else:
+    33→        decorators = [decorators]
+    34→
+    35→    def _wrapper(self, *args, **kwargs):
+    36→        # bound_method has the signature that 'decorator' expects i.e. no
+    37→        # 'self' argument, but it's a closure over self so it can call
+    38→        # 'func'. Also, wrap method.__get__() in a function because new
+    39→        # attributes can't be set on bound method objects, only on functions.
+    40→        bound_method = partial(method.__get__(self, type(self)))
+    41→        for dec in decorators:
+    42→            bound_method = dec(bound_method)
+    43→        return bound_method(*args, **kwargs)
+    44→
+    4
+[... truncated ...]
+[RAW line 74 TOOL Bash]
+python test_issue.py
+[RAW line 75 TOOL RESULT toolu_01AZ8dEG7nJB5mJSwpvxdVfj]
+Exit code 1
+  File "test_issue.py", line 15
+    print(f"{func.__name__} called with args: {args} and kwargs: {kwargs} resulting: {result}")
+                                                                                             ^
+SyntaxError: invalid syntax
+[RAW line 77 TOOL Bash]
+python --version
+[RAW line 78 TOOL RESULT toolu_01X421DuoFsizvS86pr2Jvgi]
+Python 2.7.3
+[RAW line 80 TOOL Bash]
+python3 test_issue.py
+[RAW line 81 TOOL RESULT toolu_01YUxm7nPn165VgvQaHpnXCW]
+Error: 'functools.partial' object has no attribute '__name__'
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Traceback (most recent call last):
+  File "test_issue.py", line 29, in <module>
+    result = Test().hello_world()
+  File "./swebench_9_15/testbed/django/utils/decorators.py", line 43, in _wrapper
+    return bound_method(*args, **kwargs)
+  File "test_issue.py", line 15, in inner
+    print(f"{func.__name__} called with args: {args} and kwargs: {kwargs} resulting: {result}")
+AttributeError: 'functools.partial' object has no attribute '__name__'
+[RAW line 87 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/django/utils/decorators.py",
+  "new_text_sha256": "0f8994af3a5ddd1c0e3212a4694bab4ad7a0dfc302be2cae1ec5eba84d25aeed",
+  "old_text_sha256": "559b4f947a7b615998cab965d9edf5a650b7dd04e2c703f4bb3d3e4927b3cf27"
+}
+[RAW line 91 TOOL Bash]
+python3 test_issue.py
+[RAW line 92 TOOL RESULT toolu_01YLMi5UdfmSaY5r1ncQFdik]
+hello_world called with args: () and kwargs: {} resulting: hello
+Success! Result: hello
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+[RAW line 97 TOOL Bash]
+find . -name "*test*decorator*.py" -type f 2>/dev/null | grep -v __pycache__ | head -10
+[RAW line 98 TOOL RESULT toolu_01NMkvW1XeJaorG7hqF9Y1aC]
+./tests/auth_tests/test_decorators.py
+./tests/utils_tests/test_decorators.py
+[RAW line 100 TOOL Bash]
+python3 -m pytest tests/utils_tests/test_decorators.py -v
+[RAW line 101 TOOL RESULT toolu_012RPZBzm1LkWJ3xo7dN8UmR]
+Exit code 1
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+rootdir: ./swebench_9_15/testbed
+configfile: pyproject.toml
+plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+collecting ... collected 4 items
+
+tests/utils_tests/test_decorators.py::DecoratorFromMiddlewareTests::test_callable_process_view_middleware ERROR [ 25%]
+tests/utils_tests/test_decorators.py::DecoratorFromMiddlewareTests::test_full_dec_normal ERROR [ 50%]
+tests/utils_tests/test_decorators.py::DecoratorFromMiddlewareTests::test_full_dec_templateresponse ERROR [ 75%]
+tests/utils_tests/test_decorators.py::DecoratorFromMiddlewareTests::test_process_view_middleware ERROR [100%]
+
+==================================== ERRORS ====================================
+_ ERROR at setup of DecoratorFromMiddlewareTests.test_callable_process_view_middleware _
+
+cls = <class 'utils_tests.test_decorators.DecoratorFromMiddlewareTests'>
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        if cls._overridden_settings:
+            cls._cls_overridden_context = override_settings(**cls._overridden_settings)
+            cls._cls_overridden_context.enable()
+            cls.addClassCleanup(cls._cls_overridden_context.disable)
+        if cls._modified_settings:
+            cls._cls_modified_context = modify_setting
+[... truncated ...]
+[RAW line 103 TOOL Bash]
+python3 tests/runtests.py utils_tests.test_decorators -v 2
+[RAW line 104 TOOL RESULT toolu_01Uk7fWUfcK4XxnHnrZjrtU2]
+Testing against Django installed in './swebench_9_15/testbed/django'
+Importing application utils_tests
+Found 4 test(s).
+Skipping setup of unused database(s): default, other.
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+test_callable_process_view_middleware (utils_tests.test_decorators.DecoratorFromMiddlewareTests)
+Test a middleware that implements process_view, operating on a callable class. ... ok
+test_full_dec_normal (utils_tests.test_decorators.DecoratorFromMiddlewareTests)
+All methods of middleware are called for normal HttpResponses ... ok
+test_full_dec_templateresponse (utils_tests.test_decorators.DecoratorFromMiddlewareTests)
+All methods of middleware are called for TemplateResponses in ... ok
+test_process_view_middleware (utils_tests.test_decorators.DecoratorFromMiddlewareTests)
+Test a middleware that implements process_view. ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.003s
+
+OK
+[RAW line 106 TOOL Bash]
+grep -r "method_decorator" tests/utils_tests/test_decorators.py
+[RAW line 109 TOOL Bash]
+grep -r "method_decorator" tests --include="*.py" | grep "from\|import" | head -10
+[RAW line 110 TOOL RESULT toolu_01KSKZ8ePwaL2Q6yytB1ottc]
+tests/generic_views/views.py:from django.utils.decorators import method_decorator
+tests/middleware/views.py:from django.utils.decorators import method_decorator
+tests/decorators/tests.py:from django.utils.decorators import method_decorator
+tests/test_client/views.py:from django.utils.decorators import method_decorator
+[RAW line 112 TOOL Bash]
+python3 tests/runtests.py decorators -v 2
+[RAW line 113 TOOL RESULT toolu_01K3RxtvmrjdKY4csDZggkHN]
+Testing against Django installed in './swebench_9_15/testbed/django'
+Importing application decorators
+Found 20 test(s).
+Skipping setup of unused database(s): default, other.
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+test_cache_control_decorator_http_request (decorators.tests.CacheControlDecoratorTest) ... ok
+test_argumented (decorators.tests.MethodDecoratorTests) ... ok
+test_bad_iterable (decorators.tests.MethodDecoratorTests) ... ok
+test_class_decoration (decorators.tests.MethodDecoratorTests)
+@method_decorator can be used to decorate a class and its methods. ... ok
+test_descriptors (decorators.tests.MethodDecoratorTests) ... ok
+test_invalid_method_name_to_decorate (decorators.tests.MethodDecoratorTests)
+@method_decorator on a nonexistent method raises an error. ... ok
+test_invalid_non_callable_attribute_decoration (decorators.tests.MethodDecoratorTests)
+@method_decorator on a non-callable attribute raises an error. ... ok
+test_new_attribute (decorators.tests.MethodDecoratorTests)
+A decorator that sets a new attribute on the method. ... ok
+test_preserve_attributes (decorators.tests.MethodDecoratorTests) ... ok
+test_preserve_signature (decorators.tests.MethodDecoratorTests) ... ok
+test_tuple_of_decorators (decorators.tests.MethodDecoratorTests)
+@method_decorator can accept a tuple of decorators. ... ok
+test_never_cache_decorator (decorators.tests.NeverCacheDecoratorTest) ... ok
+test_never_cache_decorator_http_request (decorators.tests.NeverCacheDecoratorTest) ... ok
+test_attributes (decorators.tests.DecoratorsTest)
+Built-in decorators set certain
+[... truncated ...]
+[RAW line 115 TOOL Write]
+{
+  "content_sha256": "9bfead82d7883243424e148d3635fa597ffd335637e19da8ace6ae94cc0021c0",
+  "file_path": "./swebench_9_15/testbed/test_wrapper_assignments.py"
+}
+[RAW line 119 TOOL Bash]
+python3 test_wrapper_assignments.py
+[RAW line 120 TOOL RESULT toolu_01QgA1as4bvnpNnGVZsZir6G]
+Running tests for method_decorator wrapper assignments fix...
+
+Function name: method_with_wraps
+Function module: __main__
+✓ test_decorator_using_wraps passed
+Calling method_with_name_access
+✓ test_decorator_accessing_name passed
+Function name: decorated_method_with_multiple_decorators
+Function module: __main__
+Calling method_with_multiple_decorators
+✓ test_multiple_decorators passed
+Function name: method_with_wraps
+Function module: __main__
+Calling method_with_name_access
+Function name: decorated_method_with_multiple_decorators
+Function module: __main__
+Calling method_with_multiple_decorators
+✓ test_wrapper_assignments_preserved passed
+
+All tests passed! ✓
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored

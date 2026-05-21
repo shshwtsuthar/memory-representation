@@ -1,0 +1,531 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 7eae692e-6c97-4c64-aaf5-ee67ac7c0208
+- repo: django/django
+- instance_id: django__django-15738
+- base_commit: 6f73eb9d90cfec684529aab48d517e3d6449ba8c
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Models migration with change field foreign to many and deleting unique together.
+Description
+
+        (last modified by Simon Charette)
+
+I have models like
+class Authors(models.Model):
+    project_data_set = models.ForeignKey(
+        ProjectDataSet,
+        on_delete=models.PROTECT
+    )
+    state = models.IntegerField()
+    start_date = models.DateField()
+    class Meta:
+         unique_together = (('project_data_set', 'state', 'start_date'),)
+and
+class DataSet(models.Model):
+    name = models.TextField(max_length=50)
+class Project(models.Model):
+    data_sets = models.ManyToManyField(
+        DataSet,
+        through='ProjectDataSet',
+    )
+    name = models.TextField(max_length=50)
+class ProjectDataSet(models.Model):
+    """
+    Cross table of data set and project
+    """
+    data_set = models.ForeignKey(DataSet, on_delete=models.PROTECT)
+    project = models.ForeignKey(Project, on_delete=models.PROTECT)
+    class Meta:
+        unique_together = (('data_set', 'project'),)
+when i want to change field project_data_set in Authors model from foreign key field to many to many field I must delete a unique_together, cause it can't be on many to many field.
+Then my model should be like:
+class Authors(models.Model):
+    project_data_set = models.ManyToManyField(
+        ProjectDataSet,
+    )
+    state = models.IntegerField()
+    start_date = models.DateField()
+But when I want to do a migrations.
+python3 manage.py makemigrations
+python3 manage.py migrate
+I have error:
+ValueError: Found wrong number (0) of constraints for app_authors(project_data_set, state, start_date)
+The database is on production, so I can't delete previous initial migrations, and this error isn't depending on database, cause I delete it and error is still the same.
+My solve is to first delete unique_together, then do a makemigrations and then migrate. After that change the field from foreign key to many to many field, then do a makemigrations and then migrate.
+But in this way I have 2 migrations instead of one.
+I added attachment with this project, download it and then do makemigrations and then migrate to see this error.
+
+FILES INSPECTED
+---------------
+- swebench_9_15/testbed [Grep: 4]
+- django/db/backends/base/schema.py [Read: 4, Grep: 1]
+- django/db/migrations/autodetector.py [Grep: 9, Read: 5]
+- django/db/migrations/operations/models.py [Grep: 2, Read: 2]
+- tests/migrations/test_autodetector.py [Grep: 4, Read: 3]
+- django/db/migrations/migration.py [Grep: 1, Read: 1]
+- django/db/migrations/operations/fields.py [Grep: 1]
+- django/db/migrations/state.py [Grep: 1]
+- tests/schema/tests.py [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [3] Grep pattern='Found wrong number.*of constraints' path='swebench_9_15/testbed'
+- [5] Grep pattern='Found wrong number.*of constraints' path='swebench_9_15/testbed'
+- [9] Glob path='swebench_9_15/testbed' glob='**/autodetector.py'
+- [13] Grep pattern='def.*unique_together' path='django/db/migrations/autodetector.py'
+- [17] Grep pattern='def _generate_removed_altered_foo_together' path='django/db/migrations/autodetector.py'
+- [19] Grep pattern='def _get_altered_foo_together_operations' path='django/db/migrations/autodetector.py'
+- [21] Grep pattern='def generate_removed_fields|def generate_altered_fields' path='django/db/migrations/autodetector.py'
+- [27] Grep pattern='def _detect_changes' path='django/db/migrations/autodetector.py'
+- [29] Grep pattern='def _generate_removed_field' path='django/db/migrations/autodetector.py'
+- [31] Grep pattern='def add_operation' path='django/db/migrations/autodetector.py'
+- [33] Grep pattern='def _sort_migrations' path='django/db/migrations/autodetector.py'
+- [37] Glob path='~/Desktop/swebben ch_9_15/testbed' glob='**/operations/models.py'
+- [39] Glob path='swebench_9_15/testbed' glob='**/operations/models.py'
+- [41] Grep pattern='class AlterUniqueTogether' path='django/db/migrations/operations/models.py'
+- [43] Grep pattern='class AlterTogetherOptionOperation' path='django/db/migrations/operations/models.py'
+- [59] Glob path='swebench_9_15/testbed' glob='**/test_autodetector.py'
+- [61] Grep pattern='unique_together.*ForeignKey|ForeignKey.*unique_together|test.*alter.*unique' path='tests/migrations/test_autodetector.py'
+- [62] Grep pattern='def test.*unique_together' path='tests/migrations/test_autodetector.py'
+- [68] Grep pattern='def get_changes' path='tests/migrations/test_autodetector.py'
+- [70] Grep pattern='def make_project_state' path='tests/migrations/test_autodetector.py'
+- [72] Grep pattern='15738' path='swebench_9_15/testbed'
+- [73] Grep pattern='def alter_unique_together' path='django/db/backends/base/schema.py'
+- [81] Grep pattern='def apply.*state|def database_forwards' path='django/db/migrations/migration.py'
+- [87] Grep pattern='def _generate_added_field' path='django/db/migrations/autodetector.py'
+- [89] Grep pattern='class AddField' path='django/db/migrations/operations/fields.py'
+- [91] Grep pattern='def add_field' path='django/db/migrations/state.py'
+- [97] Grep pattern='\\.alter_unique_together\\(|\\.alter_index_together\\(' path='swebench_9_15/testbed'
+- [99] Grep pattern='\\.alter_unique_together\\(|\\.alter_index_together\\(' path='tests/schema/tests.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction]
+- [diagnostic] ls -la ./swebench_9_15/testbed 2>&1 | head -20
+- [diagnostic] wc -l ./swebench_9_15/testbed/django/db/migrations/autodetector.py
+- [test] cd ./swebench_9_15 && python test_issue.py
+- [other/reproduction] python --version
+- [test] cd ./swebench_9_15 && python3 test_issue.py
+- [test] cd ./swebench_9_15 && python3 test_issue.py 2>&1 | grep -v "Error processing line"
+- [test] python3 test_issue.py 2>&1 | tail -20
+- [test] python3 test_issue.py 2>&1 | tail -20
+- [test] python3 test_issue.py 2>&1 | tail -20
+- [other/reproduction] python3 -c "from django.db import models; f = models.ManyToManyField('self'); print(hasattr(f, 'column')); print(f.column if hasattr(f, 'column') else 'No column')"
+- [test] cd ./swebench_9_15/testbed && python3 test_fix.py 2>&1 | grep -v "Error processing line" | tail -30
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- FAIL: test_fk_to_m2m_with_unique_together (__main__.FieldFKToM2MWithUniqueTogetherTests)
+- AssertionError: 0 not greater than or equal to 3
+- FAILED (failures=1)
+- E   django.core.exceptions.ImproperlyConfigured: Requested setting INSTALLED_APPS, but settings are not configured. You must either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing settings.
+- ERROR tests/migrations/test_autodetector.py - django.core.exceptions.Improper...
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #3]
+  Found 1 file
+  django/db/backends/base/schema.py
+- [Grep Result after action #5]
+  ./swebench_9_15/testbed/django/db/backends/base/schema.py-582-            )
+  django/db/backends/base/schema.py-583-            if default_name in constraint_names:
+  ./swebench_9_15/testbed/django/db/backends/base/schema.py-584-                constraint_names = [default_name]
+  django/db/backends/base/schema.py-585-        if len(constraint_names) != 1:
+  ./swebench_9_15/testbed/django/db/backends/base/schema.py-586-            raise ValueError(
+  django/db/backends/base/schema.py:587:                "Found wrong number (%s) of constraints for %s(%s)"
+  ./swebench_9_15/testbed/django/db/backends/base/schema.py-588-                % (
+  ./swebench_9_15/testbed/django/db/backends/base/schema.py-589-                    len(constraint_names),
+  ./swebench_9_15/testbed/django/db/backends/base/schema.py-590-                    model._meta.db_table,
+  ./swebench_9_15/testbed/django/db/backends/base/schema.py-591-                    ", ".join(columns),
+  ./swebench_9_15/testbed/django/db/backends/base/schema.py-592-                )
+- [Read Result after action #7]
+     550→        for fields in olds.difference(news):
+     551→            self._delete_composed_index(
+     552→                model,
+     553→                fields,
+     554→                {"index": True, "unique": False},
+     555→                self.sql_delete_index,
+     556→            )
+     557→        # Created indexes
+     558→        for field_names in news.difference(olds):
+     559→            fields = [model._meta.get_field(field) for field in field_names]
+     560→            self.execute(self._create_index_sql(model, fields=fields, suffix="_idx"))
+     561→
+     562→    def _delete_composed_index(self, model, fields, constraint_kwargs, sql):
+     563→        meta_constraint_names = {
+     564→            constraint.name for constraint in model._meta.constraints
+     565→        }
+     566→        meta_index_names = {constraint.name for constraint in model._meta.indexes}
+     567→        columns = [model._meta.get_field(field).column for field in fields]
+     568→        constraint_names = self._constraint_names(
+     569→            model,
+     570→            columns,
+     571→            exclude=meta_constraint_names | meta_index_names,
+     572→            **constraint_kwargs,
+     573→        )
+     574→
+  [... truncated ...]
+- [Glob Result after action #9]
+  ./swebench_9_15/testbed/django/db/migrations/autodetector.py
+- [Diagnostic Output after action #11]
+      1729 ./swebench_9_15/testbed/django/db/migrations/autodetector.py
+- [Grep Result after action #13]
+  591:        be deferred (e.g. unique_together, index_together).
+  1499:    def generate_removed_altered_unique_together(self):
+  1521:    def generate_altered_unique_together(self):
+- [Read Result after action #15]
+    1499→    def generate_removed_altered_unique_together(self):
+    1500→        self._generate_removed_altered_foo_together(operations.AlterUniqueTogether)
+    1501→
+    1502→    def generate_removed_altered_index_together(self):
+    1503→        self._generate_removed_altered_foo_together(operations.AlterIndexTogether)
+    1504→
+    1505→    def _generate_altered_foo_together(self, operation):
+    1506→        for (
+    1507→            old_value,
+    1508→            new_value,
+    1509→            app_label,
+    1510→            model_name,
+    1511→            dependencies,
+    1512→        ) in self._get_altered_foo_together_operations(operation.option_name):
+    1513→            removal_value = new_value.intersection(old_value)
+    1514→            if new_value != removal_value:
+    1515→                self.add_operation(
+    1516→                    app_label,
+    1517→                    operation(name=model_name, **{operation.option_name: new_value}),
+    1518→                    dependencies=dependencies,
+    1519→                )
+    1520→
+    1521→    def generate_altered_unique_together(self):
+    1522→        self._generate_altered_foo_together(operations.AlterUniqueTogether)
+    1523→
+    1524→    def generate_alt
+  [... truncated ...]
+- [Grep Result after action #17]
+  1474:    def _generate_removed_altered_foo_together(self, operation):
+  1475-        for (
+  1476-            old_value,
+  1477-            new_value,
+  1478-            app_label,
+  1479-            model_name,
+  1480-            dependencies,
+  1481-        ) in self._get_altered_foo_together_operations(operation.option_name):
+  1482-            if operation == operations.AlterIndexTogether:
+  1483-                old_value = {
+  1484-                    value
+  1485-                    for value in old_value
+  1486-                    if value
+  1487-                    not in self.renamed_index_together_values[app_label, model_name]
+  1488-                }
+  1489-            removal_value = new_value.intersection(old_value)
+  1490-            if removal_value or old_value:
+  1491-                self.add_operation(
+  1492-                    app_label,
+  1493-                    operation(
+  1494-                        name=model_name, **{operation.option_name: removal_value}
+  1495-                    ),
+  1496-                    dependencies=dependencies,
+  1497-                )
+  1498-
+  1499-    def generate_removed_altered_unique_together(self):
+  1500-        self._generate_removed_altered_foo_together(operations.Alter
+  [... truncated ...]
+- [Grep Result after action #19]
+  1427:    def _get_altered_foo_together_operations(self, option_name):
+  1428-        for app_label, model_name in sorted(self.kept_model_keys):
+  1429-            old_model_name = self.renamed_models.get(
+  1430-                (app_label, model_name), model_name
+  1431-            )
+  1432-            old_model_state = self.from_state.models[app_label, old_model_name]
+  1433-            new_model_state = self.to_state.models[app_label, model_name]
+  1434-
+  1435-            # We run the old version through the field renames to account for those
+  1436-            old_value = old_model_state.options.get(option_name)
+  1437-            old_value = (
+  1438-                {
+  1439-                    tuple(
+  1440-                        self.renamed_fields.get((app_label, model_name, n), n)
+  1441-                        for n in unique
+  1442-                    )
+  1443-                    for unique in old_value
+  1444-                }
+  1445-                if old_value
+  1446-                else set()
+  1447-            )
+  1448-
+  1449-            new_value = new_model_state.options.get(option_name)
+  1450-            new_value = set(new_value) if new_value else set()
+  1451-
+  1452-            if old_value != new_value:
+  1
+  [... truncated ...]
+- [Grep Result after action #21]
+  1073:    def generate_removed_fields(self):
+  1096:    def generate_altered_fields(self):
+- [Read Result after action #23]
+    1096→    def generate_altered_fields(self):
+    1097→        """
+    1098→        Make AlterField operations, or possibly RemovedField/AddField if alter
+    1099→        isn't possible.
+    1100→        """
+    1101→        for app_label, model_name, field_name in sorted(
+    1102→            self.old_field_keys & self.new_field_keys
+    1103→        ):
+    1104→            # Did the field change?
+    1105→            old_model_name = self.renamed_models.get(
+    1106→                (app_label, model_name), model_name
+    1107→            )
+    1108→            old_field_name = self.renamed_fields.get(
+    1109→                (app_label, model_name, field_name), field_name
+    1110→            )
+    1111→            old_field = self.from_state.models[app_label, old_model_name].get_field(
+    1112→                old_field_name
+    1113→            )
+    1114→            new_field = self.to_state.models[app_label, model_name].get_field(
+    1115→                field_name
+    1116→            )
+    1117→            dependencies = []
+    1118→            # Implement any model renames on relations; these are handled by RenameModel
+    1119→            # so we need to exclude them from the comparison
+    1120→            if hasa
+  [... truncated ...]
+- [Read Result after action #25]
+    1175→            new_field_dec = self.deep_deconstruct(new_field)
+    1176→            # If the field was confirmed to be renamed it means that only
+    1177→            # db_column was allowed to change which generate_renamed_fields()
+    1178→            # already accounts for by adding an AlterField operation.
+    1179→            if old_field_dec != new_field_dec and old_field_name == field_name:
+    1180→                both_m2m = old_field.many_to_many and new_field.many_to_many
+    1181→                neither_m2m = not old_field.many_to_many and not new_field.many_to_many
+    1182→                if both_m2m or neither_m2m:
+    1183→                    # Either both fields are m2m or neither is
+    1184→                    preserve_default = True
+    1185→                    if (
+    1186→                        old_field.null
+    1187→                        and not new_field.null
+    1188→                        and not new_field.has_default()
+    1189→                        and not new_field.many_to_many
+    1190→                    ):
+    1191→                        field = new_field.clone()
+    1192→                        new_default = self.questioner.ask_not_null_alteration(
+    1193→
+  [... truncated ...]
+- [Grep Result after action #27]
+  104:    def _detect_changes(self, convert_apps=None, graph=None):
+  105-        """
+  106-        Return a dict of migration plans which will achieve the
+  107-        change from from_state to to_state. The dict has app labels
+  108-        as keys and a list of migrations as values.
+  109-
+  110-        The resulting migrations aren't specially named, but the names
+  111-        do matter for dependencies inside the set.
+  112-
+  113-        convert_apps is the list of apps to convert to use migrations
+  114-        (i.e. to make initial migrations for, in the usual case)
+  115-
+  116-        graph is an optional argument that, if provided, can help improve
+  117-        dependency generation and avoid potential circular dependencies.
+  118-        """
+  119-        # The first phase is generating all the operations for each app
+  120-        # and gathering them into a big per-app list.
+  121-        # Then go through that list, order it, and split into migrations to
+  122-        # resolve dependencies caused by M2Ms and FKs.
+  123-        self.generated_operations = {}
+  124-        self.altered_indexes = {}
+  125-        self.altered_constraints = {}
+  126-        self.renamed_fields = {}
+  127-
+  128-        # Prepare som
+  [... truncated ...]
+- [Grep Result after action #29]
+  1080:    def _generate_removed_field(self, app_label, model_name, field_name):
+  1081-        self.add_operation(
+  1082-            app_label,
+  1083-            operations.RemoveField(
+  1084-                model_name=model_name,
+  1085-                name=field_name,
+  1086-            ),
+  1087-            # We might need to depend on the removal of an
+  1088-            # order_with_respect_to or index/unique_together operation;
+  1089-            # this is safely ignored if there isn't one
+  1090-            dependencies=[
+  1091-                (app_label, model_name, field_name, "order_wrt_unset"),
+  1092-                (app_label, model_name, field_name, "foo_together_change"),
+  1093-            ],
+  1094-        )
+  1095-
+  1096-    def generate_altered_fields(self):
+  1097-        """
+  1098-        Make AlterField operations, or possibly RemovedField/AddField if alter
+  1099-        isn't possible.
+  1100-        """
+  1101-        for app_label, model_name, field_name in sorted(
+  1102-            self.old_field_keys & self.new_field_keys
+  1103-        ):
+  1104-            # Did the field change?
+  1105-            old_model_name = self.renamed_models.get(
+  1106-                (app_label, model_name), model_name
+  [... truncated ...]
+- [Grep Result after action #31]
+  484:    def add_operation(self, app_label, operation, dependencies=None, beginning=False):
+  485-        # Dependencies are
+  486-        # (app_label, model_name, field_name, create/delete as True/False)
+  487-        operation._auto_deps = dependencies or []
+  488-        if beginning:
+  489-            self.generated_operations.setdefault(app_label, []).insert(0, operation)
+  490-        else:
+  491-            self.generated_operations.setdefault(app_label, []).append(operation)
+  492-
+  493-    def swappable_first_key(self, item):
+  494-        """
+  495-        Place potential swappable models first in lists of created models (only
+  496-        real way to solve #22783).
+  497-        """
+  498-        try:
+  499-            model_state = self.to_state.models[item]
+  500-            base_names = {
+  501-                base if isinstance(base, str) else base.__name__
+  502-                for base in model_state.bases
+  503-            }
+  504-            string_version = "%s.%s" % (item[0], item[1])
+- [Grep Result after action #33]
+  380:    def _sort_migrations(self):
+  381-        """
+  382-        Reorder to make things possible. Reordering may be needed so FKs work
+  383-        nicely inside the same app.
+  384-        """
+  385-        for app_label, ops in sorted(self.generated_operations.items()):
+  386-            # construct a dependency graph for intra-app dependencies
+  387-            dependency_graph = {op: set() for op in ops}
+  388-            for op in ops:
+  389-                for dep in op._auto_deps:
+  390-                    # Resolve intra-app dependencies to handle circular
+  391-                    # references involving a swappable model.
+  392-                    dep = self._resolve_dependency(dep)[0]
+  393-                    if dep[0] == app_label:
+  394-                        for op2 in ops:
+  395-                            if self.check_dependency(op2, dep):
+  396-                                dependency_graph[op].add(op2)
+  397-
+  398-            # we use a stable sort for deterministic tests & general behavior
+  399-            self.generated_operations[app_label] = stable_topological_sort(
+  400-                ops, dependency_graph
+  401-            )
+  402-
+  403-    def _optimize_migrations(self):
+  404-        # Add
+  [... truncated ...]
+- [Read Result after action #35]
+    1474→    def _generate_removed_altered_foo_together(self, operation):
+    1475→        for (
+    1476→            old_value,
+    1477→            new_value,
+    1478→            app_label,
+    1479→            model_name,
+    1480→            dependencies,
+    1481→        ) in self._get_altered_foo_together_operations(operation.option_name):
+    1482→            if operation == operations.AlterIndexTogether:
+    1483→                old_value = {
+    1484→                    value
+    1485→                    for value in old_value
+    1486→                    if value
+    1487→                    not in self.renamed_index_together_values[app_label, model_name]
+    1488→                }
+    1489→            removal_value = new_value.intersection(old_value)
+    1490→            if removal_value or old_value:
+    1491→                self.add_operation(
+    1492→                    app_label,
+    1493→                    operation(
+    1494→                        name=model_name, **{operation.option_name: removal_value}
+    1495→                    ),
+    1496→                    dependencies=dependencies,
+    1497→                )
+    1498→
+    1499→    def generate_removed_altered_unique_together(self):
+    1500→        self._
+  [... truncated ...]
+- [Glob Result after action #37]
+  <tool_use_error>Directory does not exist: ~/Desktop/swebben ch_9_15/testbed</tool_use_error>
+- [Glob Result after action #39]
+  ./swebench_9_15/testbed/django/db/migrations/operations/models.py
+- [Grep Result after action #41]
+  598:class AlterUniqueTogether(AlterTogetherOptionOperation):
+  599-    """
+  600-    Change the value of unique_together to the target one.
+  601-    Input value of unique_together must be a set of tuples.
+  602-    """
+  603-
+  604-    option_name = "unique_together"
+  605-
+  606-    def __init__(self, name, unique_together):
+  607-        super().__init__(name, unique_together)
+  608-
+  609-
+  610-class AlterIndexTogether(AlterTogetherOptionOperation):
+  611-    """
+  612-    Change the value of index_together to the target one.
+  613-    Input value of index_together must be a set of tuples.
+  614-    """
+  615-
+  616-    option_name = "index_together"
+  617-
+  618-    def __init__(self, name, index_together):
+  619-        super().__init__(name, index_together)
+  620-
+  621-
+  622-class AlterOrderWithRespectTo(ModelOptionOperation):
+  623-    """Represent a change with the order_with_respect_to option."""
+  624-
+  625-    option_name = "order_with_respect_to"
+  626-
+  627-    def __init__(self, name, order_with_respect_to):
+  628-        self.order_with_respect_to = order_with_respect_to
+  629-        super().__init__(name)
+  630-
+  631-    def deconstruct(self):
+  632-        kwargs = {
+  633-            "name": self.name,
+  634-            "order
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/backends/base/schema.py
+  Tool: Edit action #101
+  old_text_sha256: 50e4edd41e93bdb2c9ff17d15d1257f59f7fecd159b2561d1f878ceed2e3aeb8
+  new_text_sha256: f161fdfdd490443d56ca7ad7810b54dda12dad728505681c6d765d57e11cb82a
+- django/db/backends/base/schema.py
+  Tool: Edit action #104
+  old_text_sha256: aef98b37af89e324c724f58d1e25e1aec6bfd6e0604fddb7c1fb387cea9cd411
+  new_text_sha256: fb688c87fd1bf7ebb92477009848af17dd0654647d7125dcc98d70793300e4b9
+- django/db/migrations/operations/models.py
+  Tool: Edit action #105
+  old_text_sha256: 3942991ee879929217b6005a5a69f8007058fb3f102850856a75d7cf3c491d33
+  new_text_sha256: 611926ee29db7a530c82ce4dff74e46eaf0324afe15bfa453db897397ac682a4
+- test_fix.py
+  Tool: Write action #106
+  new_text_sha256: 08bbfb6ac340f332595384119313f0f931469794338067afe0c8620866f0479d
+- test_fix.py
+  Tool: Edit action #109
+  old_text_sha256: a92dbc8c729bf62cfa5c5640452fbf18218685ed9a45dd092acadc927a67993a
+  new_text_sha256: 67b7c6ed9f6be2255b64c0e307987e32c5b67a854eeef05bdb26b23b7a6c4df7
+- test_issue_15738.py
+  Tool: Write action #122
+  new_text_sha256: 239973cc3819c2f62a696c81cf366da1910c7db8fc104b3bfca80254ea0269b1
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

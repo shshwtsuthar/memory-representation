@@ -1,0 +1,474 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 111b81ba-69d4-4c33-b568-a4b02c7f8fd7
+- repo: sympy/sympy
+- instance_id: sympy__sympy-14317
+- base_commit: fb536869fb7aa28b2695ad7a3b70949926b291c4
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+LaTeX printer does not use the same order of monomials as pretty and str
+When printing a Poly, the str and pretty printers use the logical order of monomials, from highest to lowest degrees. But latex printer does not.
+```
+>>> var('a b c x')
+>>> p = Poly([a, 1, b, 2, c, 3], x)
+>>> p
+Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+>>> pretty(p)
+"Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')"
+>>> latex(p)
+'\\operatorname{Poly}{\\left( a x^{5} + b x^{3} + c x + x^{4} + 2 x^{2} + 3, x, domain=\\mathbb{Z}\\left[a, b, c\\right] \\right)}'
+```
+
+FILES INSPECTED
+---------------
+- sympy/printing [Grep: 1]
+- sympy/printing/latex.py [Grep: 1, Read: 1]
+- sympy/printing/str.py [Grep: 1, Read: 4]
+- sympy/printing/tests/test_latex.py [Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [5] Grep pattern='_print_Poly|class Poly' path='sympy/printing'
+- [6] Grep pattern='_print_Poly' path='testbed'
+- [10] Grep pattern='def _print_Poly' path='sympy/printing/latex.py'
+- [12] Grep pattern='def _print_Poly' path='sympy/printing/str.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction]
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [diagnostic] cd testbed && find . -name "*.py" -path "*/printing/*" | grep -E "(latex|printer)" | head -20
+- [diagnostic] cd testbed && grep -r "_print_Poly" sympy/printing/ --include="*.py"
+- [diagnostic] grep -r "_print_Poly" sympy/printing/ --include="*.py"
+- [test] python test_issue.py
+- [test] python ../test_issue.py
+- [diagnostic] pwd && ls test_issue.py 2>&1
+- [test] cd ./swebench_9_15 && python testbed/test_issue.py
+- [diagnostic] python -c "import sys; print(sys.path)"
+- [test] python3 testbed/test_issue.py
+- [diagnostic] pwd && ls -la test_issue.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: SymPy now depends on mpmath as an external library. See http://docs.sympy.org/latest/install.html#mpmath for more information.
+- E       AssertionError: assert '\\operatorna...ht) \\right)}' == '\\operatorna...ht) \\right)}'
+- E         - \operatorname{Poly}{\left( \frac{x}{y}, x, domain=\mathbb{Z}\left(y\right) \right)}
+- E         ?                                  ^    -
+- E         + \operatorname{Poly}{\left( \frac{1}{y} x, x, domain=\mathbb{Z}\left(y\right) \right)}
+- E         ?                                  ^       +++
+- FAILED sympy/printing/tests/test_latex.py::test_latex_Poly - AssertionError: ...
+- E   ValueError: Name node can't be used with 'False' constant
+- FAILED sympy/printing/tests/test_latex.py::test_issue_8470 - ValueError: Name...
+- FAILED sympy/printing/tests/test_latex.py::test_issue_13559 - ValueError: Nam...
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #3]
+  ./sympy/printing/codeprinter.py
+  ./sympy/printing/tests/test_codeprinter.py
+  ./sympy/printing/tests/test_latex.py
+  ./sympy/printing/latex.py
+  ./sympy/printing/printer.py
+- [Diagnostic Output after action #8]
+  sympy/printing//str.py:    def _print_PolyRing(self, ring):
+  sympy/printing//str.py:    def _print_PolyElement(self, poly):
+  sympy/printing//str.py:    def _print_Poly(self, expr):
+  sympy/printing//repr.py:    def _print_PolyRing(self, ring):
+  sympy/printing//repr.py:    def _print_PolyElement(self, poly):
+  sympy/printing//repr.py:    def _print_PolynomialRingBase(self, ring):
+  sympy/printing//pretty/pretty.py:    def _print_PolyRing(self, ring):
+  sympy/printing//pretty/pretty.py:    def _print_PolyElement(self, poly):
+  sympy/printing//pretty/pretty.py:    def _print_PolynomialRing(self, expr):
+  sympy/printing//pretty/pretty.py:    def _print_PolynomialRingBase(self, expr):
+  sympy/printing//latex.py:    def _print_PolynomialRing(self, expr):
+  sympy/printing//latex.py:    def _print_PolynomialRingBase(self, expr):
+  sympy/printing//latex.py:    def _print_Poly(self, poly):
+  sympy/printing//latex.py:    def _print_PolyElement(self, poly):
+- [Grep Result after action #10]
+  1817-        return self._print_Add(s.truncate()) + self._print(r' + \ldots')
+  1818-
+  1819-    def _print_FormalPowerSeries(self, s):
+  1820-        return self._print_Add(s.infinite)
+  1821-
+  1822-    def _print_FiniteField(self, expr):
+  1823-        return r"\mathbb{F}_{%s}" % expr.mod
+  1824-
+  1825-    def _print_IntegerRing(self, expr):
+  1826-        return r"\mathbb{Z}"
+  1827-
+  1828-    def _print_RationalField(self, expr):
+  1829-        return r"\mathbb{Q}"
+  1830-
+  1831-    def _print_RealField(self, expr):
+  1832-        return r"\mathbb{R}"
+  1833-
+  1834-    def _print_ComplexField(self, expr):
+  1835-        return r"\mathbb{C}"
+  1836-
+  1837:    def _print_PolynomialRing(self, expr):
+  1838-        domain = self._print(expr.domain)
+  1839-        symbols = ", ".join(map(self._print, expr.symbols))
+  1840-        return r"%s\left[%s\right]" % (domain, symbols)
+  1841-
+  1842-    def _print_FractionField(self, expr):
+  1843-        domain = self._print(expr.domain)
+  1844-        symbols = ", ".join(map(self._print, expr.symbols))
+  1845-        return r"%s\left(%s\right)" % (domain, symbols)
+  1846-
+  1847:    def _print_PolynomialRingBase(self, expr):
+  1848-        domain = self._print(expr.domain)
+  1849-        symbols
+  [... truncated ...]
+- [Grep Result after action #12]
+  393-        return expr._print()
+  394-
+  395-    def _print_TensMul(self, expr):
+  396-        return expr._print()
+  397-
+  398-    def _print_TensAdd(self, expr):
+  399-        return expr._print()
+  400-
+  401-    def _print_PermutationGroup(self, expr):
+  402-        p = ['    %s' % str(a) for a in expr.args]
+  403-        return 'PermutationGroup([\n%s])' % ',\n'.join(p)
+  404-
+  405-    def _print_PDF(self, expr):
+  406-        return 'PDF(%s, (%s, %s, %s))' % \
+  407-            (self._print(expr.pdf.args[1]), self._print(expr.pdf.args[0]),
+  408-            self._print(expr.domain[0]), self._print(expr.domain[1]))
+  409-
+  410-    def _print_Pi(self, expr):
+  411-        return 'pi'
+  412-
+  413:    def _print_PolyRing(self, ring):
+  414-        return "Polynomial ring in %s over %s with %s order" % \
+  415-            (", ".join(map(self._print, ring.symbols)), ring.domain, ring.order)
+  416-
+  417-    def _print_FracField(self, field):
+  418-        return "Rational function field in %s over %s with %s order" % \
+  419-            (", ".join(map(self._print, field.symbols)), field.domain, field.order)
+  420-
+  421-    def _print_FreeGroupElement(self, elm):
+  422-        return elm.__str__()
+  423-
+  424:    def _print_PolyElement(
+  [... truncated ...]
+- [Read Result after action #14]
+     435→    def _print_Poly(self, expr):
+     436→        ATOM_PREC = PRECEDENCE["Atom"] - 1
+     437→        terms, gens = [], [ self.parenthesize(s, ATOM_PREC) for s in expr.gens ]
+     438→
+     439→        for monom, coeff in expr.terms():
+     440→            s_monom = []
+     441→
+     442→            for i, exp in enumerate(monom):
+     443→                if exp > 0:
+     444→                    if exp == 1:
+     445→                        s_monom.append(gens[i])
+     446→                    else:
+     447→                        s_monom.append(gens[i] + "**%d" % exp)
+     448→
+     449→            s_monom = "*".join(s_monom)
+     450→
+     451→            if coeff.is_Add:
+     452→                if s_monom:
+     453→                    s_coeff = "(" + self._print(coeff) + ")"
+     454→                else:
+     455→                    s_coeff = self._print(coeff)
+     456→            else:
+     457→                if s_monom:
+     458→                    if coeff is S.One:
+     459→                        terms.extend(['+', s_monom])
+     460→                        continue
+     461→
+     462→                    if coeff is S.NegativeOne:
+     463→                        terms.extend(['-', s_monom])
+     464→
+  [... truncated ...]
+- [Read Result after action #16]
+     468→            if not s_monom:
+     469→                s_term = s_coeff
+     470→            else:
+     471→                s_term = s_coeff + "*" + s_monom
+     472→
+     473→            if s_term.startswith('-'):
+     474→                terms.extend(['-', s_term[1:]])
+     475→            else:
+     476→                terms.extend(['+', s_term])
+     477→
+     478→        if terms[0] in ['-', '+']:
+     479→            modifier = terms.pop(0)
+     480→
+     481→            if modifier == '-':
+     482→                terms[0] = '-' + terms[0]
+     483→
+     484→        format = expr.__class__.__name__ + "(%s, %s"
+     485→
+     486→        from sympy.polys.polyerrors import PolynomialError
+     487→
+
+- [Read Result after action #18]
+     484→        format = expr.__class__.__name__ + "(%s, %s"
+     485→
+     486→        from sympy.polys.polyerrors import PolynomialError
+     487→
+     488→        try:
+     489→            format += ", modulus=%s" % expr.get_modulus()
+     490→        except PolynomialError:
+     491→            format += ", domain='%s'" % expr.get_domain()
+     492→
+     493→        format += ")"
+     494→
+     495→        for index, item in enumerate(gens):
+     496→            if len(item) > 2 and (item[:1] == "(" and item[len(item) - 1:] == ")"):
+     497→                gens[index] = item[1:len(item) - 1]
+     498→
+     499→        return format % (' '.join(terms), ', '.join(gens))
+     500→
+     501→    def _print_ProductSet(self, p):
+     502→        return ' x '.join(self._print(set) for set in p.sets)
+     503→
+
+- [Test Output after action #20]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 2, in <module>
+      from sympy import var, Poly, latex, pretty
+    File "./swebench_9_15/testbed/sympy/__init__.py", line 21, in <module>
+      raise ImportError("SymPy now depends on mpmath as an external library. "
+  ImportError: SymPy now depends on mpmath as an external library. See http://docs.sympy.org/latest/install.html#mpmath for more information.
+- [Test Output after action #22]
+  Exit code 2
+  python: can't open file '../test_issue.py': [Errno 2] No such file or directory
+- [Diagnostic Output after action #24]
+  ./swebench_9_15/testbed
+  test_issue.py
+- [Test Output after action #26]
+  Exit code 1
+  Traceback (most recent call last):
+    File "testbed/test_issue.py", line 2, in <module>
+      from sympy import var, Poly, latex, pretty
+    File "./swebench_9_15/testbed/sympy/__init__.py", line 21, in <module>
+      raise ImportError("SymPy now depends on mpmath as an external library. "
+  ImportError: SymPy now depends on mpmath as an external library. See http://docs.sympy.org/latest/install.html#mpmath for more information.
+- [Diagnostic Output after action #28]
+  ['', '/Applications/ADFRsuite-1.0/lib/python27.zip', '/Applications/ADFRsuite-1.0/CCSBpckgs/PIL', '/Applications/ADFRsuite-1.0/lib/python2.7', '/Applications/ADFRsuite-1.0/lib/python2.7/plat-darwin', '/Applications/ADFRsuite-1.0/lib/python2.7/plat-mac', '/Applications/ADFRsuite-1.0/lib/python2.7/plat-mac/lib-scriptpackages', '/Applications/ADFRsuite-1.0/lib/python2.7/lib-tk', '/Applications/ADFRsuite-1.0/lib/python2.7/lib-old', '/Applications/ADFRsuite-1.0/lib/python2.7/lib-dynload', '/Applications/ADFRsuite-1.0/lib/python2.7/site-packages', '/Applications/ADFRsuite-1.0/CCSBpckgs']
+- [Test Output after action #30]
+  Exit code 2
+  python3: can't open file 'testbed/test_issue.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Diagnostic Output after action #32]
+  ./swebench_9_15/testbed
+  -rw-------@ 1 user  staff  954 17 Dec 01:17 test_issue.py
+- [Test Output after action #34]
+  Poly object:
+  Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+  String representation:
+  Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+  Pretty representation:
+  Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+  LaTeX representation:
+  \operatorname{Poly}{\left( a x^{5} + b x^{3} + c x + x^{4} + 2 x^{2} + 3, x, domain=\mathbb{Z}\left[a, b, c\right] \right)}
+
+  Checking order in string representation:
+    Contains 'a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3': True
+
+  Checking order in LaTeX representation:
+    Contains 'a x^{5} + x^{4} + b x^{3} + 2 x^{2} + c x + 3': False
+    WRONG - Contains 'a x^{5} + b x^{3} + c x + x^{4} + 2 x^{2} + 3': True
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using o
+  [... truncated ...]
+- [Read Result after action #36]
+    1855→    def _print_Poly(self, poly):
+    1856→        cls = poly.__class__.__name__
+    1857→        expr = self._print(poly.as_expr())
+    1858→        gens = list(map(self._print, poly.gens))
+    1859→        domain = "domain=%s" % self._print(poly.get_domain())
+    1860→
+    1861→        args = ", ".join([expr] + gens + [domain])
+    1862→        if cls in accepted_latex_functions:
+    1863→            tex = r"\%s {\left (%s \right )}" % (cls, args)
+    1864→        else:
+    1865→            tex = r"\operatorname{%s}{\left( %s \right)}" % (cls, args)
+    1866→
+    1867→        return tex
+    1868→
+    1869→    def _print_ComplexRootOf(self, root):
+
+- [Read Result after action #38]
+     435→    def _print_Poly(self, expr):
+     436→        ATOM_PREC = PRECEDENCE["Atom"] - 1
+     437→        terms, gens = [], [ self.parenthesize(s, ATOM_PREC) for s in expr.gens ]
+     438→
+     439→        for monom, coeff in expr.terms():
+     440→            s_monom = []
+     441→
+     442→            for i, exp in enumerate(monom):
+     443→                if exp > 0:
+     444→                    if exp == 1:
+     445→                        s_monom.append(gens[i])
+     446→                    else:
+     447→                        s_monom.append(gens[i] + "**%d" % exp)
+     448→
+     449→            s_monom = "*".join(s_monom)
+     450→
+     451→            if coeff.is_Add:
+     452→                if s_monom:
+     453→                    s_coeff = "(" + self._print(coeff) + ")"
+     454→                else:
+     455→                    s_coeff = self._print(coeff)
+     456→            else:
+     457→                if s_monom:
+     458→                    if coeff is S.One:
+     459→                        terms.extend(['+', s_monom])
+     460→                        continue
+     461→
+     462→                    if coeff is S.NegativeOne:
+     463→                        terms.extend(['-', s_monom])
+     464→
+  [... truncated ...]
+- [Test Output after action #41]
+  Poly object:
+  Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+  String representation:
+  Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+  Pretty representation:
+  Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+  LaTeX representation:
+  \operatorname{Poly}{\left( a x^{5} x^{4} + b x^{3} + 2 x^{2} + c x + 3, x, domain=\mathbb{Z}\left[a, b, c\right] \right)}
+
+  Checking order in string representation:
+    Contains 'a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3': True
+
+  Checking order in LaTeX representation:
+    Contains 'a x^{5} + x^{4} + b x^{3} + 2 x^{2} + c x + 3': False
+    WRONG - Contains 'a x^{5} + b x^{3} + c x + x^{4} + 2 x^{2} + 3': False
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or
+  [... truncated ...]
+- [Test Output after action #43]
+  Poly object:
+  Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+  Terms:
+    monom: (5,), coeff: a
+    monom: (4,), coeff: 1
+    monom: (3,), coeff: b
+    monom: (2,), coeff: 2
+    monom: (1,), coeff: c
+    monom: (0,), coeff: 3
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Mapping, defaultdict
+  ./swebench_9_15/testbed/sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import defaultdict, Iterable
+  ./swebench_9_15/testbed
+  [... truncated ...]
+- [Test Output after action #46]
+  Poly object:
+  Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+  String representation:
+  Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+  Pretty representation:
+  Poly(a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3, x, domain='ZZ[a,b,c]')
+
+  LaTeX representation:
+  \operatorname{Poly}{\left( a x^{5} + x^{4} + b x^{3} + 2 x^{2} + c x + 3, x, domain=\mathbb{Z}\left[a, b, c\right] \right)}
+
+  Checking order in string representation:
+    Contains 'a*x**5 + x**4 + b*x**3 + 2*x**2 + c*x + 3': True
+
+  Checking order in LaTeX representation:
+    Contains 'a x^{5} + x^{4} + b x^{3} + 2 x^{2} + c x + 3': True
+    WRONG - Contains 'a x^{5} + b x^{3} + c x + x^{4} + 2 x^{2} + 3': False
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using o
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/printing/latex.py
+  Tool: Edit action #40
+  old_text_sha256: 85674d86b25484db2abd20d2647a849196729cf33ca309d339961ae9e688ab8b
+  new_text_sha256: 7b0495f185496deb74dc817c813f0f87a717fa1382c09e7390bfc90c31b7daa5
+- sympy/printing/latex.py
+  Tool: Edit action #45
+  old_text_sha256: 17c96146c9eede9d87be2d8bd48e98613acc7e3ca32831b63f84ce350445f9c4
+  new_text_sha256: 04b81457a172e9a5ecccf49024bf37537edb291006d3111e8938dbb41741c666
+- test_poly_xy.py
+  Tool: Write action #50
+  new_text_sha256: 7dcb30aaec3b2b28b31b11eecc13fd65f519c69f1074a6ee84c48b3d6e443c40
+- sympy/printing/tests/test_latex.py
+  Tool: Edit action #57
+  old_text_sha256: cb10989b0cf6da3b7c4511ac249ff1e5076acb5fb114a7aec0ccb762c49d8992
+  new_text_sha256: df3d558bc99b553d4b7f7640a1825ce14cf55a641b5b9bf1c26be1f85d328c8c
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

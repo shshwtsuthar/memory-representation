@@ -1,0 +1,442 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: d0135991-325b-43d3-9e80-19826a3ea2ee
+- repo: django/django
+- instance_id: django__django-13265
+- base_commit: b2b0711b555fa292751763c2df4fe577c396f265
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+AlterOrderWithRespectTo() with ForeignKey crash when _order is included in Index().
+Description
+
+    class Meta:
+        db_table = 'look_image'
+        order_with_respect_to = 'look'
+        indexes = [
+            models.Index(fields=['look', '_order']),
+            models.Index(fields=['created_at']),
+            models.Index(fields=['updated_at']),
+        ]
+migrations.CreateModel(
+            name='LookImage',
+            fields=[
+                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('look', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='images', to='posts.Look', verbose_name='LOOK')),
+                ('image_url', models.URLField(blank=True, max_length=10000, null=True)),
+                ('image', models.ImageField(max_length=2000, upload_to='')),
+                ('deleted', models.DateTimeField(editable=False, null=True)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+            ],
+        ),
+        migrations.AddIndex(
+            model_name='lookimage',
+            index=models.Index(fields=['look', '_order'], name='look_image_look_id_eaff30_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='lookimage',
+            index=models.Index(fields=['created_at'], name='look_image_created_f746cf_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='lookimage',
+            index=models.Index(fields=['updated_at'], name='look_image_updated_aceaf9_idx'),
+        ),
+        migrations.AlterOrderWithRespectTo(
+            name='lookimage',
+            order_with_respect_to='look',
+        ),
+I added orders_with_respect_to in new model class's Meta class and also made index for '_order' field by combining with other field. And a new migration file based on the model looks like the code above.
+The problem is operation AlterOrderWithRespectTo after AddIndex of '_order' raising error because '_order' field had not been created yet.
+It seems to be AlterOrderWithRespectTo has to proceed before AddIndex of '_order'.
+
+FILES INSPECTED
+---------------
+- django/db/migrations [Grep: 1]
+- django/db/migrations/operations/models.py [Read: 2]
+- django/db/migrations/autodetector.py [Read: 8, Grep: 3]
+- tests/migrations/test_autodetector.py [Grep: 3, Read: 2]
+- django/db/models/options.py [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Grep pattern='AlterOrderWithRespectTo'
+- [2] Grep pattern='order_with_respect_to'
+- [3] Glob glob='**/autodetector.py'
+- [5] Glob glob='testbed/django/db/migrations/**/*.py'
+- [7] Grep pattern='AlterOrderWithRespectTo' path='django/db/migrations'
+- [13] Grep pattern='generate.*index' path='django/db/migrations/autodetector.py'
+- [17] Grep pattern='generate_altered_order' path='django/db/migrations/autodetector.py'
+- [27] Grep pattern='class.*Test.*OrderWithRespect' path='tests/migrations/test_autodetector.py'
+- [29] Grep pattern='order_with_respect_to' path='tests/migrations/test_autodetector.py'
+- [33] Grep pattern='author_with_book_order_wrt' path='tests/migrations/test_autodetector.py'
+- [53] Grep pattern='generate_created_models' path='django/db/migrations/autodetector.py'
+- [64] Grep pattern='_order' path='django/db/models/options.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find . -name "testbed" -type d 2>/dev/null | head -5
+- [diagnostic] find testbed/tests -name "*autodetect*" -o -name "*order_with_respect*" | head -10
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [diagnostic] cd testbed && python -c "import django; print(django.VERSION)"
+- [other/reproduction] cd testbed && python3 -c "import django; print(django.VERSION)"
+- [test] cd testbed && python3 ../test_issue.py
+- [other/reproduction] PYTHONPATH=testbed python3 test_issue.py
+- [other/reproduction] PYTHONPATH=testbed python3 test_issue.py
+- [other/reproduction] PYTHONPATH=testbed python3 test_issue.py
+- [other/reproduction] PYTHONPATH=testbed python3 test_issue.py
+- [test] cd testbed && python3 -m pytest tests/migrations/test_autodetector.py -xvs -k "order_with_respect" 2>&1 | head -100
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named django.conf
+- E   django.core.exceptions.ImproperlyConfigured: Requested setting INSTALLED_APPS, but settings are not configured. You must either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing settings.
+- ERROR tests/migrations/test_autodetector.py - django.core.exceptions.Improper...
+- Traceback (most recent call last):
+- ERROR: AddIndex with _order comes before AlterOrderWithRespectTo!
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #5]
+  ./swebench_9_15/testbed/django/db/migrations/__init__.py
+  ./swebench_9_15/testbed/django/db/migrations/autodetector.py
+  ./swebench_9_15/testbed/django/db/migrations/exceptions.py
+  ./swebench_9_15/testbed/django/db/migrations/executor.py
+  ./swebench_9_15/testbed/django/db/migrations/graph.py
+  ./swebench_9_15/testbed/django/db/migrations/loader.py
+  ./swebench_9_15/testbed/django/db/migrations/migration.py
+  ./swebench_9_15/testbed/django/db/migrations/operations/__init__.py
+  ./swebench_9_15/testbed/django/db/migrations/operations/base.py
+  ./swebench_9_15/testbed/django/db/migrations/operations/fields.py
+  ./swebench_9_15/testbed/django/db/migrations/operations/models.py
+  ./swebench_9_15/testbed/django/db/migrations/operations/special.py
+  ./swebench_9_15/testbed/django/db/migrations/operations/utils.py
+  ./swebench_9_15/testbed/django/db/migrations/optimizer.py
+  ./swebench_9_15/testbed/django/db/migrations/questioner.py
+  ./swebench_9_15/testbed/django/db/migrations/recorder.py
+  ./swebench_9_15/testbed/django/db/migrations/serializer.py
+  ./swebench_9_15/testbed/django/db/migrations/state.py
+  ./swebench_9_15/testbed/django/db/migrations/utils.py
+  ./swebench_9_15/testbed/django/db/migrations/writer.py
+- [Grep Result after action #7]
+  Found 3 files
+  testbed/django/db/migrations/operations/models.py
+  testbed/django/db/migrations/operations/__init__.py
+  testbed/django/db/migrations/autodetector.py
+- [Read Result after action #9]
+       1→from django.db import models
+       2→from django.db.migrations.operations.base import Operation
+       3→from django.db.migrations.state import ModelState
+       4→from django.db.models.options import normalize_together
+       5→from django.utils.functional import cached_property
+       6→
+       7→from .fields import (
+       8→    AddField, AlterField, FieldOperation, RemoveField, RenameField,
+       9→)
+      10→from .utils import field_references, get_references, resolve_relation
+      11→
+      12→
+      13→def _check_for_duplicates(arg_name, objs):
+      14→    used_vals = set()
+      15→    for val in objs:
+      16→        if val in used_vals:
+      17→            raise ValueError(
+      18→                "Found duplicate value %s in CreateModel %s argument." % (val, arg_name)
+      19→            )
+      20→        used_vals.add(val)
+      21→
+      22→
+      23→class ModelOperation(Operation):
+      24→    def __init__(self, name):
+      25→        self.name = name
+      26→
+      27→    @cached_property
+      28→    def name_lower(self):
+      29→        return self.name.lower()
+      30→
+      31→    def references_model(self, name, app_label):
+      32→        return name.lower() == self.name_lower
+      33→
+      34→    def
+  [... truncated ...]
+- [Read Result after action #11]
+       1→import functools
+       2→import re
+       3→from itertools import chain
+       4→
+       5→from django.conf import settings
+       6→from django.db import models
+       7→from django.db.migrations import operations
+       8→from django.db.migrations.migration import Migration
+       9→from django.db.migrations.operations.models import AlterModelOptions
+      10→from django.db.migrations.optimizer import MigrationOptimizer
+      11→from django.db.migrations.questioner import MigrationQuestioner
+      12→from django.db.migrations.utils import COMPILED_REGEX_TYPE, RegexObject
+      13→from django.utils.topological_sort import stable_topological_sort
+      14→
+      15→
+      16→class MigrationAutodetector:
+      17→    """
+      18→    Take a pair of ProjectStates and compare them to see what the first would
+      19→    need doing to make it match the second (the second usually being the
+      20→    project's current state).
+      21→
+      22→    Note that this naturally operates on entire projects at a time,
+      23→    as it's likely that changes interact (for example, you can't
+      24→    add a ForeignKey without having a migration to add the table it
+      25→    depends on first). A user interface may offer singl
+  [... truncated ...]
+- [Grep Result after action #13]
+  173:        # This avoids the same computation in generate_removed_indexes()
+  174:        # and generate_added_indexes().
+  177:        # Generate index removal operations before field is removed
+  179:        self.generate_removed_indexes()
+  186:        self.generate_altered_index_together()
+  187:        self.generate_added_indexes()
+  1015:    def generate_added_indexes(self):
+  1026:    def generate_removed_indexes(self):
+  1136:    def generate_altered_index_together(self):
+  1137:        self._generate_altered_foo_together(operations.AlterIndexTogether)
+- [Read Result after action #15]
+    1010→                (app_label, model_name): {
+    1011→                    'added_indexes': add_idx, 'removed_indexes': rem_idx,
+    1012→                }
+    1013→            })
+    1014→
+    1015→    def generate_added_indexes(self):
+    1016→        for (app_label, model_name), alt_indexes in self.altered_indexes.items():
+    1017→            for index in alt_indexes['added_indexes']:
+    1018→                self.add_operation(
+    1019→                    app_label,
+    1020→                    operations.AddIndex(
+    1021→                        model_name=model_name,
+    1022→                        index=index,
+    1023→                    )
+    1024→                )
+    1025→
+    1026→    def generate_removed_indexes(self):
+    1027→        for (app_label, model_name), alt_indexes in self.altered_indexes.items():
+    1028→            for index in alt_indexes['removed_indexes']:
+    1029→                self.add_operation(
+    1030→                    app_label,
+    1031→                    operations.RemoveIndex(
+    1032→                        model_name=model_name,
+    1033→                        name=index.name,
+    1034→                    )
+    1035→                )
+    1036→
+    1037→    def create_altered_con
+  [... truncated ...]
+- [Grep Result after action #17]
+  190:        self.generate_altered_order_with_respect_to()
+  1192:    def generate_altered_order_with_respect_to(self):
+- [Read Result after action #19]
+     145→            model = self.new_apps.get_model(al, mn)
+     146→            if not model._meta.managed:
+     147→                self.new_unmanaged_keys.add((al, mn))
+     148→            elif (
+     149→                al not in self.from_state.real_apps or
+     150→                (convert_apps and al in convert_apps)
+     151→            ):
+     152→                if model._meta.proxy:
+     153→                    self.new_proxy_keys.add((al, mn))
+     154→                else:
+     155→                    self.new_model_keys.add((al, mn))
+     156→
+     157→        # Renames have to come first
+     158→        self.generate_renamed_models()
+     159→
+     160→        # Prepare lists of fields and generate through model map
+     161→        self._prepare_field_lists()
+     162→        self._generate_through_model_map()
+     163→
+     164→        # Generate non-rename model operations
+     165→        self.generate_deleted_models()
+     166→        self.generate_created_models()
+     167→        self.generate_deleted_proxies()
+     168→        self.generate_created_proxies()
+     169→        self.generate_altered_options()
+     170→        self.generate_altered_managers()
+     171→
+     172→        # Create the altered indexes
+  [... truncated ...]
+- [Read Result after action #21]
+    1190→                )
+    1191→
+    1192→    def generate_altered_order_with_respect_to(self):
+    1193→        for app_label, model_name in sorted(self.kept_model_keys):
+    1194→            old_model_name = self.renamed_models.get((app_label, model_name), model_name)
+    1195→            old_model_state = self.from_state.models[app_label, old_model_name]
+    1196→            new_model_state = self.to_state.models[app_label, model_name]
+    1197→            if (old_model_state.options.get("order_with_respect_to") !=
+    1198→                    new_model_state.options.get("order_with_respect_to")):
+    1199→                # Make sure it comes second if we're adding
+    1200→                # (removal dependency is part of RemoveField)
+    1201→                dependencies = []
+    1202→                if new_model_state.options.get("order_with_respect_to"):
+    1203→                    dependencies.append((
+    1204→                        app_label,
+    1205→                        model_name,
+    1206→                        new_model_state.options["order_with_respect_to"],
+    1207→                        True,
+    1208→                    ))
+    1209→                # Actually generate the operation
+
+- [Read Result after action #23]
+    1192→    def generate_altered_order_with_respect_to(self):
+    1193→        for app_label, model_name in sorted(self.kept_model_keys):
+    1194→            old_model_name = self.renamed_models.get((app_label, model_name), model_name)
+    1195→            old_model_state = self.from_state.models[app_label, old_model_name]
+    1196→            new_model_state = self.to_state.models[app_label, model_name]
+    1197→            if (old_model_state.options.get("order_with_respect_to") !=
+    1198→                    new_model_state.options.get("order_with_respect_to")):
+    1199→                # Make sure it comes second if we're adding
+    1200→                # (removal dependency is part of RemoveField)
+    1201→                dependencies = []
+    1202→                if new_model_state.options.get("order_with_respect_to"):
+    1203→                    dependencies.append((
+    1204→                        app_label,
+    1205→                        model_name,
+    1206→                        new_model_state.options["order_with_respect_to"],
+    1207→                        True,
+    1208→                    ))
+    1209→                # Actually generate the operation
+    1210→                self.add_operation(
+
+  [... truncated ...]
+- [Diagnostic Output after action #25]
+  testbed/tests/migrations/test_autodetector.py
+  testbed/tests/contenttypes_tests/test_order_with_respect_to.py
+  testbed/tests/order_with_respect_to
+- [Grep Result after action #27]
+  No matches found
+- [Grep Result after action #29]
+  216:    ], options={"order_with_respect_to": "book"})
+  2108:    def test_set_alter_order_with_respect_to(self):
+  2109:        """Setting order_with_respect_to adds a field."""
+  2114:        self.assertOperationAttributes(changes, 'testapp', 0, 0, name="author", order_with_respect_to="book")
+  2116:    def test_add_alter_order_with_respect_to(self):
+  2118:        Setting order_with_respect_to when adding the FK too does
+  2126:        self.assertOperationAttributes(changes, 'testapp', 0, 1, name="author", order_with_respect_to="book")
+  2128:    def test_remove_alter_order_with_respect_to(self):
+  2130:        Removing order_with_respect_to when removing the FK too does
+  2137:        self.assertOperationAttributes(changes, 'testapp', 0, 0, name="author", order_with_respect_to=None)
+  2140:    def test_add_model_order_with_respect_to(self):
+  2142:        Setting order_with_respect_to when adding the whole model
+  2150:            changes, 'testapp', 0, 0, name="Author", options={'order_with_respect_to': 'book'}
+
+  [Showing results with pagination = limit: 20, offset: 0]
+- [Read Result after action #31]
+    2108→    def test_set_alter_order_with_respect_to(self):
+    2109→        """Setting order_with_respect_to adds a field."""
+    2110→        changes = self.get_changes([self.book, self.author_with_book], [self.book, self.author_with_book_order_wrt])
+    2111→        # Right number/type of migrations?
+    2112→        self.assertNumberMigrations(changes, 'testapp', 1)
+    2113→        self.assertOperationTypes(changes, 'testapp', 0, ["AlterOrderWithRespectTo"])
+    2114→        self.assertOperationAttributes(changes, 'testapp', 0, 0, name="author", order_with_respect_to="book")
+    2115→
+    2116→    def test_add_alter_order_with_respect_to(self):
+    2117→        """
+    2118→        Setting order_with_respect_to when adding the FK too does
+    2119→        things in the right order.
+    2120→        """
+    2121→        changes = self.get_changes([self.author_name], [self.book, self.author_with_book_order_wrt])
+    2122→        # Right number/type of migrations?
+    2123→        self.assertNumberMigrations(changes, 'testapp', 1)
+    2124→        self.assertOperationTypes(changes, 'testapp', 0, ["AddField", "AlterOrderWithRespectTo"])
+    2125→        self.assertOperationAttributes(changes, 'testapp', 0, 0, model
+  [... truncated ...]
+- [Grep Result after action #33]
+  212:    author_with_book_order_wrt = ModelState("testapp", "Author", [
+  2110:        changes = self.get_changes([self.book, self.author_with_book], [self.book, self.author_with_book_order_wrt])
+  2121:        changes = self.get_changes([self.author_name], [self.book, self.author_with_book_order_wrt])
+  2133:        changes = self.get_changes([self.book, self.author_with_book_order_wrt], [self.author_name])
+  2145:        changes = self.get_changes([], [self.book, self.author_with_book_order_wrt])
+
+  [Showing results with pagination = limit: 5, offset: 0]
+- [Read Result after action #35]
+     210→        ("book", models.ForeignKey("otherapp.Book", models.CASCADE)),
+     211→    ])
+     212→    author_with_book_order_wrt = ModelState("testapp", "Author", [
+     213→        ("id", models.AutoField(primary_key=True)),
+     214→        ("name", models.CharField(max_length=200)),
+     215→        ("book", models.ForeignKey("otherapp.Book", models.CASCADE)),
+     216→    ], options={"order_with_respect_to": "book"})
+     217→    author_renamed_with_book = ModelState("testapp", "Writer", [
+     218→        ("id", models.AutoField(primary_key=True)),
+     219→        ("name", models.CharField(max_length=200)),
+
+- [Test Output after action #37]
+  Exit code 1
+    File "test_issue.py", line 65
+      print(f"{i}: {operation.__class__.__name__} - {operation}")
+                                                               ^
+  SyntaxError: invalid syntax
+- [Test Output after action #39]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 4, in <module>
+      from django.conf import settings
+  ImportError: No module named django.conf
+- [Diagnostic Output after action #41]
+  Exit code 1
+  Traceback (most recent call last):
+    File "<string>", line 1, in <module>
+    File "django/__init__.py", line 1, in <module>
+      from django.utils.version import get_version
+    File "django/utils/version.py", line 71, in <module>
+      @functools.lru_cache()
+  AttributeError: 'module' object has no attribute 'lru_cache'
+- [Read Result after action #48]
+     164→        # Generate non-rename model operations
+     165→        self.generate_deleted_models()
+     166→        self.generate_created_models()
+     167→        self.generate_deleted_proxies()
+     168→        self.generate_created_proxies()
+     169→        self.generate_altered_options()
+     170→        self.generate_altered_managers()
+     171→
+     172→        # Create the altered indexes and store them in self.altered_indexes.
+     173→        # This avoids the same computation in generate_removed_indexes()
+     174→        # and generate_added_indexes().
+     175→        self.create_altered_indexes()
+     176→        self.create_altered_constraints()
+     177→        # Generate index removal operations before field is removed
+     178→        self.generate_removed_constraints()
+     179→        self.generate_removed_indexes()
+     180→        # Generate field operations
+     181→        self.generate_renamed_fields()
+     182→        self.generate_removed_fields()
+     183→        self.generate_added_fields()
+     184→        self.generate_altered_fields()
+     185→        self.generate_altered_unique_together()
+     186→        self.generate_altered_index_together()
+     187→        self.generate_added_indexes()
+
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/migrations/autodetector.py
+  Tool: Edit action #50
+  old_text_sha256: ac10bd0af270a4404d0cb98a3f0d37a8713c88dc5ab06f2cd16f016d6ff34f21
+  new_text_sha256: b2726c6ca5100cd003c8802a54d04c24c526dfcbc2258ccf6f2a5db7509f5474
+- django/db/migrations/autodetector.py
+  Tool: Edit action #59
+  old_text_sha256: 7ccead001c08b868069ef89e60472392fe3f69634b2d57425001b5ad890f6d6f
+  new_text_sha256: 5dd769994e15f9eeccd69e825c6e8f47ad7c709d381d5a33e1685751b01ddb68
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

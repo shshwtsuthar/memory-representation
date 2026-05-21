@@ -1,0 +1,237 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 1268e33f-6cb2-4a3b-bb92-d4b20c0ba0cd
+- repo: sympy/sympy
+- instance_id: sympy__sympy-24213
+- base_commit: e8c22f6eac7314be8d92590bfff92ced79ee03e2
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+collect_factor_and_dimension does not detect equivalent dimensions in addition
+Code to reproduce:
+```python
+from sympy.physics import units
+from sympy.physics.units.systems.si import SI
+
+v1 = units.Quantity('v1')
+SI.set_quantity_dimension(v1, units.velocity)
+SI.set_quantity_scale_factor(v1, 2 * units.meter / units.second)
+
+a1 = units.Quantity('a1')
+SI.set_quantity_dimension(a1, units.acceleration)
+SI.set_quantity_scale_factor(a1, -9.8 * units.meter / units.second**2)
+
+t1 = units.Quantity('t1')
+SI.set_quantity_dimension(t1, units.time)
+SI.set_quantity_scale_factor(t1, 5 * units.second)
+
+expr1 = a1*t1 + v1
+SI._collect_factor_and_dimension(expr1)
+```
+Results in:
+```
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "C:\Python\Python310\lib\site-packages\sympy\physics\units\unitsystem.py", line 179, in _collect_factor_and_dimension
+    raise ValueError(
+ValueError: Dimension of "v1" is Dimension(velocity), but it should be Dimension(acceleration*time)
+```
+
+FILES INSPECTED
+---------------
+- sympy/physics/units/unitsystem.py [Read: 1]
+- sympy/physics/units/dimensions.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+(none)
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find . -name "unitsystem.py" -type f | grep -v __pycache__ | head -5
+- [diagnostic] ls -la testbed 2>/dev/null || echo "testbed directory not found"
+- [diagnostic] ls testbed/setup.py
+- [test] python test_bug.py
+- [other/reproduction] python --version
+- [test] python3 test_bug.py
+- [diagnostic] find testbed -name "unitsystem.py" -type f | grep -v __pycache__
+- [diagnostic] find testbed -name "dimensions.py" -path "*/physics/units/*" | grep -v __pycache__ | head -1
+- [test] python3 test_bug.py
+- [test] python3 test_comprehensive.py 2>&1 | grep -v "Error processing line\|Traceback\|File \"/opt\|AttributeError\|Remainder of file"
+- [test] python3 test_original.py 2>&1 | grep -v "Error processing\|Traceback\|File \"/opt\|AttributeError\|Remainder"
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #2]
+  testbed directory not found
+- [Diagnostic Output after action #4]
+  testbed/setup.py
+- [Test Output after action #7]
+  Exit code 1
+    File "test_bug.py", line 23
+      print(f"Expression: {expr1}")
+                                 ^
+  SyntaxError: invalid syntax
+- [Test Output after action #11]
+  Expression: a1*t1 + v1
+  Dimension of v1: Dimension(velocity)
+  Dimension of a1*t1: Dimension(acceleration*time)
+
+  Attempting to collect factor and dimension...
+  Error: Dimension of "v1" is Dimension(velocity), but it should be Dimension(acceleration*time)
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Diagnostic Output after action #13]
+  testbed/sympy/physics/units/unitsystem.py
+  testbed/testbed/sympy/physics/units/unitsystem.py
+- [Read Result after action #15]
+       1→"""
+       2→Unit system for physical quantities; include definition of constants.
+       3→"""
+       4→
+       5→from typing import Dict as tDict, Set as tSet
+       6→
+       7→from sympy.core.add import Add
+       8→from sympy.core.function import (Derivative, Function)
+       9→from sympy.core.mul import Mul
+      10→from sympy.core.power import Pow
+      11→from sympy.core.singleton import S
+      12→from sympy.physics.units.dimensions import _QuantityMapper
+      13→from sympy.physics.units.quantities import Quantity
+      14→
+      15→from .dimensions import Dimension
+      16→
+      17→
+      18→class UnitSystem(_QuantityMapper):
+      19→    """
+      20→    UnitSystem represents a coherent set of units.
+      21→
+      22→    A unit system is basically a dimension system with notions of scales. Many
+      23→    of the methods are defined in the same way.
+      24→
+      25→    It is much better if all base units have a symbol.
+      26→    """
+      27→
+      28→    _unit_systems = {}  # type: tDict[str, UnitSystem]
+      29→
+      30→    def __init__(self, base_units, units=(), name="", descr="", dimension_system=None, derived_units: tDict[Dimension, Quantity]={}):
+      31→
+      32→        UnitSystem._unit_systems[name]
+  [... truncated ...]
+- [Diagnostic Output after action #17]
+  testbed/sympy/physics/units/dimensions.py
+- [Read Result after action #19]
+       1→"""
+       2→Definition of physical dimensions.
+       3→
+       4→Unit systems will be constructed on top of these dimensions.
+       5→
+       6→Most of the examples in the doc use MKS system and are presented from the
+       7→computer point of view: from a human point, adding length to time is not legal
+       8→in MKS but it is in natural system; for a computer in natural system there is
+       9→no time dimension (but a velocity dimension instead) - in the basis - so the
+      10→question of adding time to length has no meaning.
+      11→"""
+      12→
+      13→from typing import Dict as tDict
+      14→
+      15→import collections
+      16→from functools import reduce
+      17→
+      18→from sympy.core.basic import Basic
+      19→from sympy.core.containers import (Dict, Tuple)
+      20→from sympy.core.singleton import S
+      21→from sympy.core.sorting import default_sort_key
+      22→from sympy.core.symbol import Symbol
+      23→from sympy.core.sympify import sympify
+      24→from sympy.matrices.dense import Matrix
+      25→from sympy.functions.elementary.trigonometric import TrigonometricFunction
+      26→from sympy.core.expr import Expr
+      27→from sympy.core.power import Pow
+      28→
+      29→
+      30→class _QuantityMa
+  [... truncated ...]
+- [Test Output after action #22]
+  Expression: a1*t1 + v1
+  Dimension of v1: Dimension(velocity)
+  Dimension of a1*t1: Dimension(acceleration*time)
+
+  Attempting to collect factor and dimension...
+  Success! Result: (-47.0000000000000, Dimension(acceleration*time))
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #25]
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+
+  Test 1: Original bug case - velocity and acceleration*time
+    ✓ Success! Result: (-47.0000000000000, Dimension(acceleration*time))
+
+  Test 2: Should still reject incompatible dimensions (length + time)
+    ✓ Correctly rejected: Dimension of "t2" is Dimension(time, T), but it should be Di...
+
+  Test 3: Adding same dimensions should work (length + length)
+    ✓ Success! Result: (13, Dimension(length, L))
+
+  Test 4: More complex equivalent dimensions - force/mass = acceleration
+    ✓ Success! Result: (15, Dimension(force/mass))
+
+  All tests completed!
+- [Test Output after action #28]
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+
+  SUCCESS: No ValueError raised!
+  Result: (-47.0000000000000, Dimension(acceleration*time))
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/physics/units/unitsystem.py
+  Tool: Edit action #21
+  old_text_sha256: 9134ba9bc93767b4ff3d5297f5e0754f36a3d1a9996f10095471ea9c759b07b3
+  new_text_sha256: 29db92ff1b40df6dbef61621d12a11d3c28804a78d438a54ec1288e25c9d6b27
+- swebench_9_15/test_bug.py
+  Tool: Write action #6
+  new_text_sha256: 5fae90d44dcebf55346ba03c688b191e254aac566d8d2b5ee73b3a6e62014368
+- swebench_9_15/test_comprehensive.py
+  Tool: Write action #24
+  new_text_sha256: 23854865cd8de6be146202564ba5d3c2e30aa2b7821e68ed9d12f87486c46f93
+- swebench_9_15/test_original.py
+  Tool: Write action #27
+  new_text_sha256: bb749ff94271f570a943ab2f89f2a629f86e1580dbdaf491aec4864be19a144f
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

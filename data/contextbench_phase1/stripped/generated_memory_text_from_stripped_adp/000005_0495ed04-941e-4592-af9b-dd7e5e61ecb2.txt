@@ -1,0 +1,217 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 0495ed04-941e-4592-af9b-dd7e5e61ecb2
+- repo: django/django
+- instance_id: django__django-16379
+- base_commit: 1d0fa848e084cad62d0bb6bde3b51e4862558e57
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+FileBasedCache has_key is susceptible to race conditions
+Description
+
+        (last modified by Marti Raudsepp)
+
+I received the exception from Django's cache framework:
+FileNotFoundError: [Errno 2] No such file or directory: '/app/var/cache/d729e4cf4ba88cba5a0f48e0396ec48a.djcache'
+[...]
+ File "django/core/cache/backends/base.py", line 229, in get_or_set
+    self.add(key, default, timeout=timeout, version=version)
+ File "django/core/cache/backends/filebased.py", line 26, in add
+    if self.has_key(key, version):
+ File "django/core/cache/backends/filebased.py", line 94, in has_key
+    with open(fname, "rb") as f:
+The code is:
+    def has_key(self, key, version=None):
+        fname = self._key_to_file(key, version)
+        if os.path.exists(fname):
+            with open(fname, "rb") as f:
+                return not self._is_expired(f)
+        return False
+Between the exists() check and open(), it's possible for the file to be deleted. In fact, the _is_expired() method itself deletes the file if it finds it to be expired. So if many threads race to read an expired cache at once, it's not that unlikely to hit this window.
+
+FILES INSPECTED
+---------------
+- django/core/cache/backends/filebased.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+(none)
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15/testbed -type f -name "*.py" -path "*/cache/backends/filebased.py" 2>/dev/null | head -5
+- [other/reproduction]
+- [diagnostic] find testbed -name "filebased.py" -path "*/cache/backends/*"
+- [test] python test_race_condition.py
+- [other/reproduction] python --version
+- [test] python3 test_race_condition.py
+- [test] cd testbed && python3 tests/runtests.py cache.tests --verbosity=2 2>&1 | head -100
+- [test] cd testbed && python3 tests/runtests.py cache.tests.test_file_based -v 2 2>&1 | tail -50
+- [test] python3 tests/runtests.py cache.tests.test_file_based -v 2 2>&1 | tail -50
+- [test] python3 testbed/tests/runtests.py cache.tests -v 2 2>&1 | tail -100
+- [test] python3 tests/runtests.py cache -v 2 2>&1 | grep -A 5 "Ran.*test"
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ModuleNotFoundError: No module named 'sqlparse'
+- ERROR: test_file_based (unittest.loader._FailedTest)
+- FAILED (errors=1)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #3]
+  testbed/django/core/cache/backends/filebased.py
+- [Read Result after action #5]
+       1→"File-based cache backend"
+       2→import glob
+       3→import os
+       4→import pickle
+       5→import random
+       6→import tempfile
+       7→import time
+       8→import zlib
+       9→
+      10→from django.core.cache.backends.base import DEFAULT_TIMEOUT, BaseCache
+      11→from django.core.files import locks
+      12→from django.core.files.move import file_move_safe
+      13→from django.utils.crypto import md5
+      14→
+      15→
+      16→class FileBasedCache(BaseCache):
+      17→    cache_suffix = ".djcache"
+      18→    pickle_protocol = pickle.HIGHEST_PROTOCOL
+      19→
+      20→    def __init__(self, dir, params):
+      21→        super().__init__(params)
+      22→        self._dir = os.path.abspath(dir)
+      23→        self._createdir()
+      24→
+      25→    def add(self, key, value, timeout=DEFAULT_TIMEOUT, version=None):
+      26→        if self.has_key(key, version):
+      27→            return False
+      28→        self.set(key, value, timeout, version)
+      29→        return True
+      30→
+      31→    def get(self, key, default=None, version=None):
+      32→        fname = self._key_to_file(key, version)
+      33→        try:
+      34→            with open(fname, "rb") as f:
+      35→                if not self._is_expire
+  [... truncated ...]
+- [Test Output after action #9]
+  Exit code 1
+    File "test_race_condition.py", line 56
+      print(f"FAIL: FileNotFoundError was raised {len(errors)} times")
+                                                                    ^
+  SyntaxError: invalid syntax
+- [Test Output after action #13]
+  Testing FileBasedCache.has_key race condition fix
+
+  Test 1: Multiple threads checking expired key
+  --------------------------------------------------
+  PASS: No FileNotFoundError raised. has_key was called 10 times.
+
+  Test 2: File deleted between exists() and open()
+  --------------------------------------------------
+  PASS: has_key returned False without raising FileNotFoundError
+
+
+  ✓ All tests passed!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #15]
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "tests/runtests.py", line 28, in <module>
+      from django.test.runner import get_max_test_processes, parallel_type
+    File "./swebench_9_15/testbed/django/test/runner.py", line 20, in <module>
+      import sqlparse
+  ModuleNotFoundError: No module named 'sqlparse'
+- [Test Output after action #18]
+  Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Importing application cache
+  Found 1 test(s).
+  Skipping setup of unused database(s): default, other.
+  System check identified no issues (0 silenced).
+  test_file_based (unittest.loader._FailedTest) ... ERROR
+
+  ======================================================================
+  ERROR: test_file_based (unittest.loader._FailedTest)
+  ----------------------------------------------------------------------
+  AttributeError: module 'cache.tests' has no attribute 'test_file_based'
+
+  ----------------------------------------------------------------------
+  Ran 1 test in 0.000s
+
+  FAILED (errors=1)
+- [Test Output after action #20]
+  python3: can't open file 'testbed/tests/runtests.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #22]
+  Ran 595 tests in 14.247s
+
+  OK (skipped=183)
+  Destroying test database for alias 'default' ('default_1.sqlite3')...
+  Destroying test database for alias 'default' ('default_2.sqlite3')...
+  Destroying test database for alias 'default' ('default_3.sqlite3')...
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/core/cache/backends/filebased.py
+  Tool: Edit action #7
+  old_text_sha256: 5972002855d8241b61c513472fb3589ba8f5d82c52cb9b55a59ff340b5946908
+  new_text_sha256: c51501c051022798d107f9779c8f5fb2ab0e4e83886be54d68fcdd84038d127c
+- swebench_9_15/test_race_condition.py
+  Tool: Write action #8
+  new_text_sha256: 9ecb0a2355a70caca3008da27b31e977dfa1dbeb566618afef8c2d8c2dceaf53
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

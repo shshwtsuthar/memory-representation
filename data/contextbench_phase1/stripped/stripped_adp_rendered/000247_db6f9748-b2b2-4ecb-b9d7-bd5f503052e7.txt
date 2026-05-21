@@ -1,0 +1,410 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: db6f9748-b2b2-4ecb-b9d7-bd5f503052e7
+- repo: scikit-learn/scikit-learn
+- instance_id: scikit-learn__scikit-learn-14894
+- base_commit: fdbaa58acbead5a254f2e6d597dc1ab3b947f4c6
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: scikit-learn/scikit-learn
+instance_id: scikit-learn__scikit-learn-14894
+base_commit: fdbaa58acbead5a254f2e6d597dc1ab3b947f4c6
+problem_statement:
+ZeroDivisionError in _sparse_fit for SVM with empty support_vectors_
+#### Description
+When using sparse data, in the case where the support_vectors_ attribute is be empty, _fit_sparse gives a ZeroDivisionError
+
+#### Steps/Code to Reproduce
+```
+import numpy as np
+import scipy
+import sklearn
+from sklearn.svm import SVR
+x_train = np.array([[0, 1, 0, 0],
+[0, 0, 0, 1],
+[0, 0, 1, 0],
+[0, 0, 0, 1]])
+y_train = np.array([0.04, 0.04, 0.10, 0.16])
+model = SVR(C=316.227766017, cache_size=200, coef0=0.0, degree=3, epsilon=0.1,
+          gamma=1.0, kernel='linear', max_iter=15000,
+          shrinking=True, tol=0.001, verbose=False)
+# dense x_train has no error
+model.fit(x_train, y_train)
+
+# convert to sparse
+xtrain= scipy.sparse.csr_matrix(x_train)
+model.fit(xtrain, y_train)
+
+```
+#### Expected Results
+No error is thrown and  `self.dual_coef_ = sp.csr_matrix([])`
+
+#### Actual Results
+```
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/usr/local/lib/python3.5/dist-packages/sklearn/svm/base.py", line 209, in fit
+    fit(X, y, sample_weight, solver_type, kernel, random_seed=seed)
+  File "/usr/local/lib/python3.5/dist-packages/sklearn/svm/base.py", line 302, in _sparse_fit
+    dual_coef_indices.size / n_class)
+ZeroDivisionError: float division by zero
+```
+
+#### Versions
+```
+>>> sklearn.show_versions()
+
+System:
+executable: /usr/bin/python3
+    python: 3.5.2 (default, Nov 12 2018, 13:43:14)  [GCC 5.4.0 20160609]
+   machine: Linux-4.15.0-58-generic-x86_64-with-Ubuntu-16.04-xenial
+
+Python deps:
+     numpy: 1.17.0
+    Cython: None
+       pip: 19.2.1
+    pandas: 0.22.0
+   sklearn: 0.21.3
+     scipy: 1.3.0
+setuptools: 40.4.3
+```
+sha256: ee7fa9415c9fc659b90f486df5d69af300bdadeb76cf223cdfca682f806227f3
+truncated: false
+
+[ADP ACTION current=1 original=1: code_action bash]
+payload:
+find ./swebench_9_15/testbed -type f -name "base.py" | grep svm
+sha256: af9943b376c5014e9cf1df2fc68b9e1e4758a6d68885c55c7b17393b4e641de2
+truncated: false
+
+[ADP ACTION current=2 original=19: api_action Glob]
+path: testbed
+payload:
+{
+  "path": "testbed",
+  "pattern": "**/svm/base.py"
+}
+sha256: 2a027bbc61903a8ac6633930dfea607410c66ce49677466305624b220e88c1bb
+truncated: false
+
+[ADP OBSERVATION current=3 original=20 source=environment]
+name: Glob:toolu_01JvpwTeJKzwWzPYoXGMambi
+excerpt:
+./swebench_9_15/testbed/sklearn/svm/base.py
+sha256: 7de2876537514be740bbdf598ab2e8f727ffcfa235c03746e64cdb9e8ed0623a
+truncated: false
+
+[ADP ACTION current=4 original=21: api_action Read]
+path: sklearn/svm/base.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/svm/base.py"
+}
+sha256: bde6a82cf24be13ef7e092cff6b4ede1d1da56718990fe1c97db727067d93514
+truncated: false
+
+[ADP OBSERVATION current=5 original=22 source=environment]
+name: Read:toolu_01GQM1vB8abaCTvdug9K8Kqk
+excerpt:
+     1→import numpy as np
+     2→import scipy.sparse as sp
+     3→import warnings
+     4→from abc import ABCMeta, abstractmethod
+     5→
+     6→from . import libsvm, liblinear
+     7→from . import libsvm_sparse
+     8→from ..base import BaseEstimator, ClassifierMixin
+     9→from ..preprocessing import LabelEncoder
+    10→from ..utils.multiclass import _ovr_decision_function
+    11→from ..utils import check_array, check_random_state
+    12→from ..utils import column_or_1d, check_X_y
+    13→from ..utils import compute_class_weight
+    14→from ..utils.extmath import safe_sparse_dot
+    15→from ..utils.validation import check_is_fitted, _check_large_sparse
+    16→from ..utils.validation import _check_sample_weight
+    17→from ..utils.multiclass import check_classification_targets
+    18→from ..exceptions import ConvergenceWarning
+    19→from ..exceptions import NotFittedError
+    20→
+    21→
+    22→LIBSVM_IMPL = ['c_svc', 'nu_svc', 'one_class', 'epsilon_svr', 'nu_svr']
+    23→
+    24→
+    25→def _one_vs_one_coef(dual_coef, n_support, support_vectors):
+    26→    """Generate primal coefficients from dual coefficients
+    27→    for the one-vs-one multi class LibSVM in the case
+    28→    of a linear kernel."""
+    29→
+    30→    # get 1vs1 weights for all n*(n-1) classifiers.
+    31→    # this is somewhat messy.
+    32→    # shape of dual_coef_ is nSV * (n_classes -1)
+    33→    # see docs for details
+    34→    n_class = dual_coef.shape[0] + 1
+    35→
+    36→    # XXX we could do preallocation of coef but
+    37→    # would have to take care in the sparse case
+    38→    coef = []
+    39→    sv_locs = np.cumsum(np.hstack([[0], n_support]))
+    40→    for class1 in range(n_class):
+    41→        # SVs for class1:
+    42→        sv1 = support_vectors[sv_locs[class1]:sv_locs[class1 + 1], :]
+    43→        for class2 in range(class1 + 1, n_class):
+    44→            # SVs for class1:
+    45→            sv2 = support_vectors[sv_locs[class2]:sv_locs[class2 + 1], :]
+    46→
+
+sha256: b6d5eaa3b600c032aa8fee8af10ca79700720226e7ccb5fba9e0a61c4c01f225
+truncated: true
+
+[ADP ACTION current=6 original=31: api_action BashOutput]
+payload:
+{
+  "bash_id": "47aca9"
+}
+sha256: eb30aa9c36742ff05504682efa00c35e872dcd80f4f7632170b10f4c96a7c8db
+truncated: false
+
+[ADP OBSERVATION current=7 original=32 source=environment]
+name: BashOutput:toolu_01BUdm3CeZRyG5XonZFvFeN4
+excerpt:
+<status>running</status>
+
+<stderr>
+DEPRECATION: pyodbc 4.0.0-unsupported has a non-standard version number. pip 24.0 will enforce this behaviour change. A possible replacement is to upgrade to a newer version of pyodbc or contact the author to suggest that they release a version with a conforming version number. Discussion can be found at https://github.com/pypa/pip/issues/12063
+</stderr>
+
+<timestamp>2025-11-27T01:32:08.440Z</timestamp>
+sha256: 152b882ebed8f4039d82ddd1db648e5f6304144e179a66222b415e5e75de3e51
+truncated: false
+
+[ADP ACTION current=8 original=33: code_action bash]
+payload:
+sleep 30
+sha256: c9f9f7677091a60d1f35b5575330a8ec094f76c345879b54ea41606c12812013
+truncated: false
+
+[ADP ACTION current=9 original=35: api_action BashOutput]
+payload:
+{
+  "bash_id": "47aca9"
+}
+sha256: 028f80a215577c116db9e80461715c03137934919ea35dc340d40cdf343f112a
+truncated: false
+
+[ADP OBSERVATION current=10 original=36 source=environment]
+name: BashOutput:toolu_01LARBXzrCH58wtdMFzVrKkp
+excerpt:
+<status>completed</status>
+
+<exit_code>0</exit_code>
+
+<stderr>
+DEPRECATION: pyodbc 4.0.0-unsupported has a non-standard version number. pip 24.0 will enforce this behaviour change. A possible replacement is to upgrade to a newer version of pyodbc or contact the author to suggest that they release a version with a conforming version number. Discussion can be found at https://github.com/pypa/pip/issues/12063
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+flaml 1.0.9 requires scikit-learn>=0.24, but you have scikit-learn 0.22.dev0 which is incompatible.
+auto-sklearn 0.14.7 requires scikit-learn<0.25.0,>=0.24.0, but you have scikit-learn 0.22.dev0 which is incompatible.
+pyclustertend 1.8.2 requires numpy==1.20.3, but you have numpy 1.24.4 which is incompatible.
+pyclustertend 1.8.2 requires scikit-learn<2.0.0,>=1.1.2, but you have scikit-learn 0.22.dev0 which is incompatible.
+smac 1.2 requires scikit-learn>=0.22.0, but you have scikit-learn 0.22.dev0 which is incompatible.
+</stderr>
+
+<timestamp>2025-11-27T01:32:47.113Z</timestamp>
+sha256: 382b0a5d8f8c6c8abfd2c17739eb367b24da2323b6a7a3fa373c2dbb12cf3772
+truncated: false
+
+[ADP ACTION current=11 original=37: code_action bash]
+payload:
+python test_issue.py
+sha256: ab46e19567b927d900dc5c1a53582b551320b5d7b221e7f97f69018ae74d56f1
+truncated: false
+
+[ADP OBSERVATION current=12 original=38 source=environment]
+name: Bash:toolu_01RUYRcDBCWKoRp9EC1CmGXX:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 6
+    print(f"sklearn version: {sklearn.__version__}")
+                                                  ^
+SyntaxError: invalid syntax
+sha256: b51f5843b1b32dac79d8c3ea55c11023d9b6099279661c2aafe339a6c7200fd9
+truncated: false
+
+[ADP ACTION current=13 original=45: code_action bash]
+payload:
+python test_issue.py
+sha256: bf566a535552db5bf83e30efbc7a9f67380229cbaaf26de379e8e29bbc612152
+truncated: false
+
+[ADP OBSERVATION current=14 original=46 source=environment]
+name: Bash:toolu_01M2wSZVQB8frh6P4zGAs8di:error
+excerpt:
+Exit code 1
+Traceback (most recent call last):
+  File "test_issue.py", line 2, in <module>
+    import scipy
+ImportError: No module named scipy
+sha256: 0026348b25e8f702ba43a3eec65f9e7dcf1c22616e704f6cf4e9bef11a457d3f
+truncated: false
+
+[ADP ACTION current=15 original=47: code_action bash]
+payload:
+python --version && which python
+sha256: 40eef30dbb991111576fb3c048603955c707d890d46b82eb8e6e84e2a50cbf63
+truncated: false
+
+[ADP OBSERVATION current=16 original=48 source=environment]
+name: Bash:toolu_01UEf2DD2ZB9xPkznqZkGtm1
+excerpt:
+/Applications/ADFRsuite-1.0/bin/python
+Python 2.7.3
+sha256: fb8820d3776e6870b0c02d82aaec456dc0857ca70665ffeb5b960a4bde468057
+truncated: false
+
+[ADP ACTION current=17 original=49: code_action bash]
+payload:
+python3 test_issue.py
+sha256: 721f7c3c29db309539ea71e5171092b97ae28e1c23f1810b98ad3f3d142067d3
+truncated: false
+
+[ADP OBSERVATION current=18 original=50 source=environment]
+name: Bash:toolu_01PNSrjC41DHaruweUgKdZh4:error
+excerpt:
+Exit code 1
+./swebench_9_15/testbed/sklearn/utils/multiclass.py:13: DeprecationWarning: Please use `spmatrix` from the `scipy.sparse` namespace, the `scipy.sparse.base` namespace is deprecated.
+  from scipy.sparse.base import spmatrix
+Traceback (most recent call last):
+  File "test_issue.py", line 4, in <module>
+    from sklearn.svm import SVR
+  File "./swebench_9_15/testbed/sklearn/svm/__init__.py", line 13, in <module>
+    from .classes import SVC, NuSVC, SVR, NuSVR, OneClassSVM, LinearSVC, \
+  File "./swebench_9_15/testbed/sklearn/svm/classes.py", line 6, in <module>
+    from ..linear_model.base import LinearClassifierMixin, SparseCoefMixin, \
+  File "./swebench_9_15/testbed/sklearn/linear_model/__init__.py", line 15, in <module>
+    from .least_angle import (Lars, LassoLars, lars_path, lars_path_gram, LarsCV,
+  File "./swebench_9_15/testbed/sklearn/linear_model/least_angle.py", line 30, in <module>
+    method='lar', copy_X=True, eps=np.finfo(np.float).eps,
+  File "/opt/anaconda3/lib/python3.8/site-packages/numpy/__init__.py", line 305, in __getattr__
+    raise AttributeError(__former_attrs__[attr])
+AttributeError: module 'numpy' has no attribute 'float'.
+`np.float` was a deprecated alias for the builtin `float`. To avoid this error in existing code, use `float` by itself. Doing this will not modify any behavior and is safe. If you specifically wanted the numpy scalar type, use `np.float64` here.
+The aliases was originally deprecated in NumPy 1.20; for more details and guidance see the original release note at:
+    https://numpy.org/devdocs/release/1.20.0-notes.html#deprecations
+sha256: f591a02a467c990d80d1e75ceb70691c7c225087c07e5d31c7fcd2a6959a2f2f
+truncated: false
+
+[ADP ACTION current=19 original=51: api_action Grep]
+path: sklearn/linear_model
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/sklearn/linear_model",
+  "pattern": "np\\.finfo\\(np\\.float\\)"
+}
+sha256: eab58f70404612fe18ece57d5da417703b3992c00e88f0fdb1ae18d12253a94b
+truncated: false
+
+[ADP OBSERVATION current=20 original=52 source=environment]
+name: Grep:toolu_01YP9rQRR8uuhbe74ViLgCEF
+excerpt:
+testbed/sklearn/linear_model/least_angle.py:30:              method='lar', copy_X=True, eps=np.finfo(np.float).eps,
+testbed/sklearn/linear_model/least_angle.py:92:        systems. By default, ``np.finfo(np.float).eps`` is used.
+testbed/sklearn/linear_model/least_angle.py:169:                   method='lar', copy_X=True, eps=np.finfo(np.float).eps,
+testbed/sklearn/linear_model/least_angle.py:211:        systems. By default, ``np.finfo(np.float).eps`` is used.
+testbed/sklearn/linear_model/least_angle.py:286:                      eps=np.finfo(np.float).eps, copy_Gram=True, verbose=0,
+testbed/sklearn/linear_model/least_angle.py:339:        systems. By default, ``np.finfo(np.float).eps`` is used
+testbed/sklearn/linear_model/least_angle.py:801:        By default, ``np.finfo(np.float).eps`` is used.
+testbed/sklearn/linear_model/least_angle.py:858:                 eps=np.finfo(np.float).eps, copy_X=True, fit_path=True):
+testbed/sklearn/linear_model/least_angle.py:1022:        By default, ``np.finfo(np.float).eps`` is used.
+testbed/sklearn/linear_model/least_angle.py:1094:                 eps=np.finfo(np.float).eps, copy_X=True, fit_path=True,
+testbed/sklearn/linear_model/least_angle.py:1120:                        eps=np.finfo(np.float).eps, positive=False):
+testbed/sklearn/linear_model/least_angle.py:1183:        By default, ``np.finfo(np.float).eps`` is used
+testbed/sklearn/linear_model/least_angle.py:1295:        systems. By default, ``np.finfo(np.float).eps`` is used.
+testbed/sklearn/linear_model/least_angle.py:1349:                 max_n_alphas=1000, n_jobs=None, eps=np.finfo(np.float).eps,
+testbed/sklearn/linear_model/least_angle.py:1512:        systems. By default, ``np.finfo(np.float).eps`` is used.
+testbed/sklearn/linear_model/least_angle.py:1590:                 max_n_alphas=1000, n_jobs=None, eps=np.finfo(np.float).eps,
+testbed/sklearn/linear_model/least_angle.py:1658:        By default, ``np.finfo(np.float).eps`` is used
+testbed/sklearn/linear_model/least_angle.
+sha256: 3952d471c294de961fc39ba6b9f183b8f444bbf5a52ffca2c8bc6ba1cd4dcf87
+truncated: true
+
+[ADP ACTION current=21 original=53: api_action Edit]
+path: sklearn/svm/base.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/svm/base.py",
+  "new_text_sha256": "0f03303e9037f8f0400c8f816bbd33de87d9979dcda4558df6a92309bdb43607",
+  "old_text_sha256": "1a30791409b5739915ebeacce1ff65c619ef9a6cb38ffe5edecb14a591560960"
+}
+sha256: 7fbfbffd04c15663ceab6ed2e385eada043d3103f2b6bf548af0a5d3d5406481
+truncated: false
+
+[ADP ACTION current=22 original=55: api_action Edit]
+path: sklearn/svm/base.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/svm/base.py",
+  "new_text_sha256": "d12315d275a564c64a19ddcb71082df177673be2e4d8c7f865047b136f2015c4",
+  "old_text_sha256": "79cd8d1e6479899ad3eb1c9e09a24dc1d5c018e6a462c6bee9fe6d6df140e3dc"
+}
+sha256: 878cb5a74a32bc41719410e2c35ec11709f61f80f70568dc77a5987b74b99a13
+truncated: false
+
+[ADP ACTION current=23 original=59: api_action Write]
+path: test_fix.py
+payload:
+{
+  "content_sha256": "8b8470401176b9e0c42762b50fcce6cf78b46ed88750762875b00441b716c3a8",
+  "file_path": "./swebench_9_15/testbed/test_fix.py"
+}
+sha256: 39b3a676af06160b9c04139ab2defd44d7389205dd0588ea729dba6b276e1010
+truncated: false
+
+[ADP ACTION current=24 original=61: code_action bash]
+payload:
+cd testbed && python3 test_fix.py
+sha256: 5533f65f5d3bb9ffb3626b6d175359feabd1f1f5dc6134a8bebb6ced9e1e4471
+truncated: false
+
+[ADP OBSERVATION current=25 original=62 source=environment]
+name: Bash:toolu_01TDfSYvGdRABNbBGsVifzWz
+excerpt:
+Testing empty sparse matrix creation...
+Created empty sparse matrix with shape: (1, 0)
+Expected shape: (1, 0)
+Created empty sparse matrix with shape: (1, 0)
+Expected shape: (1, 0)
+Created non-empty sparse matrix with shape: (1, 5)
+Expected shape: (1, 5)
+
+All tests passed!
+sha256: 18721448b4c2437b459a4b5bf15bcd63cb33ad347997b9559baa77f364d33409
+truncated: false
+
+[ADP ACTION current=26 original=63: api_action Glob]
+path: testbed
+payload:
+{
+  "path": "testbed",
+  "pattern": "**/test_svm.py"
+}
+sha256: 9d81c76e367bc382d3979d612aa59de998b0b8610d54adb210c76753a4d53040
+truncated: false
+
+[ADP OBSERVATION current=27 original=64 source=environment]
+name: Glob:toolu_01Jt45b2XEtdsszJAFaJBSmc:error
+excerpt:
+<tool_use_error>Directory does not exist: testbed</tool_use_error>
+sha256: 1ec73743d398aec2a16d65b1961560c3e7a2ca75c25aab68cd233330e07ed6f9
+truncated: false
+
+[ADP ACTION current=28 original=65: code_action bash]
+payload:
+find testbed -name "test_svm.py" -type f
+sha256: 7ca8be7076c5cdbea28d9d15ed99529ad5564a7bc4843b3067abe815a933f384
+truncated: false

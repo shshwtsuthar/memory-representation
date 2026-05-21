@@ -1,0 +1,281 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 03e2a2e8-7c7c-4f38-9181-99bb7a8c36ff
+- repo: astropy/astropy
+- instance_id: astropy__astropy-6938
+- base_commit: c76af9ed6bb89bfba45b9f5bc1e635188278e2fa
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Possible bug in io.fits related to D exponents
+I came across the following code in ``fitsrec.py``:
+
+```python
+        # Replace exponent separator in floating point numbers
+        if 'D' in format:
+            output_field.replace(encode_ascii('E'), encode_ascii('D'))
+```
+
+I think this may be incorrect because as far as I can tell ``replace`` is not an in-place operation for ``chararray`` (it returns a copy). Commenting out this code doesn't cause any tests to fail so I think this code isn't being tested anyway.
+
+FILES INSPECTED
+---------------
+- astropy/io/fits/fitsrec.py [Grep: 3, Read: 5]
+- astropy/io/fits [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [5] Grep pattern='Replace exponent separator' path='astropy/io/fits/fitsrec.py'
+- [12] Grep pattern='_scale_back_ascii' path='astropy/io/fits/fitsrec.py'
+- [26] Grep pattern='def encode_ascii' path='astropy/io/fits'
+- [27] Grep pattern='encode_ascii' path='astropy/io/fits/fitsrec.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15/testbed -type f -name "fitsrec.py" 2>/dev/null | head -5
+- [diagnostic] cd ./swebench_9_15/testbed && find . -type d -name "astropy" 2>/dev/null | head -5
+- [diagnostic] find testbed -name "fitsrec.py" -type f
+- [test] cd testbed && python test_d_exponent_bug.py 2>&1
+- [test] python test_d_exponent_bug.py 2>&1
+- [test] python test_d_exponent_bug.py 2>&1
+- [other/reproduction] which python3
+- [test] python3 test_d_exponent_bug.py 2>&1
+- [diagnostic] find ./swebench_9_15/testbed -name "*test*fitsrec*" -o -name "*test*fits*" 2>/dev/null | grep -E "test.*\.py$" | head -10
+- [diagnostic] find ./swebench_9_15/testbed/astropy/io/fits/tests -name "*.py" -type f | xargs grep -l "ASCII\|table" 2>/dev/null | head -10
+- [diagnostic] grep -n "D.*exponent\|exponent.*D" ./swebench_9_15/testbed/astropy/io/fits/tests/test_table.py
+- [diagnostic] grep -n "'D'" ./swebench_9_15/testbed/astropy/io/fits/tests/test_table.py | head -20
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- TypeError: replace() argument 1 must be str, not numpy.bytes_
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #3]
+  testbed/astropy/io/fits/fitsrec.py
+- [Read Result after action #6]
+    1240→        # Even if the format precision is 0, we should output a decimal point
+    1241→        # as long as there is space to do so--not including a decimal point in
+    1242→        # a float value is discouraged by the FITS Standard
+    1243→        trailing_decimal = (format.precision == 0 and
+    1244→                            format.format in ('F', 'E', 'D'))
+    1245→
+    1246→        # not using numarray.strings's num2char because the
+    1247→        # result is not allowed to expand (as C/Python does).
+    1248→        for jdx, value in enumerate(input_field):
+    1249→            value = fmt.format(value)
+    1250→            if len(value) > starts[col_idx + 1] - starts[col_idx]:
+    1251→                raise ValueError(
+    1252→                    "Value {!r} does not fit into the output's itemsize of "
+    1253→                    "{}.".format(value, spans[col_idx]))
+    1254→
+    1255→            if trailing_decimal and value[0] == ' ':
+    1256→                # We have some extra space in the field for the trailing
+    1257→                # decimal point
+    1258→                value = value[1:] + '.'
+    1259→
+    1260→            output_field[jdx] = value
+    1261→
+    1262→        # Replace exp
+  [... truncated ...]
+- [Read Result after action #8]
+    1200→        The ``input_field`` is the internal representation of the values, and
+    1201→        the ``output_field`` is the character array representing the ASCII
+    1202→        output that will be written.
+    1203→        """
+    1204→
+    1205→        starts = self._coldefs.starts[:]
+    1206→        spans = self._coldefs.spans
+    1207→        format = self._coldefs[col_idx].format
+    1208→
+    1209→        # The the index of the "end" column of the record, beyond
+    1210→        # which we can't write
+    1211→        end = super().field(-1).itemsize
+    1212→        starts.append(end + starts[-1])
+    1213→
+    1214→        if col_idx > 0:
+    1215→            lead = starts[col_idx] - starts[col_idx - 1] - spans[col_idx - 1]
+    1216→        else:
+    1217→            lead = 0
+    1218→
+    1219→        if lead < 0:
+    1220→            warnings.warn('Column {!r} starting point overlaps the previous '
+    1221→                          'column.'.format(col_idx + 1))
+    1222→
+    1223→        trail = starts[col_idx + 1] - starts[col_idx] - spans[col_idx]
+    1224→
+    1225→        if trail < 0:
+    1226→            warnings.warn('Column {!r} ending point overlaps the next '
+    1227→                          'column.'.
+  [... truncated ...]
+- [Read Result after action #10]
+    1180→                    "at the index {1!r} of the column, and the index {2} of "
+    1181→                    "the string at that location.".format(
+    1182→                        self._coldefs[col_idx].name,
+    1183→                        exc.index[0] if len(exc.index) == 1 else exc.index,
+    1184→                        exc.start))
+    1185→        else:
+    1186→            # Otherwise go ahead and do a direct copy into--if both are type
+    1187→            # 'U' we'll handle encoding later
+    1188→            input_field = input_field.flatten().view(output_field.dtype)
+    1189→            output_field.flat[:] = input_field
+    1190→
+    1191→        # Ensure that blanks at the end of each string are
+    1192→        # converted to nulls instead of spaces, see Trac #15
+    1193→        # and #111
+    1194→        _rstrip_inplace(output_field)
+    1195→
+    1196→    def _scale_back_ascii(self, col_idx, input_field, output_field):
+    1197→        """
+    1198→        Convert internal array values back to ASCII table representation.
+    1199→
+    1200→        The ``input_field`` is the internal representation of the values, and
+    1201→        the ``output_field`` is the character array representing the ASCII
+  [... truncated ...]
+- [Test Output after action #15]
+  Exit code 1
+    File "test_d_exponent_bug.py", line 48
+      print(f"File contains 'D' exponent: {has_d_exponent}")
+                                                          ^
+  SyntaxError: invalid syntax
+- [Test Output after action #18]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_d_exponent_bug.py", line 3, in <module>
+      from astropy.io import fits
+    File "./swebench_9_15/testbed/astropy/__init__.py", line 22, in <module>
+      raise UnsupportedPythonError("Astropy does not support Python < {}".format(__minimum_python_version__))
+  astropy.UnsupportedPythonError: Astropy does not support Python < 3.5
+- [Test Output after action #22]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "test_d_exponent_bug.py", line 77, in <module>
+      test_d_exponent()
+    File "test_d_exponent_bug.py", line 16, in test_d_exponent
+      hdu = fits.BinTableHDU.from_columns([col])
+    File "./swebench_9_15/testbed/astropy/io/fits/hdu/table.py", line 129, in from_columns
+      hdu = cls(data=data, header=header, character_as_bytes=character_as_bytes, **kwargs)
+    File "./swebench_9_15/testbed/astropy/io/fits/hdu/table.py", line 848, in __init__
+      from ....table import Table
+    File "./swebench_9_15/testbed/astropy/table/__init__.py", line 41, in <module>
+      from .column import Column, MaskedColumn, StringTruncateWarning, ColumnInfo
+    File "./swebench_9_15/testbed/astropy/table/column.py", line 28, in <module>
+      from .np
+  [... truncated ...]
+- [Diagnostic Output after action #28]
+  ./swebench_9_15/testbed/astropy/visualization/scripts/tests/test_fits2bitmap.py
+  ./swebench_9_15/testbed/astropy/io/misc/asdf/tags/fits/tests/test_fits.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_fitsheader.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_fitsdiff.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_fitsinfo.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_fitscheck.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_fitstime.py
+- [Diagnostic Output after action #30]
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_connect.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_fitsheader.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_convenience.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_table.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_core.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_image.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_checksum.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_fitstime.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_diff.py
+  ./swebench_9_15/testbed/astropy/io/fits/tests/test_header.py
+- [Diagnostic Output after action #33]
+  329:        col1 = fits.Column(name='a', format='D', array=a1)
+  330:        col2 = fits.Column(name='b', format='D', array=a2)
+  2055:        c6 = fits.Column(name='c6', format='D', array=a6)
+  2776:        assert c.format.format == 'D'
+  2793:        assert c.format.format == 'D'
+  2819:        c = fits.Column('TEST', 'D')
+  2820:        assert c.format == 'D'
+  2822:        c = fits.Column('TEST', 'D', ascii=True)
+  2897:        a = fits.Column(name='a', format='D')
+  2898:        b = fits.Column(name='b', format='D')
+  2917:            fits.Column('a', format='D'),
+  2918:            fits.Column('b', format='D')])
+- [Test Output after action #36]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Original array: ['1.23E+10' '4.56E-05']
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_d_exponent_simple.py", line 34, in <module>
+      test_chararray_replace()
+    File "./swebench_9_15/testbed/test_d_exponent_simple.py", line 19, in test_chararray_replace
+      arr.replace(b'E', b'D')
+    File "/opt/anaconda3/lib/python3.8/site-packages/numpy/core/defchararray.py", line 2507, in replace
+      return asarray(replace(self, old, new, count))
+    File "<__array_function__ internals>", line 200, in replace
+    File "/opt/anaconda3/lib/python3.8/site-packages/numpy/core/defchararray.py", line 1265, in replace
+      _vec_string(
+  TypeError: replace() argument 1 must be str, not numpy.bytes_
+- [Test Output after action #39]
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Original array: ['1.23E+10' '4.56E-05']
+  After replace without assignment: ['1.23E+10' '4.56E-05']
+  Bug confirmed: array unchanged
+  After replace with assignment: ['1.23D+10' '4.56D-05']
+  Fix verified: array changed
+
+  Test passed!
+
+SOURCE EDIT EVIDENCE
+--------------------
+- astropy/io/fits/fitsrec.py
+  Tool: Edit action #25
+  old_text_sha256: 52715090a3b9a9d34c6c0245d87866f6900280e713da23f66ab7f5535bc89b3f
+  new_text_sha256: db3ae9063f6e5688a0268da685ea5754300d1f390196c944c5b102bdc41903a9
+- test_d_exponent_bug.py
+  Tool: Write action #13
+  new_text_sha256: da53995b72fc2273da087fadd01c9348d1ed1398fdbd14bc2a4b78eeb9ef037d
+- test_d_exponent_bug.py
+  Tool: Edit action #17
+  old_text_sha256: 38c7f63c5603295b50fcd9a291d65d11bc332a208e57670d5317c121727008eb
+  new_text_sha256: 31fe32e22a89acc71d353e422a84d9fb5850e9df237b23bf6802ea44ed957701
+- test_d_exponent_simple.py
+  Tool: Write action #35
+  new_text_sha256: 1559c6bdf527cdfb6fec3d27af41fbd313718b2335039ac89cfb443d399e1b3f
+- test_d_exponent_simple.py
+  Tool: Edit action #38
+  old_text_sha256: 2f864bed2d114f76e9715e1dd6971cd0739f83f82fd66ba2243029e43b61b3d3
+  new_text_sha256: 460e21595b42f199c1a50471c59b946f153e0da6bc6350f132b2f3c4f1cc5b88
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

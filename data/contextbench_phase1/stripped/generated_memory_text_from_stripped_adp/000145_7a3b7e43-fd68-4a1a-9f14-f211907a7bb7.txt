@@ -1,0 +1,440 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 7a3b7e43-fd68-4a1a-9f14-f211907a7bb7
+- repo: django/django
+- instance_id: django__django-15388
+- base_commit: c5cd8783825b5f6384417dac5f3889b4210b7d08
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Dev Server fails to restart after adding BASE_DIR to TEMPLATES[0]['DIRS'] in settings
+Description
+
+Repro steps:
+$ pip install -U django
+$ django-admin startproject <name>
+Open settings.py, copy the BASE_DIR variable from line 16 and paste it into the empty DIRS list on line 57
+$ ./manage.py runserver
+Back in your IDE, save a file and watch the dev server *NOT* restart.
+Back in settings.py, remove BASE_DIR from the templates DIRS list. Manually CTRL-C your dev server (as it won't restart on its own when you save), restart the dev server. Now return to your settings.py file, re-save it, and notice the development server once again detects changes and restarts.
+
+FILES INSPECTED
+---------------
+- django/template/autoreload.py [Read: 1, Grep: 1]
+- tests/template_tests/test_autoreloader.py [Read: 1]
+- django/utils/_os.py [Read: 1]
+- django/utils/autoreload.py [Grep: 5, Read: 2]
+- django/conf/project_template/project_name/settings.py-tpl [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [20] Grep pattern='def watch_dir' path='django/utils/autoreload.py'
+- [24] Grep pattern='absolute|is_absolute' path='django/template/autoreload.py'
+- [34] Grep pattern='def is_django_path' path='django/utils/autoreload.py'
+- [36] Grep pattern='file_changed.send' path='django/utils/autoreload.py'
+- [38] Grep pattern='notify_file_changed' path='django/utils/autoreload.py'
+- [44] Grep pattern='def trigger_reload' path='django/utils/autoreload.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [test] cd testbed && python -m pytest tests/template_tests/test_autoreloader.py::TemplateReloadTests::test_template_dirs_normalized_to_paths -xvs
+- [test] cd testbed && python tests/runtests.py template_tests.test_autoreloader.TemplateReloadTests.test_template_dirs_normalized_to_paths -v2
+- [other/reproduction] python3 --version
+- [test] cd testbed && python3 tests/runtests.py template_tests.test_autoreloader.TemplateReloadTests.test_template_dirs_normalized_to_paths -v2
+- [test] python3 testbed/tests/runtests.py template_tests.test_autoreloader.TemplateReloadTests.test_template_dirs_normalized_to_paths -v2
+- [test] python3 tests/runtests.py template_tests.test_autoreloader.TemplateReloadTests.test_template_dirs_normalized_to_paths -v2
+- [test] python3 test_issue.py
+- [diagnostic] find . -name "settings.py-tpl" -o -name "project_template" -type d | head -5
+- [diagnostic] git show 68357b2ca9 --stat
+- [diagnostic] git show 68357b2ca9
+- [test] python3 tests/runtests.py template_tests.test_autoreloader -v2
+- [test] python3 test_base_dir_fix.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #3]
+       1→from pathlib import Path
+       2→
+       3→from django.dispatch import receiver
+       4→from django.template import engines
+       5→from django.template.backends.django import DjangoTemplates
+       6→from django.utils._os import to_path
+       7→from django.utils.autoreload import (
+       8→    autoreload_started, file_changed, is_django_path,
+       9→)
+      10→
+      11→
+      12→def get_template_directories():
+      13→    # Iterate through each template backend and find
+      14→    # any template_loader that has a 'get_dirs' method.
+      15→    # Collect the directories, filtering out Django templates.
+      16→    cwd = Path.cwd()
+      17→    items = set()
+      18→    for backend in engines.all():
+      19→        if not isinstance(backend, DjangoTemplates):
+      20→            continue
+      21→
+      22→        items.update(cwd / to_path(dir) for dir in backend.engine.dirs)
+      23→
+      24→        for loader in backend.engine.template_loaders:
+      25→            if not hasattr(loader, 'get_dirs'):
+      26→                continue
+      27→            items.update(
+      28→                cwd / to_path(directory)
+      29→                for directory in loader.get_dirs()
+      30→                if not is_d
+  [... truncated ...]
+- [Read Result after action #5]
+       1→from pathlib import Path
+       2→from unittest import mock
+       3→
+       4→from django.template import autoreload
+       5→from django.test import SimpleTestCase, override_settings
+       6→from django.test.utils import require_jinja2
+       7→
+       8→ROOT = Path(__file__).parent.absolute()
+       9→EXTRA_TEMPLATES_DIR = ROOT / "templates_extra"
+      10→
+      11→
+      12→@override_settings(
+      13→    INSTALLED_APPS=['template_tests'],
+      14→    TEMPLATES=[{
+      15→        'BACKEND': 'django.template.backends.dummy.TemplateStrings',
+      16→        'APP_DIRS': True,
+      17→    }, {
+      18→        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+      19→        'DIRS': [EXTRA_TEMPLATES_DIR],
+      20→        'OPTIONS': {
+      21→            'context_processors': [
+      22→                'django.template.context_processors.request',
+      23→            ],
+      24→            'loaders': [
+      25→                'django.template.loaders.filesystem.Loader',
+      26→                'django.template.loaders.app_directories.Loader',
+      27→            ]
+      28→        },
+      29→    }])
+      30→class TemplateReloadTests(SimpleTestCase):
+      31→    @mock.patch('django.template.autoreload.rese
+  [... truncated ...]
+- [Read Result after action #7]
+       1→import os
+       2→import tempfile
+       3→from os.path import abspath, dirname, join, normcase, sep
+       4→from pathlib import Path
+       5→
+       6→from django.core.exceptions import SuspiciousFileOperation
+       7→
+       8→
+       9→def safe_join(base, *paths):
+      10→    """
+      11→    Join one or more path components to the base path component intelligently.
+      12→    Return a normalized, absolute version of the final path.
+      13→
+      14→    Raise ValueError if the final path isn't located inside of the base path
+      15→    component.
+      16→    """
+      17→    final_path = abspath(join(base, *paths))
+      18→    base_path = abspath(base)
+      19→    # Ensure final_path starts with base_path (using normcase to ensure we
+      20→    # don't false-negative on case insensitive operating systems like Windows),
+      21→    # further, one of the following conditions must be true:
+      22→    #  a) The next character is the path separator (to prevent conditions like
+      23→    #     safe_join("/dir", "/../d"))
+      24→    #  b) The final path must be the same as the base path.
+      25→    #  c) The base path must be the most root path (meaning either "/" or "C:\\")
+      26→    if (not normcas
+  [... truncated ...]
+- [Test Output after action #9]
+  Exit code 1
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #11]
+  Exit code 1
+    File "tests/runtests.py", line 20
+      ) from e
+           ^
+  SyntaxError: invalid syntax
+- [Test Output after action #16]
+  Exit code 2
+  python3: can't open file 'testbed/tests/runtests.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #18]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Importing application template_tests
+  Found 1 test(s).
+  Skipping setup of unused database(s): default, other.
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  test_template_dirs_normalized_to_paths (template_tests.test_autoreloader.TemplateReloadTests) ... ok
+
+  ----------------------------------------------------------------------
+  Ran 1 test in 0.001s
+
+  OK
+- [Grep Result after action #20]
+  276:    def watch_dir(self, path, glob):
+  277-        path = Path(path)
+  278-        try:
+  279-            path = path.absolute()
+  280-        except FileNotFoundError:
+  281-            logger.debug(
+  282-                'Unable to watch directory %s as it cannot be resolved.',
+  283-                path,
+  284-                exc_info=True,
+  285-            )
+  286-            return
+  287-        logger.debug('Watching dir %s with glob %s.', path, glob)
+  288-        self.directory_globs[path].add(glob)
+  289-
+  290-    def watched_files(self, include_globs=True):
+  291-        """
+- [Test Output after action #22]
+  Current behavior:
+    CWD: ./swebench_9_15/testbed
+    BASE_DIR: /some/project/path
+    Template dir (absolute): /some/project/path/templates
+    Result of cwd / template_dir: /some/project/path/templates
+    Are they equal? True
+
+  Demonstration of the issue:
+    Type of template_dir: <class 'pathlib.PosixPath'>
+    Type of result: <class 'pathlib.PosixPath'>
+    template_dir is absolute: True
+
+  Relative path behavior:
+    Relative dir: templates/relative
+    Result of cwd / relative_dir: ./swebench_9_15/testbed/templates/relative
+    relative_dir is absolute: False
+
+  Proposed fix:
+    Absolute path normalized: /some/project/path/templates
+    Relative path normalized: ./swebench_9_15/testbed/templates/relative
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Grep Result after action #24]
+  No matches found
+- [Diagnostic Output after action #26]
+  ./tests/admin_scripts/custom_templates/project_template
+  ./tests/project_template
+  ./django/conf/project_template
+  ./django/conf/project_template/project_name/settings.py-tpl
+- [Read Result after action #28]
+       1→"""
+       2→Django settings for {{ project_name }} project.
+       3→
+       4→Generated by 'django-admin startproject' using Django {{ django_version }}.
+       5→
+       6→For more information on this file, see
+       7→https://docs.djangoproject.com/en/{{ docs_version }}/topics/settings/
+       8→
+       9→For the full list of settings and their values, see
+      10→https://docs.djangoproject.com/en/{{ docs_version }}/ref/settings/
+      11→"""
+      12→
+      13→from pathlib import Path
+      14→
+      15→# Build paths inside the project like this: BASE_DIR / 'subdir'.
+      16→BASE_DIR = Path(__file__).resolve().parent.parent
+      17→
+      18→
+      19→# Quick-start development settings - unsuitable for production
+      20→# See https://docs.djangoproject.com/en/{{ docs_version }}/howto/deployment/checklist/
+      21→
+      22→# SECURITY WARNING: keep the secret key used in production secret!
+      23→SECRET_KEY = '{{ secret_key }}'
+      24→
+      25→# SECURITY WARNING: don't run with debug turned on in production!
+      26→DEBUG = True
+      27→
+      28→ALLOWED_HOSTS = []
+      29→
+      30→
+      31→# Application definition
+      32→
+      33→INSTALLED_APPS = [
+      34→    'django.contrib.admin',
+      35→    'django.contrib.aut
+  [... truncated ...]
+- [Diagnostic Output after action #30]
+  commit 68357b2ca9e88c40fc00d848799813241be39129
+  Author: Hasan Ramezani <hasan.r67@gmail.com>
+  Date:   Mon May 17 21:53:21 2021 +0200
+
+      Fixed #32744 -- Normalized to pathlib.Path in autoreloader check for template changes.
+
+   django/template/autoreload.py             |  7 +++++--
+   docs/releases/3.2.4.txt                   |  3 +++
+   tests/template_tests/test_autoreloader.py | 20 ++++++++++++++++++++
+   3 files changed, 28 insertions(+), 2 deletions(-)
+- [Diagnostic Output after action #32]
+  commit 68357b2ca9e88c40fc00d848799813241be39129
+  Author: Hasan Ramezani <hasan.r67@gmail.com>
+  Date:   Mon May 17 21:53:21 2021 +0200
+
+      Fixed #32744 -- Normalized to pathlib.Path in autoreloader check for template changes.
+
+- [Grep Result after action #34]
+  54:def is_django_path(path):
+  55-    """Return True if the given file path is nested under Django."""
+  56-    return Path(django.__file__).parent in Path(path).parents
+  57-
+  58-
+  59-def check_errors(fn):
+  60-    @functools.wraps(fn)
+  61-    def wrapper(*args, **kwargs):
+  62-        global _exception
+  63-        try:
+  64-            fn(*args, **kwargs)
+- [Grep Result after action #36]
+  356-    @classmethod
+  357-    def check_availability(cls):
+  358-        raise NotImplementedError('subclasses must implement check_availability().')
+  359-
+  360-    def notify_file_changed(self, path):
+  361:        results = file_changed.send(sender=self, file_path=path)
+  362-        logger.debug('%s notified as changed. Signal results: %s.', path, results)
+  363-        if not any(res[1] for res in results):
+  364-            trigger_reload(path)
+  365-
+  366-    # These are primarily used for testing.
+- [Grep Result after action #38]
+  357-    def check_availability(cls):
+  358-        raise NotImplementedError('subclasses must implement check_availability().')
+  359-
+  360:    def notify_file_changed(self, path):
+  361-        results = file_changed.send(sender=self, file_path=path)
+  362-        logger.debug('%s notified as changed. Signal results: %s.', path, results)
+  363-        if not any(res[1] for res in results):
+  --
+  386-                    continue
+  387-                elif mtime > old_time:
+  388-                    logger.debug('File %s previous mtime: %s, current mtime: %s', filepath, old_time, mtime)
+  389:                    self.notify_file_changed(filepath)
+  390-
+  391-            time.sleep(self.SLEEP_TIME)
+  392-            yield
+  --
+  550-            root_directory = Path(result['subscription'].split(':', 1)[1])
+  551-            logger.debug('Found root directory %s', root_directory)
+  552-            for file in result.get('files', []):
+  553:                self.notify_file_changed(root_directory / file)
+  554-
+  555-    def request_processed(self, **kwargs):
+  556-        logger.debug('Request processed. Setting update_watches event.')
+- [Read Result after action #40]
+     370→
+     371→    def stop(self):
+     372→        self._stop_condition.set()
+     373→
+     374→
+     375→class StatReloader(BaseReloader):
+     376→    SLEEP_TIME = 1  # Check for changes once per second.
+     377→
+     378→    def tick(self):
+     379→        mtimes = {}
+     380→        while True:
+     381→            for filepath, mtime in self.snapshot_files():
+     382→                old_time = mtimes.get(filepath)
+     383→                mtimes[filepath] = mtime
+     384→                if old_time is None:
+     385→                    logger.debug('File %s first seen with mtime %s', filepath, mtime)
+     386→                    continue
+     387→                elif mtime > old_time:
+     388→                    logger.debug('File %s previous mtime: %s, current mtime: %s', filepath, old_time, mtime)
+     389→                    self.notify_file_changed(filepath)
+     390→
+     391→            time.sleep(self.SLEEP_TIME)
+     392→            yield
+     393→
+     394→    def snapshot_files(self):
+     395→        # watched_files may produce duplicate paths if globs overlap.
+     396→        seen_files = set()
+     397→        for file in self.watched_files():
+     398→            if file in seen_files:
+     399→
+  [... truncated ...]
+- [Read Result after action #42]
+     290→    def watched_files(self, include_globs=True):
+     291→        """
+     292→        Yield all files that need to be watched, including module files and
+     293→        files within globs.
+     294→        """
+     295→        yield from iter_all_python_module_files()
+     296→        yield from self.extra_files
+     297→        if include_globs:
+     298→            for directory, patterns in self.directory_globs.items():
+     299→                for pattern in patterns:
+     300→                    yield from directory.glob(pattern)
+     301→
+     302→    def wait_for_apps_ready(self, app_reg, django_main_thread):
+     303→        """
+     304→        Wait until Django reports that the apps have been loaded. If the given
+     305→        thread has terminated before the apps are ready, then a SyntaxError or
+     306→        other non-recoverable error has been raised. In that case, stop waiting
+     307→        for the apps_ready event and continue processing.
+     308→
+     309→        Return True if the thread is alive and the ready event has been
+
+- [Grep Result after action #44]
+  256:def trigger_reload(filename):
+  257-    logger.info('%s changed, reloading.', filename)
+  258-    sys.exit(3)
+  259-
+  260-
+  261-def restart_with_reloader():
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/template/autoreload.py
+  Tool: Edit action #46
+  old_text_sha256: e557ba5deeae269d7e449b1e0c9e40860667ac72a6c1d42c7a90b6fe9145768b
+  new_text_sha256: 97270c82e39a7ca7dd3e32841726dcf0f7936e8771249a478847a598f57023e6
+- test_base_dir_fix.py
+  Tool: Write action #49
+  new_text_sha256: 18d3cf36619d8bf309997819dec7831e1dca38818664fdd8f92b949ef32abea2
+- test_simple_fix.py
+  Tool: Write action #52
+  new_text_sha256: 298f788c324ecd5adab6b6fb40813d20f426af8b6258c0e13ced1d27c905c628
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

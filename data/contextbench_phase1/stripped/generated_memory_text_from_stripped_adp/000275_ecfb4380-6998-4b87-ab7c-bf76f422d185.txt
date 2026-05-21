@@ -1,0 +1,189 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: ecfb4380-6998-4b87-ab7c-bf76f422d185
+- repo: pallets/flask
+- instance_id: pallets__flask-4045
+- base_commit: d8c37f43724cd9fb0870f77877b7c4c7e38a19e0
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Raise error when blueprint name contains a dot
+This is required since every dot is now significant since blueprints can be nested. An error was already added for endpoint names in 1.0, but should have been added for this as well.
+
+FILES INSPECTED
+---------------
+- src/flask/blueprints.py [Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='**/*blueprint*.py'
+- [3] Glob glob='**/*.py'
+- [5] Glob glob='testbed/src/flask/*blueprint*.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15/testbed -type f -name "*.py" | grep -i blueprint | head -20
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [diagnostic] cd testbed && python -c "from flask import Blueprint; bp = Blueprint('admin.users', __name__)"
+- [test] cd testbed && python -m pytest tests/test_blueprints.py -v -k "test" 2>&1 | head -50
+- [other/reproduction] cd testbed && python3 -c "
+import sys
+sys.path.insert(0, 'src')
+from flask import Blueprint
+
+# Test 1: Blueprint with dot should raise ValueError
+try:
+    bp = Blueprint('admin.users', __name__)
+    print('FAIL: Expected ValueError')
+    sys.exit(1)
+except ValueError as e:
+    print('PASS: Got expected ValueError -', str(e))
+
+# Test 2: Blueprint without dot should work
+try:
+    bp = Blueprint('admin_users', __name__)
+    print('PASS: Valid blueprint name works')
+except Exception as e:
+    print(
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, 'testbed/src')
+from flask import Blueprint
+
+# Test 1: Blueprint with dot should raise ValueError
+try:
+    bp = Blueprint('admin.users', __name__)
+    print('FAIL: Expected ValueError')
+    sys.exit(1)
+except ValueError as e:
+    print('PASS: Got expected ValueError -', str(e))
+
+# Test 2: Blueprint without dot should work
+try:
+    bp = Blueprint('admin_users', __name__)
+    print('PASS: Valid blueprint name works')
+except Exception as e:
+    print('FAIL:
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, 'testbed/src')
+
+# Just test the validation logic directly
+name = 'admin.users'
+if '.' in name:
+    print('PASS: Validation logic correctly detects dot in name')
+else:
+    print('FAIL: Validation logic failed')
+    sys.exit(1)
+
+name = 'admin_users'
+if '.' in name:
+    print('FAIL: Validation logic false positive')
+    sys.exit(1)
+else:
+    print('PASS: Validation logic correctly allows valid name')
+
+print('Logic validation passed!')
+"
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named markupsafe
+- Traceback (most recent call last):
+- ImportError: No module named flask
+- ImportError: cannot import name 'url_quote' from 'werkzeug.urls' (/opt/anaconda3/lib/python3.8/site-packages/werkzeug/urls.py)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #3]
+  ./swebench_9_15/calculate_session_usage.py
+- [Glob Result after action #5]
+  ./swebench_9_15/testbed/src/flask/blueprints.py
+- [Read Result after action #7]
+       1→import typing as t
+       2→from collections import defaultdict
+       3→from functools import update_wrapper
+       4→
+       5→from .scaffold import _endpoint_from_view_func
+       6→from .scaffold import _sentinel
+       7→from .scaffold import Scaffold
+       8→from .typing import AfterRequestCallable
+       9→from .typing import BeforeRequestCallable
+      10→from .typing import ErrorHandlerCallable
+      11→from .typing import TeardownCallable
+      12→from .typing import TemplateContextProcessorCallable
+      13→from .typing import TemplateFilterCallable
+      14→from .typing import TemplateGlobalCallable
+      15→from .typing import TemplateTestCallable
+      16→from .typing import URLDefaultCallable
+      17→from .typing import URLValuePreprocessorCallable
+      18→
+      19→if t.TYPE_CHECKING:
+      20→    from .app import Flask
+      21→
+      22→DeferredSetupFunction = t.Callable[["BlueprintSetupState"], t.Callable]
+      23→
+      24→
+      25→class BlueprintSetupState:
+      26→    """Temporary holder object for registering a blueprint with the
+      27→    application.  An instance of this class is created by the
+      28→    :meth:`~flask.Blueprint.make_setup_state` method and later passed
+      29→    to all regi
+  [... truncated ...]
+- [Test Output after action #10]
+  Exit code 1
+    File "test_issue.py", line 13
+      print(f"PASS: Got expected ValueError: {e}")
+                                                ^
+  SyntaxError: invalid syntax
+- [Test Output after action #12]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 5, in <module>
+      from flask import Blueprint
+    File "./swebench_9_15/testbed/src/flask/__init__.py", line 1, in <module>
+      from markupsafe import escape
+  ImportError: No module named markupsafe
+- [Diagnostic Output after action #14]
+  Exit code 1
+  Traceback (most recent call last):
+    File "<string>", line 1, in <module>
+  ImportError: No module named flask
+- [Test Output after action #16]
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Read Result after action #23]
+     185→            import_name=import_name,
+     186→            static_folder=static_folder,
+     187→            static_url_path=static_url_path,
+     188→            template_folder=template_folder,
+     189→            root_path=root_path,
+     190→        )
+     191→        if "." in name:
+     192→            raise ValueError("Blueprint name should not contain dots")
+     193→        self.name = name
+     194→        self.url_prefix = url_prefix
+
+
+SOURCE EDIT EVIDENCE
+--------------------
+- src/flask/blueprints.py
+  Tool: Edit action #9
+  old_text_sha256: 52d9984887afef9393611d9cb02a1a9cd6dc20d68ba55c5421fe7ae6bff0a712
+  new_text_sha256: aca49969cb8eaafcddad605b6dee6a0bebc0691eea3d88c070736a75f24a9242
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

@@ -1,0 +1,397 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 3d6a7888-9853-41a8-88bb-53022f626a61
+- repo: django/django
+- instance_id: django__django-11797
+- base_commit: 3346b78a8a872286a245d1e77ef4718fc5e6be1a
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Filtering on query result overrides GROUP BY of internal query
+Description
+
+from django.contrib.auth import models
+a = models.User.objects.filter(email__isnull=True).values('email').annotate(m=Max('id')).values('m')
+print(a.query) # good
+# SELECT MAX("auth_user"."id") AS "m" FROM "auth_user" WHERE "auth_user"."email" IS NULL GROUP BY "auth_user"."email"
+print(a[:1].query) # good
+# SELECT MAX("auth_user"."id") AS "m" FROM "auth_user" WHERE "auth_user"."email" IS NULL GROUP BY "auth_user"."email" LIMIT 1
+b = models.User.objects.filter(id=a[:1])
+print(b.query) # GROUP BY U0."id" should be GROUP BY U0."email"
+# SELECT ... FROM "auth_user" WHERE "auth_user"."id" = (SELECT U0."id" FROM "auth_user" U0 WHERE U0."email" IS NULL GROUP BY U0."id" LIMIT 1)
+
+FILES INSPECTED
+---------------
+- django/db/models/sql [Grep: 4]
+- django/db/models/sql/query.py [Grep: 3, Read: 4]
+- django/db/models [Grep: 2]
+- django/db/models/query.py [Grep: 1]
+- django/db/models/sql/compiler.py [Read: 2]
+- django/db/models/lookups.py [Read: 3]
+
+SEARCH ANCHORS
+--------------
+- [9] Grep pattern='as_sql.*subquery' path='django/db/models/sql'
+- [10] Grep pattern='resolve_lookup_value' path='django/db/models/sql'
+- [12] Grep pattern='def resolve_lookup_value' path='django/db/models/sql/query.py'
+- [14] Grep pattern='add_fields.*pk' path='django/db/models/sql/query.py'
+- [16] Grep pattern='set_group_by' path='django/db/models/sql'
+- [24] Grep pattern='resolve_expression.*Query' path='django/db/models/sql'
+- [25] Grep pattern='class.*Query.*Expression' path='django/db/models'
+- [27] Grep pattern='as_sql.*query.*resolve' path='django/db/models'
+- [30] Grep pattern='def resolve_expression' path='django/db/models/query.py'
+- [32] Grep pattern='def resolve_expression' path='django/db/models/sql/query.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction] cd testbed && python reproduce_issue.py
+- [other/reproduction] cd ./swebench_9_15/testbed && python reproduce_issue.py 2>&1
+- [other/reproduction] cd ./swebench_9_15/testbed && python3 reproduce_issue.py 2>&1
+- [diagnostic] find . -name "*.py" -path "*/db/models/sql/*" -type f | head -20
+- [diagnostic] grep -n "def set_group_by" django/db/models/sql/query.py
+- [diagnostic] find testbed/django/db/models -name "*.py" -exec grep -l "resolve_expression" {} \; | head -10
+- [diagnostic] grep -n "^    def as_sql" testbed/django/db/models/sql/query.py | head -5
+- [other/reproduction] awk '/^    def as_sql\(self, compiler, connection\):$/,/^    def [a-z_]/ { print NR": "$0 }' testbed/django/db/models/sql/query.py | head -50
+- [diagnostic] grep -n "^    def as_sql" testbed/django/db/models/sql/query.py
+- [diagnostic] sed -n '1301,1350p' testbed/django/db/models/sql/query.py
+- [diagnostic] grep -n "set_group_by\|\.subquery" testbed/django/db/models/sql/compiler.py | head -30
+- [diagnostic] grep -n "set_group_by\|get_group_by" testbed/django/db/models/sql/compiler.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- FAIL: Subquery does not select pk
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #7]
+  ./testbed/django/contrib/gis/db/models/sql/conversion.py
+  ./testbed/django/contrib/gis/db/models/sql/__init__.py
+  ./testbed/django/db/models/sql/compiler.py
+  ./testbed/django/db/models/sql/query.py
+  ./testbed/django/db/models/sql/subqueries.py
+  ./testbed/django/db/models/sql/where.py
+  ./testbed/django/db/models/sql/constants.py
+  ./testbed/django/db/models/sql/__init__.py
+  ./testbed/django/db/models/sql/datastructures.py
+  ./django/contrib/gis/db/models/sql/conversion.py
+  ./django/contrib/gis/db/models/sql/__init__.py
+  ./django/db/models/sql/compiler.py
+  ./django/db/models/sql/query.py
+  ./django/db/models/sql/subqueries.py
+  ./django/db/models/sql/where.py
+  ./django/db/models/sql/constants.py
+  ./django/db/models/sql/__init__.py
+  ./django/db/models/sql/datastructures.py
+- [Grep Result after action #10]
+  Found 1 file
+  testbed/django/db/models/sql/query.py
+- [Grep Result after action #12]
+  1316:    def resolve_lookup_value(self, value, can_reuse, allow_joins, summarize=False):
+  1317-        if hasattr(value, "resolve_expression"):
+  1318-            value = value.resolve_expression(
+  1319-                self,
+  1320-                reuse=can_reuse,
+  1321-                allow_joins=allow_joins,
+  1322-                summarize=summarize,
+  1323-            )
+  1324-        elif isinstance(value, (list, tuple)):
+  1325-            # The items of the iterable may be expressions and therefore need
+  1326-            # to be resolved independently.
+  1327-            values = (
+  1328-                self.resolve_lookup_value(sub_value, can_reuse, allow_joins, summarize)
+  1329-                for sub_value in value
+  1330-            )
+  1331-            type_ = type(value)
+  1332-            if hasattr(type_, "_make"):  # namedtuple
+  1333-                return type_(*values)
+  1334-            return type_(values)
+  1335-        return value
+  1336-
+  1337-    def solve_lookup_type(self, lookup, summarize=False):
+  1338-        """
+  1339-        Solve the lookup type from the lookup (e.g.: 'foobar__id__icontains').
+  1340-        """
+  1341-        lookup_splitted = lookup.split(LOOKUP_SEP)
+  1342-        if self
+  [... truncated ...]
+- [Grep Result after action #14]
+  No matches found
+- [Grep Result after action #16]
+  ./swebench_9_15/testbed/testbed/django/db/models/sql/query.py-661-                )
+  ./swebench_9_15/testbed/testbed/django/db/models/sql/query.py-662-                # Disable GROUP BY aliases to avoid orphaning references to the
+  ./swebench_9_15/testbed/testbed/django/db/models/sql/query.py-663-                # SELECT clause which is about to be cleared.
+  testbed/django/db/models/sql/query.py:664:                q.set_group_by(allow_aliases=False)
+  ./swebench_9_15/testbed/testbed/django/db/models/sql/query.py-665-            q.clear_select_clause()
+  testbed/django/db/models/sql/query.py-666-        if q.combined_queries and q.combinator == "union":
+  ./swebench_9_15/testbed/testbed/django/db/models/sql/query.py-667-            q.combined_queries = tuple(
+  ./swebench_9_15/testbed/testbed/django/db/models/sql/query.py-668-                combined_query.exists(limit=False)
+  ./swebench_9_15/testbed/testbed/django/db/models/sql/query.py-669-                for combined_query in q.combined_queries
+  ./swebench_9_15/testbed/testbed/django/db/models/sql/query.py-670-            )
+  ./swebench_9_15/testbed/testbed/django/db/models/sql/query.py-671-        q.clear_ordering(force=True)
+  testbed/django/d
+  [... truncated ...]
+- [Read Result after action #18]
+    2357→        return to_demote
+    2358→
+
+- [Diagnostic Output after action #20]
+  1911:    def set_group_by(self):
+- [Read Result after action #22]
+    1911→    def set_group_by(self):
+    1912→        """
+    1913→        Expand the GROUP BY clause required by the query.
+    1914→
+    1915→        This will usually be the set of all non-aggregate fields in the
+    1916→        return data. If the database backend supports grouping by the
+    1917→        primary key, and the query would be equivalent, the optimization
+    1918→        will be made automatically.
+    1919→        """
+    1920→        group_by = list(self.select)
+    1921→        if self.annotation_select:
+    1922→            for alias, annotation in self.annotation_select.items():
+    1923→                try:
+    1924→                    inspect.getcallargs(annotation.get_group_by_cols, alias=alias)
+    1925→                except TypeError:
+    1926→                    annotation_class = annotation.__class__
+    1927→                    msg = (
+    1928→                        '`alias=None` must be added to the signature of '
+    1929→                        '%s.%s.get_group_by_cols().'
+    1930→                    ) % (annotation_class.__module__, annotation_class.__qualname__)
+    1931→                    warnings.warn(msg, category=RemovedInDjango40Warning)
+    1932→                    group_by_co
+  [... truncated ...]
+- [Grep Result after action #25]
+  Found 1 file
+  testbed/django/db/models/sql/query.py
+- [Diagnostic Output after action #28]
+  testbed/django/db/models/query.py
+  testbed/django/db/models/expressions.py
+  testbed/django/db/models/lookups.py
+  testbed/django/db/models/indexes.py
+  testbed/django/db/models/aggregates.py
+  testbed/django/db/models/functions/text.py
+  testbed/django/db/models/functions/datetime.py
+  testbed/django/db/models/fields/generated.py
+  testbed/django/db/models/fields/__init__.py
+  testbed/django/db/models/fields/related_lookups.py
+- [Grep Result after action #30]
+  2129:    def resolve_expression(self, *args, **kwargs):
+  2130-        query = self.query.resolve_expression(*args, **kwargs)
+  2131-        query._db = self._db
+  2132-        return query
+  2133-
+  2134-    resolve_expression.queryset_only = True
+  2135-
+  2136-    def _add_hints(self, **hints):
+  2137-        """
+  2138-        Update hinting information for use by routers. Add new key/values or
+  2139-        overwrite existing key/values.
+  2140-        """
+  2141-        self._hints.update(hints)
+  2142-
+  2143-    def _has_filters(self):
+  2144-        """
+  2145-        Check if this QuerySet has any filtering going on. This isn't
+  2146-        equivalent with checking if all objects are present in results, for
+  2147-        example, qs[1:]._has_filters() -> False.
+  2148-        """
+  2149-        return self.query.has_filters()
+  2150-
+  2151-    @staticmethod
+  2152-    def _validate_values_are_expressions(values, method_name):
+  2153-        invalid_args = sorted(
+  2154-            str(arg) for arg in values if not hasattr(arg, "resolve_expression")
+  2155-        )
+  2156-        if invalid_args:
+  2157-            raise TypeError(
+  2158-                "QuerySet.%s() received non-expression(s): %s."
+  2159-
+  [... truncated ...]
+- [Grep Result after action #32]
+  1253:    def resolve_expression(self, query, *args, **kwargs):
+  1254-        clone = self.clone()
+  1255-        # Subqueries need to use a different set of aliases than the outer
+  1256-        # query.
+  1257-        clone.bump_prefix(query)
+  1258-        clone.subquery = True
+  1259-        clone.where.resolve_expression(query, *args, **kwargs)
+  1260-        # Resolve combined queries.
+  1261-        if clone.combinator:
+  1262-            clone.combined_queries = tuple(
+  1263-                [
+  1264-                    combined_query.resolve_expression(query, *args, **kwargs)
+  1265-                    for combined_query in clone.combined_queries
+  1266-                ]
+  1267-            )
+  1268-        for key, value in clone.annotations.items():
+  1269-            resolved = value.resolve_expression(query, *args, **kwargs)
+  1270-            if hasattr(resolved, "external_aliases"):
+  1271-                resolved.external_aliases.update(clone.external_aliases)
+  1272-            clone.annotations[key] = resolved
+  1273-        # Outer query's aliases are considered external.
+  1274-        for alias, table in query.alias_map.items():
+  1275-            clone.external_aliases[alias] = (
+  1276-                isi
+  [... truncated ...]
+- [Read Result after action #34]
+    1301→        else:
+    1302→            col = _get_col(targets[0], join_info.final_field, alias, simple_col)
+    1303→
+    1304→        condition = self.build_lookup(lookups, col, value)
+    1305→        lookup_type = condition.lookup_name
+    1306→        clause.add(condition, AND)
+    1307→
+    1308→        require_outer = lookup_type == 'isnull' and condition.rhs is True and not current_negated
+    1309→        if current_negated and (lookup_type != 'isnull' or condition.rhs is False) and condition.rhs is not None:
+    1310→            require_outer = True
+    1311→            if (lookup_type != 'isnull' and (
+    1312→                    self.is_nullable(targets[0]) or
+    1313→                    self.alias_map[join_list[-1]].join_type == LOUTER)):
+    1314→                # The condition added here will be SQL like this:
+    1315→                # NOT (col IS NOT NULL), where the first NOT is added in
+    1316→                # upper layers of code. The reason for addition is that if col
+    1317→                # is null, then col != someval will result in SQL "unknown"
+    1318→                # which isn't the same as in Python. The Python None handling
+    1319→                # is wanted, and it can be g
+  [... truncated ...]
+- [Diagnostic Output after action #36]
+  1301:    def as_sql(self, compiler, connection):
+- [Read Result after action #38]
+    1301→        else:
+    1302→            col = _get_col(targets[0], join_info.final_field, alias, simple_col)
+    1303→
+    1304→        condition = self.build_lookup(lookups, col, value)
+    1305→        lookup_type = condition.lookup_name
+    1306→        clause.add(condition, AND)
+    1307→
+    1308→        require_outer = lookup_type == 'isnull' and condition.rhs is True and not current_negated
+    1309→        if current_negated and (lookup_type != 'isnull' or condition.rhs is False) and condition.rhs is not None:
+    1310→            require_outer = True
+    1311→            if (lookup_type != 'isnull' and (
+    1312→                    self.is_nullable(targets[0]) or
+    1313→                    self.alias_map[join_list[-1]].join_type == LOUTER)):
+    1314→                # The condition added here will be SQL like this:
+    1315→                # NOT (col IS NOT NULL), where the first NOT is added in
+    1316→                # upper layers of code. The reason for addition is that if col
+    1317→                # is null, then col != someval will result in SQL "unknown"
+    1318→                # which isn't the same as in Python. The Python None handling
+    1319→                # is wanted, and it can be g
+  [... truncated ...]
+- [Diagnostic Output after action #42]
+  1301:    def as_sql(self, compiler, connection):
+- [Diagnostic Output after action #44]
+      def as_sql(self, compiler, connection):
+          # Some backends (e.g. Oracle) raise an error when a subquery contains
+          # unnecessary ORDER BY clause.
+          if (
+              self.subquery
+              and not connection.features.ignores_unnecessary_order_by_in_subqueries
+          ):
+              self.clear_ordering(force=False)
+              for query in self.combined_queries:
+                  query.clear_ordering(force=False)
+          sql, params = self.get_compiler(connection=connection).as_sql()
+          if self.subquery:
+              sql = "(%s)" % sql
+          return sql, params
+
+      def resolve_lookup_value(self, value, can_reuse, allow_joins, summarize=False):
+          if hasattr(value, "resolve_expression"):
+              value = value.resolve_expression(
+                  self,
+                  reuse=can_reuse,
+                  allow_joins=allow_joins,
+                  summarize=summarize,
+              )
+          elif isinstance(value, (list, tuple)):
+              # The items of the iterable may be expressions and therefore need
+              # to be resolved independently.
+              values = (
+                  self.resolve_lookup_value(sub_value, can_reuse, allow_joins, summarize)
+
+  [... truncated ...]
+- [Diagnostic Output after action #46]
+  630:        if not self.query.subquery and features.supports_slicing_ordering_in_compound:
+  659:                self.query.subquery
+  663:        elif self.query.subquery and features.supports_slicing_ordering_in_compound:
+  674:        inner_query.subquery = True
+  953:            if self.query.subquery and extra_select:
+- [Diagnostic Output after action #48]
+  93:        group_by = self.get_group_by(self.select + extra_select, order_by)
+  96:    def get_group_by(self, select, order_by):
+  164:            expressions.extend(expr.get_group_by_cols())
+  170:                    expressions.extend(expr.get_group_by_cols())
+  171:        having_group_by = self.having.get_group_by_cols() if self.having else ()
+- [Read Result after action #50]
+      93→        if self.query.group_by is None:
+      94→            return []
+      95→        expressions = []
+      96→        if self.query.group_by is not True:
+      97→            # If the group by is set to a list (by .values() call most likely),
+      98→            # then we need to add everything in it to the GROUP BY clause.
+      99→            # Backwards compatibility hack for setting query.group_by. Remove
+     100→            # when  we have public API way of forcing the GROUP BY clause.
+     101→            # Converts string references to expressions.
+     102→            for expr in self.query.group_by:
+     103→                if not hasattr(expr, 'as_sql'):
+     104→                    expressions.append(self.query.resolve_ref(expr))
+     105→                else:
+     106→                    expressions.append(expr)
+     107→        # Note that even if the group_by is set, it is only the minimal
+     108→        # set to group by. So, we need to add cols in select, order_by, and
+     109→        # having into the select in any case.
+     110→        for expr, _, _ in select:
+     111→            cols = expr.get_group_by_cols()
+     112→            for col in cols:
+     113→                expressions
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- reproduce_issue.py
+  Tool: Write action #1
+  new_text_sha256: 97f5b62bf5e3c0f249527334ade8d559294bff3c35e5501d56faf0b8d34189b6
+- django/db/models/lookups.py
+  Tool: Edit action #143
+  old_text_sha256: b49b57c89cd3524ae32ebd0c5c3daf070d035c78094b3cbfbd58878af95dafd9
+  new_text_sha256: f756c5ded46eed84a6a408651b58947d556f742089b1955fdab3b93b919cdc0f
+- django/db/models/lookups.py
+  Tool: Edit action #155
+  old_text_sha256: b49b57c89cd3524ae32ebd0c5c3daf070d035c78094b3cbfbd58878af95dafd9
+  new_text_sha256: f756c5ded46eed84a6a408651b58947d556f742089b1955fdab3b93b919cdc0f
+- django/db/models/lookups.py
+  Tool: Edit action #156
+  old_text_sha256: 02326b806bf67e0441763f71f32fb6381a1fe4d987b393c446053cdf3f5951a8
+  new_text_sha256: 7963dcead75cd5460e34216177e5b187a81b09f6c52761612c17d9b6b374a1dd
+- django/db/models/lookups.py
+  Tool: Edit action #157
+  old_text_sha256: 99dd136b559c51298326c3e2f786d2fbd19309c788fdf61d9c5c97eda4fa1622
+  new_text_sha256: a891ff24bc3377e296bf233cf42a6b9300469c551bb5642fac6baf191aa49099
+- django/db/models/lookups.py
+  Tool: Edit action #160
+  old_text_sha256: 8870db3ebc5b6f70be78dcc4875356545788411afdd1e1384569bed246075973
+  new_text_sha256: 735f02771f89954d69101cb4e102c4a78024156348cae96104043c72e318f2db
+- test_debug2.py
+  Tool: Write action #100
+  new_text_sha256: c275a9ede2cecd50430d05b346464e204a2edfcfb2827d34cff4fcd28a9336d1
+- test_debug3.py
+  Tool: Write action #107
+  new_text_sha256: 8513f2158be46716f886396dbaac69b27705cc0bc97c7933f26665a81c1cbf89
+- test_fix.py
+  Tool: Write action #186
+  new_text_sha256: 3b52bc97afa4b1b830a89f62e37d118c1ac74b554693bdc108a94fb64edc9406
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

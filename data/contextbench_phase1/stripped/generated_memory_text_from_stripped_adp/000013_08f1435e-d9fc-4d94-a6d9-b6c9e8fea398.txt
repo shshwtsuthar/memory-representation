@@ -1,0 +1,485 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 08f1435e-d9fc-4d94-a6d9-b6c9e8fea398
+- repo: django/django
+- instance_id: django__django-14534
+- base_commit: 910ecd1b8df7678f45c3d507dde6bcb1faafa243
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+BoundWidget.id_for_label ignores id set by ChoiceWidget.options
+Description
+
+If you look at the implementation of BoundField.subwidgets
+class BoundField:
+    ...
+    def subwidgets(self):
+        id_ = self.field.widget.attrs.get('id') or self.auto_id
+        attrs = {'id': id_} if id_ else {}
+        attrs = self.build_widget_attrs(attrs)
+        return [
+            BoundWidget(self.field.widget, widget, self.form.renderer)
+            for widget in self.field.widget.subwidgets(self.html_name, self.value(), attrs=attrs)
+        ]
+one sees that self.field.widget.subwidgets(self.html_name, self.value(), attrs=attrs) returns a dict and assigns it to widget. Now widget['attrs']['id'] contains the "id" we would like to use when rendering the label of our CheckboxSelectMultiple.
+However BoundWidget.id_for_label() is implemented as
+class BoundWidget:
+    ...
+    def id_for_label(self):
+        return 'id_%s_%s' % (self.data['name'], self.data['index'])
+ignoring the id available through self.data['attrs']['id']. This re-implementation for rendering the "id" is confusing and presumably not intended. Nobody has probably realized that so far, because rarely the auto_id-argument is overridden when initializing a form. If however we do, one would assume that the method BoundWidget.id_for_label renders that string as specified through the auto_id format-string.
+By changing the code from above to
+class BoundWidget:
+    ...
+    def id_for_label(self):
+        return self.data['attrs']['id']
+that function behaves as expected.
+Please note that this error only occurs when rendering the subwidgets of a widget of type CheckboxSelectMultiple. This has nothing to do with the method BoundField.id_for_label().
+
+FILES INSPECTED
+---------------
+- django/forms/boundfield.py [Read: 1]
+- django/forms/widgets.py [Grep: 2]
+- tests/forms_tests/tests [Grep: 1]
+- tests/forms_tests/tests/test_forms.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Grep pattern='class BoundWidget'
+- [2] Grep pattern='class BoundField'
+- [3] Grep pattern='class BoundWidget' path='testbed'
+- [7] Grep pattern='class ChoiceWidget' path='testbed'
+- [9] Grep pattern='def subwidgets' path='django/forms/widgets.py'
+- [11] Grep pattern='def create_option' path='django/forms/widgets.py'
+- [35] Glob path='testbed' glob='**/runtests.py'
+- [38] Glob glob='**/runtests.py'
+- [44] Grep pattern='def test_iterable_boundfield_select' path='tests/forms_tests/tests'
+- [45] Grep pattern='def test_iterable_boundfield_select'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [test] cd testbed && python ./swebench_9_15/test_bug.py
+- [test] cd testbed && python ./swebench_9_15/test_bug.py
+- [test] python ./swebench_9_15/test_bug.py
+- [test] python3 ./swebench_9_15/test_bug.py
+- [test] python3 ./swebench_9_15/test_bug.py
+- [test] cd testbed && python3 -m pytest tests/forms_tests/tests/test_forms.py -xvs -k "BoundWidget or subwidget" 2>&1 | head -100
+- [other/reproduction] cd testbed && python3 -m pytest tests/forms_tests/tests/ -xvs -k "id_for_label" 2>&1 | head -150
+- [other/reproduction] python3 -m pytest tests/forms_tests/tests/ -xvs -k "id_for_label" 2>&1 | head -150
+- [test] cd testbed && python3 tests/runtests.py forms_tests.tests.test_widgets -v 2 2>&1 | head -200
+- [test] python3 testbed/tests/runtests.py forms_tests.tests.test_widgets -v 2 2>&1 | head -200
+- [diagnostic] pwd && ls -la testbed 2>&1 | head -20
+- [test] python3 tests/runtests.py forms_tests.tests.test_widgets -v 2 2>&1 | head -300
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named django
+- ERROR: test_iterable_boundfield_select (forms_tests.tests.test_forms.FormsTestCase)
+- FAILED (errors=1, skipped=1)
+- E   django.core.exceptions.ImproperlyConfigured: Requested setting INSTALLED_APPS, but settings are not configured. You must either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing settings.
+- ERROR tests/forms_tests/tests/test_error_messages.py - django.core.exceptions...
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #3]
+  Found 1 file
+  testbed/django/forms/boundfield.py
+- [Read Result after action #5]
+       1→import re
+       2→
+       3→from django.core.exceptions import ValidationError
+       4→from django.forms.utils import flatatt, pretty_name
+       5→from django.forms.widgets import Textarea, TextInput
+       6→from django.utils.functional import cached_property
+       7→from django.utils.html import conditional_escape, format_html, html_safe
+       8→from django.utils.safestring import mark_safe
+       9→from django.utils.translation import gettext_lazy as _
+      10→
+      11→__all__ = ('BoundField',)
+      12→
+      13→
+      14→@html_safe
+      15→class BoundField:
+      16→    "A Field plus data"
+      17→    def __init__(self, form, field, name):
+      18→        self.form = form
+      19→        self.field = field
+      20→        self.name = name
+      21→        self.html_name = form.add_prefix(name)
+      22→        self.html_initial_name = form.add_initial_prefix(name)
+      23→        self.html_initial_id = form.add_initial_prefix(self.auto_id)
+      24→        if self.field.label is None:
+      25→            self.label = pretty_name(name)
+      26→        else:
+      27→            self.label = self.field.label
+      28→        self.help_text = field.help_text or ''
+      29→
+      30→    def __str__(self):
+      31→
+  [... truncated ...]
+- [Grep Result after action #7]
+  Found 1 file
+  testbed/django/forms/widgets.py
+- [Grep Result after action #9]
+  218:    def subwidgets(self, name, value, attrs=None):
+  219-        context = self.get_context(name, value, attrs)
+  220-        yield context['widget']
+  221-
+  222-    def format_value(self, value):
+  223-        """
+  224-        Return a value as it should appear when rendered in a template.
+  225-        """
+  226-        if value == '' or value is None:
+  227-            return None
+  228-        if self.is_localized:
+  229-            return formats.localize_input(value)
+  230-        return str(value)
+  231-
+  232-    def get_context(self, name, value, attrs):
+  233-        return {
+  234-            'widget': {
+  235-                'name': name,
+  236-                'is_hidden': self.is_hidden,
+  237-                'required': self.is_required,
+  238-                'value': self.format_value(value),
+  --
+  574:    def subwidgets(self, name, value, attrs=None):
+  575-        """
+  576-        Yield all "subwidgets" of this widget. Used to enable iterating
+  577-        options from a BoundField for choice widgets.
+  578-        """
+  579-        value = self.format_value(value)
+  580-        yield from self.options(name, value, attrs)
+  581-
+  582-    def options(self, name, value, attrs=None):
+  583-        """Yield a flat list
+  [... truncated ...]
+- [Grep Result after action #11]
+  621:    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+  622-        index = str(index) if subindex is None else "%s_%s" % (index, subindex)
+  623-        option_attrs = self.build_attrs(self.attrs, attrs) if self.option_inherits_attrs else {}
+  624-        if selected:
+  625-            option_attrs.update(self.checked_attribute)
+  626-        if 'id' in option_attrs:
+  627-            option_attrs['id'] = self.id_for_label(option_attrs['id'], index)
+  628-        return {
+  629-            'name': name,
+  630-            'value': value,
+  631-            'label': label,
+  632-            'selected': selected,
+  633-            'index': index,
+  634-            'attrs': option_attrs,
+  635-            'type': self.input_type,
+  636-            'template_name': self.option_template_name,
+  637-            'wrap_label': True,
+  638-        }
+  639-
+  640-    def get_context(self, name, value, attrs):
+  641-        context = super().get_context(name, value, attrs)
+  642-        context['widget']['optgroups'] = self.optgroups(name, context['widget']['value'], attrs)
+  643-        return context
+  644-
+  645-    def id_for_label(self, id_, index='0'):
+  646-        """
+  647-        Use an incre
+  [... truncated ...]
+- [Test Output after action #14]
+  Exit code 1
+    File "./swebench_9_15/test_bug.py", line 20
+      print(f"\nSubwidget {i}:")
+                              ^
+  SyntaxError: invalid syntax
+- [Test Output after action #17]
+  Exit code 1
+  Traceback (most recent call last):
+    File "./swebench_9_15/test_bug.py", line 4, in <module>
+      from django import forms
+  ImportError: No module named django
+- [Test Output after action #20]
+  Exit code 1
+  Traceback (most recent call last):
+    File "./swebench_9_15/test_bug.py", line 4, in <module>
+      import django
+  ImportError: No module named django
+- [Test Output after action #22]
+  Testing BoundWidget.id_for_label with custom auto_id
+  ============================================================
+
+  Subwidget 0:
+    data['attrs']['id']: custom_id_choices_0
+    id_for_label: id_choices_0
+    data['name']: choices
+    data['index']: 0
+    BUG: id_for_label should be 'custom_id_choices_0' but got 'id_choices_0'
+
+  Subwidget 1:
+    data['attrs']['id']: custom_id_choices_1
+    id_for_label: id_choices_1
+    data['name']: choices
+    data['index']: 1
+    BUG: id_for_label should be 'custom_id_choices_1' but got 'id_choices_1'
+
+  Subwidget 2:
+    data['attrs']['id']: custom_id_choices_2
+    id_for_label: id_choices_2
+    data['name']: choices
+    data['index']: 2
+    BUG: id_for_label should be 'custom_id_choices_2' but got 'id_choices_2'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #25]
+  Testing BoundWidget.id_for_label with custom auto_id
+  ============================================================
+
+  Subwidget 0:
+    data['attrs']['id']: custom_id_choices_0
+    id_for_label: custom_id_choices_0
+    data['name']: choices
+    data['index']: 0
+    OK: id_for_label matches data['attrs']['id']
+
+  Subwidget 1:
+    data['attrs']['id']: custom_id_choices_1
+    id_for_label: custom_id_choices_1
+    data['name']: choices
+    data['index']: 1
+    OK: id_for_label matches data['attrs']['id']
+
+  Subwidget 2:
+    data['attrs']['id']: custom_id_choices_2
+    id_for_label: custom_id_choices_2
+    data['name']: choices
+    data['index']: 2
+    OK: id_for_label matches data['attrs']['id']
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #27]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  rootdir: ./swebench_9_15/testbed
+  configfile: pyproject.toml
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 120 items / 120 deselected / 0 selected
+
+  =========================== 120 deselected in 0.44s ============================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #33]
+  python3: can't open file 'testbed/tests/runtests.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Glob Result after action #35]
+  <tool_use_error>Directory does not exist: testbed</tool_use_error>
+- [Glob Result after action #38]
+  ./swebench_9_15/testbed/tests/runtests.py
+- [Test Output after action #40]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Importing application forms_tests
+  Found 1 test(s).
+  Skipping setup of unused database(s): other.
+  Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+  Operations to perform:
+    Synchronize unmigrated apps: auth, contenttypes, forms_tests, messages, sessions, staticfiles
+    Apply all migrations: admin, sites
+  Synchronizing apps without migrations:
+    Creating tables...
+      Creating table django_content_type
+      Creating table auth_permission
+      Creating table auth_group
+      Creating table auth_user
+      Creating table django_session
+      Creating table forms_tests_boundarymodel
+      Creating table forms_tests_defaults
+      Creating table forms_tests_choicemodel
+      C
+  [... truncated ...]
+- [Test Output after action #42]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Found 695 test(s).
+  Creating test database for alias 'default'...
+  System check identified no issues (0 silenced).
+  .........................................................................................................................................................................................................................................................................................................................................E..................................................................................................................................................................................s.......................................................................................
+  [... truncated ...]
+- [Grep Result after action #45]
+  tests/forms_tests/tests/test_forms.py:717:    def test_iterable_boundfield_select(self):
+  tests/forms_tests/tests/test_forms.py-718-        class BeatleForm(Form):
+  ./swebench_9_15/testbed/tests/forms_tests/tests/test_forms.py-719-            name = ChoiceField(choices=[('john', 'John'), ('paul', 'Paul'), ('george', 'George'), ('ringo', 'Ringo')])
+  ./swebench_9_15/testbed/tests/forms_tests/tests/test_forms.py-720-        fields = list(BeatleForm(auto_id=False)['name'])
+  ./swebench_9_15/testbed/tests/forms_tests/tests/test_forms.py-721-        self.assertEqual(len(fields), 4)
+  ./swebench_9_15/testbed/tests/forms_tests/tests/test_forms.py-722-
+  ./swebench_9_15/testbed/tests/forms_tests/tests/test_forms.py-723-        self.assertEqual(fields[0].id_for_label, 'id_name_0')
+  ./swebench_9_15/testbed/tests/forms_tests/tests/test_forms.py-724-        self.assertEqual(fields[0].choice_label, 'John')
+  ./swebench_9_15/testbed/tests/forms_tests/tests/test_forms.py-725-        self.assertHTMLEqual(fields[0].tag(), '<option value="john">John</option>')
+  ./swebench_9_15/testbed/tests/forms_tests/tests/test_forms.py-726-        self.assertHTMLEqual(str(fields[0]), '<option value="john">John</option>')
+  ./swe
+  [... truncated ...]
+- [Read Result after action #47]
+     717→    def test_iterable_boundfield_select(self):
+     718→        class BeatleForm(Form):
+     719→            name = ChoiceField(choices=[('john', 'John'), ('paul', 'Paul'), ('george', 'George'), ('ringo', 'Ringo')])
+     720→        fields = list(BeatleForm(auto_id=False)['name'])
+     721→        self.assertEqual(len(fields), 4)
+     722→
+     723→        self.assertEqual(fields[0].id_for_label, 'id_name_0')
+     724→        self.assertEqual(fields[0].choice_label, 'John')
+     725→        self.assertHTMLEqual(fields[0].tag(), '<option value="john">John</option>')
+     726→        self.assertHTMLEqual(str(fields[0]), '<option value="john">John</option>')
+     727→
+     728→    def test_form_with_noniterable_boundfield(self):
+     729→        # You can iterate over any BoundField, not just those with widget=RadioSelect.
+     730→        class BeatleForm(Form):
+     731→            name = CharField()
+     732→
+     733→        f = BeatleForm(auto_id=False)
+     734→        self.assertHTMLEqual('\n'.join(str(bf) for bf in f['name']), '<input type="text" name="name" required>')
+     735→
+     736→    def test_boundfield_slice(self):
+     737→        class BeatleForm(Form):
+     738→            name = ChoiceField(
+     73
+  [... truncated ...]
+- [Test Output after action #50]
+  Testing BoundWidget.id_for_label with custom auto_id
+  ============================================================
+
+  Subwidget 0:
+    data['attrs']['id']: custom_id_choices_0
+    id_for_label: custom_id_choices_0
+    data['name']: choices
+    data['index']: 0
+    OK: id_for_label matches data['attrs']['id']
+
+  Subwidget 1:
+    data['attrs']['id']: custom_id_choices_1
+    id_for_label: custom_id_choices_1
+    data['name']: choices
+    data['index']: 1
+    OK: id_for_label matches data['attrs']['id']
+
+  Subwidget 2:
+    data['attrs']['id']: custom_id_choices_2
+    id_for_label: custom_id_choices_2
+    data['name']: choices
+    data['index']: 2
+    OK: id_for_label matches data['attrs']['id']
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #52]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Found 695 test(s).
+  Creating test database for alias 'default'...
+  System check identified no issues (0 silenced).
+  ............................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................s.......................................................................................
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/forms/boundfield.py
+  Tool: Edit action #24
+  old_text_sha256: 8e32d50ca2804256c7e8b7380844a4ca6dba65d2203a4a7589f15671e83472f5
+  new_text_sha256: 19aebfbbcc73470450de64790995ad945f38bea96ef9c510472cae9ebd1b9e71
+- django/forms/boundfield.py
+  Tool: Edit action #49
+  old_text_sha256: 19aebfbbcc73470450de64790995ad945f38bea96ef9c510472cae9ebd1b9e71
+  new_text_sha256: 11d8df938377e4184a7ff3b30b7bd8bf22d9e57e830f935a8b20b4e8583eecfa
+- swebench_9_15/test_bug.py
+  Tool: Write action #13
+  new_text_sha256: 77385359c172bbdb3641cc3a1f367a3eaf602da9ded9240ca1804262bcbd7ab4
+- swebench_9_15/test_bug.py
+  Tool: Edit action #16
+  old_text_sha256: a83eaed24d6c786c45e3604b30051ae9124e74692dd54ba2e082d34c572487d9
+  new_text_sha256: 4af3cb4a0cded60d5500ddf9607f95da0e6713d90eeda90d0ac43fd6e1027a40
+- swebench_9_15/test_bug.py
+  Tool: Edit action #19
+  old_text_sha256: 06e1bfcc66bfc3685d69934737130deb8ba258b1f01c133e6b65356420131418
+  new_text_sha256: b9c90d16fecdc53a57153f28e090ced5c0962b4a062747b9294ef789de47dea3
+- swebench_9_15/test_comprehensive.py
+  Tool: Write action #54
+  new_text_sha256: a27385d0ed1a640b87b4f91543b62c6177160e01cb4d888607c350717c0ee51c
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

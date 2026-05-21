@@ -1,0 +1,450 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: fff9c452-cfac-4494-bfb9-eba450e336b4
+- repo: sympy/sympy
+- instance_id: sympy__sympy-15308
+- base_commit: fb59d703e6863ed803c98177b59197b5513332e9
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+LaTeX printing for Matrix Expression
+```py
+>>> A = MatrixSymbol("A", n, n)
+>>> latex(trace(A**2))
+'Trace(A**2)'
+```
+
+The bad part is not only is Trace not recognized, but whatever printer is being used doesn't fallback to the LaTeX printer for the inner expression (it should be `A^2`).
+
+FILES INSPECTED
+---------------
+- sympy [Grep: 1]
+- sympy/matrices/expressions/trace.py [Read: 1]
+- sympy/printing/pretty/pretty.py [Grep: 1]
+- sympy/printing/latex.py [Grep: 4, Read: 2]
+- sympy/printing/tests/test_latex.py [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Glob glob='**/trace.py'
+- [2] Grep pattern='class Trace'
+- [3] Grep pattern='def _print_Trace'
+- [4] Grep pattern='^class Trace' path='sympy'
+- [5] Glob glob='**/matrices/**/*.py'
+- [7] Grep pattern='^class Trace' path='testbed'
+- [9] Grep pattern='def trace' path='testbed'
+- [13] Glob glob='testbed/sympy/printing/latex.py'
+- [15] Grep pattern='_print_Trace' path='testbed'
+- [17] Grep pattern='def _print_Trace' path='sympy/printing/pretty/pretty.py'
+- [21] Grep pattern='def _print_.*Matrix' path='sympy/printing/latex.py'
+- [26] Grep pattern='def _print_.*Matrix' path='sympy/printing/latex.py'
+- [30] Grep pattern='operatorname' path='sympy/printing/latex.py'
+- [32] Grep pattern='\\\\btr\\\\b' path='sympy/printing/latex.py'
+- [43] Grep pattern='Trace' path='sympy/printing/tests/test_latex.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls testbed 2>&1 | head -20
+- [other/reproduction] cd testbed && python3 -c "from sympy import MatrixSymbol, latex, trace, Symbol
+n = Symbol('n')
+A = MatrixSymbol('A', n, n)
+print('Result:', repr(latex(trace(A**2))))"
+- [diagnostic] ls -la testbed/sympy/printing/latex.py
+- [diagnostic] ls testbed/sympy/printing/
+- [diagnostic] ls sympy/printing/
+- [other/reproduction] python3 -c "from sympy import MatrixSymbol, latex, trace, Symbol
+n = Symbol('n')
+A = MatrixSymbol('A', n, n)
+result = latex(trace(A**2))
+print('Result:', repr(result))
+print('Expected: something like \\\\operatorname{tr}\\\\left(A^{2}\\\\right)')
+print('Actual output:', result)"
+- [other/reproduction] python3 -c "from sympy import MatrixSymbol, latex, trace, Symbol, Trace
+n = Symbol('n')
+A = MatrixSymbol('A', n, n)
+B = MatrixSymbol('B', n, n)
+
+# Test case 1: Original bug
+print('Test 1 - trace(A**2):', latex(trace(A**2)))
+
+# Test case 2: Simple matrix
+print('Test 2 - trace(A):', latex(trace(A)))
+
+# Test case 3: Matrix multiplication
+print('Test 3 - trace(A*B):', latex(trace(A*B)))
+
+# Test case 4: Using Trace directly
+print('Test 4 - Trace(A**2):', latex(Trace(A**2)))
+
+# Test case 5: Complex ex
+  [... truncated ...]
+- [diagnostic] find sympy/printing/tests -name "*latex*" -type f
+- [test] python3 -m pytest sympy/printing/tests/test_latex.py -xvs 2>&1 | head -100
+- [test] python3 -m pytest sympy/printing/tests/test_latex.py -xvs 2>&1 | tail -50
+- [diagnostic] grep -A 10 "def test_issue_8470" sympy/printing/tests/test_latex.py
+- [test] python3 -m pytest sympy/printing/tests/test_latex.py::test_latex_Matrix -xvs && python3 -m pytest sympy/printing/tests/test_latex.py::test_matMul -xvs && python3 -m pytest sympy/printing/tests/test_latex.py::test_matAdd -xvs
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- E           ValueError: Name node can't be used with 'False' constant
+- FAILED sympy/printing/tests/test_latex.py::test_issue_8470 - ValueError: Name...
+- Traceback (most recent call last):
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #7]
+  Found 1 file
+  testbed/sympy/matrices/expressions/trace.py
+- [Grep Result after action #9]
+  Found 4 files
+  testbed/sympy/matrices/expressions/trace.py
+  testbed/sympy/matrices/densetools.py
+  testbed/sympy/matrices/common.py
+  testbed/sympy/core/tests/test_trace.py
+- [Read Result after action #11]
+       1→from __future__ import print_function, division
+       2→
+       3→from sympy import Basic, Expr, sympify
+       4→from sympy.matrices.matrices import MatrixBase
+       5→from .matexpr import ShapeError
+       6→
+       7→
+       8→class Trace(Expr):
+       9→    """Matrix Trace
+      10→
+      11→    Represents the trace of a matrix expression.
+      12→
+      13→    >>> from sympy import MatrixSymbol, Trace, eye
+      14→    >>> A = MatrixSymbol('A', 3, 3)
+      15→    >>> Trace(A)
+      16→    Trace(A)
+      17→
+      18→    See Also:
+      19→        trace
+      20→    """
+      21→    is_Trace = True
+      22→
+      23→    def __new__(cls, mat):
+      24→        mat = sympify(mat)
+      25→
+      26→        if not mat.is_Matrix:
+      27→            raise TypeError("input to Trace, %s, is not a matrix" % str(mat))
+      28→
+      29→        if not mat.is_square:
+      30→            raise ShapeError("Trace of a non-square matrix")
+      31→
+      32→        return Basic.__new__(cls, mat)
+      33→
+      34→    def _eval_transpose(self):
+      35→        return self
+      36→
+      37→    def _eval_derivative(self, v):
+      38→        from sympy import Dummy, MatrixExpr, Sum
+      39→        if not isinstance(v, MatrixExpr):
+      40→
+  [... truncated ...]
+- [Glob Result after action #13]
+  ./swebench_9_15/testbed/sympy/printing/latex.py
+- [Grep Result after action #15]
+  Found 1 file
+  testbed/sympy/printing/pretty/pretty.py
+- [Grep Result after action #17]
+  742:    def _print_Trace(self, e):
+  743-        D = self._print(e.arg)
+  744-        D = prettyForm(*D.parens('(',')'))
+  745-        D.baseline = D.height()//2
+  746-        D = prettyForm(*D.left('\n'*(0) + 'tr'))
+  747-        return D
+  748-
+  749-
+  750-    def _print_MatrixElement(self, expr):
+  751-        from sympy.matrices import MatrixSymbol
+  752-        from sympy import Symbol
+- [Diagnostic Output after action #24]
+  __init__.py
+  __pycache__
+  ccode.py
+  codeprinter.py
+  conventions.py
+  cxxcode.py
+  defaults.py
+  dot.py
+  fcode.py
+  glsl.py
+  gtk.py
+  jscode.py
+  julia.py
+  lambdarepr.py
+  latex.py
+  llvmjitcode.py
+  mathematica.py
+  mathml.py
+  octave.py
+  precedence.py
+  pretty
+  preview.py
+  printer.py
+  pycode.py
+  python.py
+  rcode.py
+  repr.py
+  rust.py
+  str.py
+  tableform.py
+  tests
+  theanocode.py
+  tree.py
+- [Grep Result after action #26]
+  1406:    def _print_MatrixBase(self, expr):
+  1436:    def _print_MatrixElement(self, expr):
+  1440:    def _print_MatrixSlice(self, expr):
+  1454:    def _print_BlockMatrix(self, expr):
+  1535:    def _print_ZeroMatrix(self, Z):
+  2166:    def _print_MatrixHomomorphism(self, h):
+- [Read Result after action #28]
+    1436→    def _print_MatrixElement(self, expr):
+    1437→        return self.parenthesize(expr.parent, PRECEDENCE["Atom"], strict=True) \
+    1438→            + '_{%s, %s}' % (expr.i, expr.j)
+    1439→
+    1440→    def _print_MatrixSlice(self, expr):
+    1441→        def latexslice(x):
+    1442→            x = list(x)
+    1443→            if x[2] == 1:
+    1444→                del x[2]
+    1445→            if x[1] == x[0] + 1:
+    1446→                del x[1]
+    1447→            if x[0] == 0:
+    1448→                x[0] = ''
+    1449→            return ':'.join(map(self._print, x))
+    1450→        return (self._print(expr.parent) + r'\left[' +
+    1451→                latexslice(expr.rowslice) + ', ' +
+    1452→                latexslice(expr.colslice) + r'\right]')
+    1453→
+    1454→    def _print_BlockMatrix(self, expr):
+    1455→        return self._print(expr.blocks)
+    1456→
+    1457→    def _print_Transpose(self, expr):
+    1458→        mat = expr.arg
+    1459→        from sympy.matrices import MatrixSymbol
+    1460→        if not isinstance(mat, MatrixSymbol):
+    1461→            return r"\left(%s\right)^T" % self._print(mat)
+    1462→        else:
+    1463→            return "%s^T" % self._print(mat)
+    1464→
+    1465→
+  [... truncated ...]
+- [Grep Result after action #30]
+  701-          - if it is a recognized latex name, use the appropriate latex command
+  702-          - if it is a single letter, just use that letter
+  703:          - if it is a longer name, then put \operatorname{} around it and be
+  704-            mindful of undercores in the name
+  705-        '''
+  --
+  710-            name = func
+  711-        else:
+  712:            name = r"\operatorname{%s}" % func
+  713-        return name
+  714-
+  --
+  719-        For single-letter function names, render them as regular LaTeX math
+  720-        symbols. For multi-letter function names that LaTeX does not know
+  721:        about, (e.g., Li, sech) use \operatorname{} so that the function name
+  722-        is rendered in Roman font and LaTeX handles spacing properly.
+  723-
+  --
+  761-                    name = r"\%s^{-1}" % func
+  762-                else:
+  763:                    name = r"\operatorname{%s}^{-1}" % func
+  764-            elif exp is not None:
+  765-                name = r'%s^{%s}' % (self._hprint_Function(func), exp)
+  --
+  795-                gamma:  r'\Gamma',
+  796-                lowergamma: r'\gamma',
+  797:                beta: r'\operatorname{B}',
+  798-                DiracDelta: r'\delta',
+  799:                Chi
+  [... truncated ...]
+- [Grep Result after action #32]
+  No matches found
+- [Read Result after action #34]
+    1454→    def _print_BlockMatrix(self, expr):
+    1455→        return self._print(expr.blocks)
+    1456→
+    1457→    def _print_Transpose(self, expr):
+    1458→        mat = expr.arg
+    1459→        from sympy.matrices import MatrixSymbol
+    1460→        if not isinstance(mat, MatrixSymbol):
+    1461→            return r"\left(%s\right)^T" % self._print(mat)
+    1462→        else:
+    1463→            return "%s^T" % self._print(mat)
+    1464→
+    1465→    def _print_Adjoint(self, expr):
+    1466→        mat = expr.arg
+    1467→        from sympy.matrices import MatrixSymbol
+    1468→        if not isinstance(mat, MatrixSymbol):
+    1469→            return r"\left(%s\right)^\dagger" % self._print(mat)
+    1470→        else:
+    1471→            return r"%s^\dagger" % self._print(mat)
+    1472→
+    1473→    def _print_MatAdd(self, expr):
+    1474→        terms = [self._print(t) for t in expr.args]
+    1475→        l = []
+    1476→        for t in terms:
+    1477→            if t.startswith('-'):
+    1478→                sign = "-"
+    1479→                t = t[1:]
+    1480→            else:
+    1481→                sign = "+"
+    1482→            l.extend([sign, t])
+    1483→        sign = l.pop(0)
+    1484→        if sign == '+':
+    148
+  [... truncated ...]
+- [Diagnostic Output after action #41]
+  sympy/printing/tests/test_latex.py
+- [Grep Result after action #43]
+  No matches found
+- [Test Output after action #45]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 124 items
+
+  sympy/printing/tests/test_latex.py::test_printmethod PASSED
+  sympy/printing/tests/test_latex.py::test_latex_basic PASSED
+  sympy/printing/tests/test_latex.py::test_latex_builtins PASSED
+  sympy/printing/tests/test_latex.py::test_latex_SingularityFunction PASSED
+  sympy/printing/tests/test_latex.py::test_latex_cycle PASSED
+  sympy/printing/tests/test_latex.py::test_latex_permutation PASSED
+  sympy/printing/tests/test_latex.py::test_latex_Float PASSED
+  sympy/printing/tests/test_latex.py::test_latex_vector_expressions PASSED
+  sympy/printing/tests/test_latex.py::test_latex_symbols PASSED
+  sympy/printing/tests/test_latex.py::test_latex_symbols_failing XFAIL
+  sympy/printing/tests/test_latex.py::test
+  [... truncated ...]
+- [Test Output after action #47]
+          >>> a == b
+          False
+          >>> a.args
+          (1, x)
+          >>> b.args
+          (x, 1)
+
+          See Also
+          ========
+
+          stringify_expr, eval_expr, standard_transformations,
+          implicit_multiplication_application
+
+          """
+
+          if local_dict is None:
+              local_dict = {}
+
+          if global_dict is None:
+              global_dict = {}
+              exec_('from sympy import *', global_dict)
+
+          code = stringify_expr(s, local_dict, global_dict, transformations)
+
+          if not evaluate:
+  >           code = compile(evaluateFalse(code), '<string>', 'eval')
+  E           ValueError: Name node can't be used with 'False' constant
+
+  sympy/parsing/sympy_parser.py:963: ValueError
+  =============================== warnings summary ===============================
+  sympy/physics/quantum/matrixutils.py:46
+    ./swebench_9_15/testbed/sympy/physics/quantum/matrixutils.py:46: DeprecationWarning: Please use `spmatrix` from the `scipy.sparse` namespace, the `scipy.sparse.base` namespace is deprecated.
+      scipy_sparse_matrix = sparse.base.spmatrix
+
+  -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+                                  DO *NOT* COMMIT!
+  [... truncated ...]
+- [Diagnostic Output after action #49]
+  def test_issue_8470():
+      from sympy.parsing.sympy_parser import parse_expr
+      e = parse_expr("-B*A", evaluate=False)
+      assert latex(e) == r"A \left(- B\right)"
+
+
+  def test_issue_7117():
+      # See also issue #5031 (hence the evaluate=False in these).
+      e = Eq(x + 1, 2*x)
+      q = Mul(2, e, evaluate=False)
+      assert latex(q) == r"2 \left(x + 1 = 2 x\right)"
+- [Test Output after action #51]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 1 item
+
+  sympy/printing/tests/test_latex.py::test_latex_Matrix PASSED
+
+  =============================== warnings summary ===============================
+  sympy/physics/quantum/matrixutils.py:46
+    ./swebench_9_15/testbed/sympy/physics/quantum/matrixutils.py:46: DeprecationWarning: Please use `spmatrix` from the `scipy.sparse` namespace, the `scipy.sparse.base` namespace is deprecated.
+      scipy_sparse_matrix = sparse.base.spmatrix
+
+  -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+  ========================= 1 passed, 1 warning in 0.63s =========================
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8,
+  [... truncated ...]
+- [Diagnostic Output after action #53]
+  Testing LaTeX printing for Trace:
+  ============================================================
+  latex(trace(A**2)) = \operatorname{tr}\left(A^{2}\right)
+  ✓ Original issue test passed!
+  latex(trace(A)) = \operatorname{tr}\left(A\right)
+  ✓ Simple trace test passed!
+  latex(trace(A*B)) = \operatorname{tr}\left(A B\right)
+  ✓ Matrix multiplication test passed!
+  latex(Trace(A**2)) = \operatorname{tr}\left(A^{2}\right)
+  ✓ Direct Trace test passed!
+  ============================================================
+  All tests passed! ✓
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/printing/latex.py
+  Tool: Edit action #36
+  old_text_sha256: 71dcbaef45f38d9c04b07030ff2d4786ced0d7c5b6a427d49c06d4c545785fbf
+  new_text_sha256: af95b2b77f78642ca916bd77f535db2496422d60eefdfff9cda405658861e09a
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

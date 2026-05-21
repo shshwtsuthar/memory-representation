@@ -1,0 +1,753 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 20420468-8b69-495f-8850-1f8149280f47
+- repo: django/django
+- instance_id: django__django-11001
+- base_commit: ef082ebb84f00e38af4e8880d04e8365c2766d34
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-11001
+base_commit: ef082ebb84f00e38af4e8880d04e8365c2766d34
+problem_statement:
+Incorrect removal of order_by clause created as multiline RawSQL
+Description
+
+Hi.
+The SQLCompiler is ripping off one of my "order by" clause, because he "thinks" the clause was already "seen" (in SQLCompiler.get_order_by()). I'm using expressions written as multiline RawSQLs, which are similar but not the same.
+The bug is located in SQLCompiler.get_order_by(), somewhere around line computing part of SQL query without ordering:
+without_ordering = self.ordering_parts.search(sql).group(1)
+The sql variable contains multiline sql. As a result, the self.ordering_parts regular expression is returning just a line containing ASC or DESC words. This line is added to seen set, and because my raw queries have identical last lines, only the first clasue is returing from SQLCompiler.get_order_by().
+As a quick/temporal fix I can suggest making sql variable clean of newline characters, like this:
+sql_oneline = ' '.join(sql.split('\n'))
+without_ordering = self.ordering_parts.search(sql_oneline).group(1)
+Note: beware of unicode (Py2.x u'') and EOL dragons (\r).
+Example of my query:
+    return MyModel.objects.all().order_by(
+        RawSQL('''
+            case when status in ('accepted', 'verification')
+                 then 2 else 1 end''', []).desc(),
+        RawSQL('''
+            case when status in ('accepted', 'verification')
+                 then (accepted_datetime, preferred_datetime)
+                 else null end''', []).asc(),
+        RawSQL('''
+            case when status not in ('accepted', 'verification')
+                 then (accepted_datetime, preferred_datetime, created_at)
+                 else null end''', []).desc())
+The ordering_parts.search is returing accordingly:
+'                 then 2 else 1 end)'
+'                 else null end'
+'                 else null end'
+Second RawSQL with a                 else null en
+sha256: e0f86ea4be43b28e9edcfa8b15ead562cc30ad820b9c4ca5fb4f73d0bf45e030
+truncated: true
+
+[ADP ACTION current=1 original=1: code_action bash]
+payload:
+
+sha256: 9a65b75272f224e90080abbb7a795550ff9536c50454603f23831907c030be85
+truncated: false
+
+[ADP ACTION current=2 original=3: api_action Grep]
+payload:
+{
+  "output_mode": "files_with_matches",
+  "pattern": "class SQLCompiler"
+}
+sha256: 3fe5d55b203e217c8f9508dcc019d30aa56e9633ae005011216a9e2e3cd8a573
+truncated: false
+
+[ADP ACTION current=3 original=7: api_action Grep]
+payload:
+{
+  "output_mode": "files_with_matches",
+  "pattern": "SQLCompiler"
+}
+sha256: e46d97d8bdf8f57095db0b762ccc8a4525cc11d4033ecd9fe69cc0778fd189cd
+truncated: false
+
+[ADP ACTION current=4 original=11: code_action bash]
+payload:
+ls -la ./swebench_9_15/testbed/ 2>/dev/null || echo "No testbed directory found"
+sha256: efe661821ea3fadac2cde4bdbdcfeab2019b55855e946a9d809aefc861573041
+truncated: false
+
+[ADP OBSERVATION current=5 original=12 source=environment]
+name: Bash:toolu_0176MyEhVrCM9q2wkFrVdGTM
+excerpt:
+No testbed directory found
+sha256: 24c8f4e7fa1a6e754a0f099e5c078c8f00b708ac72d61f8999d2de23e68469d5
+truncated: false
+
+[ADP ACTION current=6 original=23: api_action Grep]
+path: testbed
+payload:
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed",
+  "pattern": "class SQLCompiler"
+}
+sha256: 77e9ab54b97d4b0fcdaf9f3ecb611e05199b942e8a5b3a55eb148018221cabdc
+truncated: false
+
+[ADP OBSERVATION current=7 original=24 source=environment]
+name: Grep:toolu_01ACrC3oMyuwwENjBMznhWH1
+excerpt:
+Found 2 files
+testbed/django/db/models/sql/compiler.py
+testbed/django/db/backends/mysql/compiler.py
+sha256: 13de81b69bd1739649091a2ca590a4c76d94478aecaf38be4c168f33d6c743b9
+truncated: false
+
+[ADP ACTION current=8 original=25: api_action Grep]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql/compiler.py",
+  "pattern": "def get_order_by"
+}
+sha256: 035827552007aac17465649708bef38233a2d780c2398d64376f83e4c3b299d3
+truncated: false
+
+[ADP OBSERVATION current=9 original=26 source=environment]
+name: Grep:toolu_01Jjcv29wtSXbvMzvybuvJ4X
+excerpt:
+252:    def get_order_by(self):
+sha256: 506ad43ee318da5bf574df4155f4aeca7a1608c08580c36454ade43f3e49af8b
+truncated: false
+
+[ADP ACTION current=10 original=27: api_action Read]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "file_path": "testbed/django/db/models/sql/compiler.py",
+  "limit": 100,
+  "offset": 240
+}
+sha256: 816613ee832acca809bf23cccbefdf28e949f8c1aafe7c1338cdef43750d4c46
+truncated: false
+
+[ADP OBSERVATION current=11 original=28 source=environment]
+name: Read:toolu_01MTuHGCdVQSgo7bsnMeb93m
+excerpt:
+   240→            get_select_from_parent(klass_info)
+   241→
+   242→        ret = []
+   243→        for col, alias in select:
+   244→            try:
+   245→                sql, params = self.compile(col, select_format=True)
+   246→            except EmptyResultSet:
+   247→                # Select a predicate that's always False.
+   248→                sql, params = '0', ()
+   249→            ret.append((col, (sql, params), alias))
+   250→        return ret, klass_info, annotations
+   251→
+   252→    def get_order_by(self):
+   253→        """
+   254→        Return a list of 2-tuples of form (expr, (sql, params, is_ref)) for the
+   255→        ORDER BY clause.
+   256→
+   257→        The order_by clause can alter the select clause (for example it
+   258→        can add aliases to clauses that do not yet have one, or it can
+   259→        add totally new select clauses).
+   260→        """
+   261→        if self.query.extra_order_by:
+   262→            ordering = self.query.extra_order_by
+   263→        elif not self.query.default_ordering:
+   264→            ordering = self.query.order_by
+   265→        elif self.query.order_by:
+   266→            ordering = self.query.order_by
+   267→        elif self.query.get_meta().ordering:
+   268→            ordering = self.query.get_meta().ordering
+   269→            self._meta_ordering = ordering
+   270→        else:
+   271→            ordering = []
+   272→        if self.query.standard_ordering:
+   273→            asc, desc = ORDER_DIR['ASC']
+   274→        else:
+   275→            asc, desc = ORDER_DIR['DESC']
+   276→
+   277→        order_by = []
+   278→        for field in ordering:
+   279→            if hasattr(field, 'resolve_expression'):
+   280→                if not isinstance(field, OrderBy):
+   281→                    field = field.asc()
+   282→                if not self.query.standard_ordering:
+   283→                    field.reverse_ordering()
+   284→                order_by.append((field, False))
+   285→
+sha256: cf3762e499bb417b790b501116efd4aea5c5ff61665046d2170d62a76fc74089
+truncated: true
+
+[ADP ACTION current=12 original=29: api_action Read]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "file_path": "testbed/django/db/models/sql/compiler.py",
+  "limit": 50,
+  "offset": 330
+}
+sha256: e2c4a27e553b94896404d99ba668614178002de9a2be0bc00713f3aadd04970a
+truncated: false
+
+[ADP OBSERVATION current=13 original=30 source=environment]
+name: Read:toolu_01TSvrngdXeBUVUYCHkjeofp
+excerpt:
+   330→                        True))
+   331→        result = []
+   332→        seen = set()
+   333→
+   334→        for expr, is_ref in order_by:
+   335→            resolved = expr.resolve_expression(self.query, allow_joins=True, reuse=None)
+   336→            if self.query.combinator:
+   337→                src = resolved.get_source_expressions()[0]
+   338→                # Relabel order by columns to raw numbers if this is a combined
+   339→                # query; necessary since the columns can't be referenced by the
+   340→                # fully qualified name and the simple column names may collide.
+   341→                for idx, (sel_expr, _, col_alias) in enumerate(self.select):
+   342→                    if is_ref and col_alias == src.refs:
+   343→                        src = src.source
+   344→                    elif col_alias:
+   345→                        continue
+   346→                    if src == sel_expr:
+   347→                        resolved.set_source_expressions([RawSQL('%d' % (idx + 1), ())])
+   348→                        break
+   349→                else:
+   350→                    raise DatabaseError('ORDER BY term does not match any column in the result set.')
+   351→            sql, params = self.compile(resolved)
+   352→            # Don't add the same column twice, but the order direction is
+   353→            # not taken into account so we strip it. When this entire method
+   354→            # is refactored into expressions, then we can check each part as we
+   355→            # generate it.
+   356→            without_ordering = self.ordering_parts.search(sql).group(1)
+   357→            params_hash = make_hashable(params)
+   358→            if (without_ordering, params_hash) in seen:
+   359→                continue
+   360→            seen.add((without_ordering, params_hash))
+   361→            result.append((resolved, (sql, params, is_ref)))
+   362→        return result
+   363→
+   364→    def get_extra_select(self, order_by, selec
+sha256: b8b259b6b687239ccea10aaed91167b4ae5ee8b398d8e11375e3072f6753a7a4
+truncated: true
+
+[ADP ACTION current=14 original=31: api_action Grep]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql/compiler.py",
+  "pattern": "ordering_parts"
+}
+sha256: fb54d5b04d19293c98bafb21d2c1655f9122ebb1c7258d3d11387c5e709fa4c5
+truncated: false
+
+[ADP OBSERVATION current=15 original=32 source=environment]
+name: Grep:toolu_01KgtqNRK63gwZpoHca9fopD
+excerpt:
+35:        self.ordering_parts = re.compile(r'(.*)\s(ASC|DESC)(.*)')
+356:            without_ordering = self.ordering_parts.search(sql).group(1)
+369:                without_ordering = self.ordering_parts.search(sql).group(1)
+sha256: 4a0c153d79194c24a68bd90a2ce3b0d26d7d18be2aee7ff29ca52d883172a51e
+truncated: false
+
+[ADP ACTION current=16 original=33: api_action Read]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "file_path": "testbed/django/db/models/sql/compiler.py",
+  "limit": 60,
+  "offset": 0
+}
+sha256: b58cf266b931af5e84e9bbff363fee61577fe459fb7bce5bf7ab47882a53d068
+truncated: false
+
+[ADP OBSERVATION current=17 original=34 source=environment]
+name: Read:toolu_01Kzy14Ag1e9agubTSC4NfHz
+excerpt:
+     0→import collections
+     1→import re
+     2→import warnings
+     3→from itertools import chain
+     4→
+     5→from django.core.exceptions import EmptyResultSet, FieldError
+     6→from django.db.models.constants import LOOKUP_SEP
+     7→from django.db.models.expressions import OrderBy, Random, RawSQL, Ref
+     8→from django.db.models.query_utils import QueryWrapper, select_related_descend
+     9→from django.db.models.sql.constants import (
+    10→    CURSOR, GET_ITERATOR_CHUNK_SIZE, MULTI, NO_RESULTS, ORDER_DIR, SINGLE,
+    11→)
+    12→from django.db.models.sql.query import Query, get_order_dir
+    13→from django.db.transaction import TransactionManagementError
+    14→from django.db.utils import DatabaseError, NotSupportedError
+    15→from django.utils.deprecation import RemovedInDjango31Warning
+    16→from django.utils.hashable import make_hashable
+    17→
+    18→FORCE = object()
+    19→
+    20→
+    21→class SQLCompiler:
+    22→    def __init__(self, query, connection, using):
+    23→        self.query = query
+    24→        self.connection = connection
+    25→        self.using = using
+    26→        self.quote_cache = {'*': '*'}
+    27→        # The select, klass_info, and annotations are needed by QuerySet.iterator()
+    28→        # these are set as a side-effect of executing the query. Note that we calculate
+    29→        # separately a list of extra select columns needed for grammatical correctness
+    30→        # of the query, but these columns are not included in self.select.
+    31→        self.select = None
+    32→        self.annotation_col_map = None
+    33→        self.klass_info = None
+    34→        self.ordering_parts = re.compile(r'(.*)\s(ASC|DESC)(.*)')
+    35→        self._meta_ordering = None
+    36→
+    37→    def setup_query(self):
+    38→        if all(self.query.alias_refcount[a] == 0 for a in self.query.alias_map):
+    39→            self.query.get_initial_alias()
+    40→        self.select, self.klass_info, self.annotation_col_map =
+sha256: 33ccaaa7d01edd3de484905fc6f7389c810bd5cadf2d444dbfad388b238aab34
+truncated: true
+
+[ADP ACTION current=18 original=37: api_action Write]
+path: test_multiline_order_by.py
+payload:
+{
+  "content_sha256": "3563a9a03de02c23aba9b659077ca5aac15e5599424269e069f5a3277be21043",
+  "file_path": "testbed/test_multiline_order_by.py"
+}
+sha256: ba08a29b7b909eaae236c86c43eafca79d68316ba56e6b4d45d974a8ef44524b
+truncated: false
+
+[ADP ACTION current=19 original=39: code_action bash]
+payload:
+cd testbed && python test_multiline_order_by.py
+sha256: 40e7a59e142af4375c618abc309b07d64e74a32ac1a587cc7f130a43a5d2ea4b
+truncated: false
+
+[ADP OBSERVATION current=20 original=40 source=environment]
+name: Bash:toolu_01XoGcGzw9kZ1sEBr82WQNZu:error
+excerpt:
+Exit code 1
+  File "test_multiline_order_by.py", line 68
+    print(f"Number of order_by clauses: {len(order_by_clauses)}")
+                                                               ^
+SyntaxError: invalid syntax
+sha256: 09146dc97777a0102c198e45cca27cd58d6d8dff34e57a2cf343568168430ef7
+truncated: false
+
+[ADP ACTION current=21 original=41: code_action bash]
+payload:
+cd testbed && python --version
+sha256: 2683e99aa166684a962f00e0c3aea0bf962d0c25aeb3ede282fab2e1619e9342
+truncated: false
+
+[ADP OBSERVATION current=22 original=42 source=environment]
+name: Bash:toolu_01VpTnZo6xDAdiaTTqgvwcdg
+excerpt:
+Python 2.7.3
+sha256: c6d9bd2d561b074688a302920b8e73838fd3f7b4043465431748a1e3b85691fe
+truncated: false
+
+[ADP ACTION current=23 original=43: code_action bash]
+payload:
+cd testbed && python3 --version
+sha256: 6d0ad62d5f0eb85e0eba29f394b93f954af280dded176e784d97015de70b0dd1
+truncated: false
+
+[ADP ACTION current=24 original=45: code_action bash]
+payload:
+python3 --version
+sha256: 13375a460079c3230e8b2b56a2c5ef1fe519721bfc757a35059d14e9740262e2
+truncated: false
+
+[ADP OBSERVATION current=25 original=46 source=environment]
+name: Bash:toolu_01X3yumVoZYPZC8Nj3SZWYLn
+excerpt:
+Python 3.8.8
+sha256: acd1c6d0a01b9418a3ac077015cf0ed3f607b78b23b8e2400bef63b5ad40366d
+truncated: false
+
+[ADP ACTION current=26 original=47: code_action bash]
+payload:
+cd testbed && python3 test_multiline_order_by.py
+sha256: 24426a8f8312e1ca355e47aad9f27ca7576ef374b15f8fb2c8442b181541180e
+truncated: false
+
+[ADP ACTION current=27 original=49: code_action bash]
+payload:
+python3 testbed/test_multiline_order_by.py
+sha256: 122b934acde59d04cd0f1f0cd7e33b6994a6157a65557528c9a00e17196ca18e
+truncated: false
+
+[ADP OBSERVATION current=28 original=50 source=environment]
+name: Bash:toolu_016DL7bqKsKiXzW7miPFSAGN:error
+excerpt:
+Exit code 2
+python3: can't open file 'testbed/test_multiline_order_by.py': [Errno 2] No such file or directory
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: c6a047f9aefd4794936511249400fa42c0f33a3933d2adaaff0d9525eab5bf5f
+truncated: false
+
+[ADP ACTION current=29 original=55: code_action bash]
+payload:
+ls -la test_multiline_order_by.py
+sha256: ee4adc63c4a6d55d5907a45279c8bef8a94c3c8672ad20b8f6e6390563498dba
+truncated: false
+
+[ADP OBSERVATION current=30 original=56 source=environment]
+name: Bash:toolu_01Jki4NqXjaFu3d9dBiLVNrG
+excerpt:
+-rw-------@ 1 user  staff  2945 15 Dec 18:24 test_multiline_order_by.py
+sha256: fc40f03f68631a35842d5ff81c9a0ac9b82325e17e378f653d692a4ff13bd558
+truncated: false
+
+[ADP ACTION current=31 original=57: code_action bash]
+payload:
+python3 test_multiline_order_by.py
+sha256: 345fb22120c75cef67db35b669313d6a159a84f2ed42ad9015d6bc4b198e44ed
+truncated: false
+
+[ADP OBSERVATION current=32 original=58 source=environment]
+name: Bash:toolu_01Qqu2UMQiMbUYH5sfvzS1q1:error
+excerpt:
+Exit code 1
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+
+Number of order_by clauses: 2
+
+Order by clauses:
+
+1. SQL: "(\n            case when status in ('accepted', 'verification')\n                 then 2 else 1 end) DESC"
+   Params: []
+
+2. SQL: "(\n            case when status in ('accepted', 'verification')\n                 then (accepted_datetime, preferred_datetime)\n                 else null end) ASC"
+   Params: []
+
+❌ BUG CONFIRMED: Expected 3 order_by clauses, but got 2
+The second and third RawSQL expressions have the same last line, so one was removed.
+sha256: f9397bc71a4aef64924159c2e4c8ecc3cc961eb7e5d13d4761cd7283c9b14772
+truncated: false
+
+[ADP ACTION current=33 original=61: api_action Read]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "file_path": "django/db/models/sql/compiler.py",
+  "limit": 25,
+  "offset": 350
+}
+sha256: e521007ef0b5f9174db39f369e8e31cafbab9bff1493547f22c62ef965972924
+truncated: false
+
+[ADP OBSERVATION current=34 original=62 source=environment]
+name: Read:toolu_01MteSRzm8a1GgTVLMk8zyJ5
+excerpt:
+   350→                    raise DatabaseError('ORDER BY term does not match any column in the result set.')
+   351→            sql, params = self.compile(resolved)
+   352→            # Don't add the same column twice, but the order direction is
+   353→            # not taken into account so we strip it. When this entire method
+   354→            # is refactored into expressions, then we can check each part as we
+   355→            # generate it.
+   356→            without_ordering = self.ordering_parts.search(sql).group(1)
+   357→            params_hash = make_hashable(params)
+   358→            if (without_ordering, params_hash) in seen:
+   359→                continue
+   360→            seen.add((without_ordering, params_hash))
+   361→            result.append((resolved, (sql, params, is_ref)))
+   362→        return result
+   363→
+   364→    def get_extra_select(self, order_by, select):
+   365→        extra_select = []
+   366→        if self.query.distinct and not self.query.distinct_fields:
+   367→            select_sql = [t[1] for t in select]
+   368→            for expr, (sql, params, is_ref) in order_by:
+   369→                without_ordering = self.ordering_parts.search(sql).group(1)
+   370→                if not is_ref and (without_ordering, params) not in select_sql:
+   371→                    extra_select.append((expr, (without_ordering, params), None))
+   372→        return extra_select
+   373→
+   374→    def quote_name_unless_alias(self, name):
+
+sha256: 0385489423c11ccfdc5c7fd5373a4ee8dac47c826db35d69266dc152339305bf
+truncated: false
+
+[ADP ACTION current=35 original=63: api_action Edit]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "file_path": "django/db/models/sql/compiler.py",
+  "new_text_sha256": "96b4c99963873613d62f45bebd5a005a0333078a5aa9dfee8311910b81544f90",
+  "old_text_sha256": "cc4bafecbd7a0c5e4d07aaadc37038a3db63b4aa3a02471473518c9f9109d94a"
+}
+sha256: 36c8f88579421e568dbb752fde634c3b4a388e995c8b49356246e38d85c77c1a
+truncated: false
+
+[ADP ACTION current=36 original=65: api_action Edit]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "file_path": "django/db/models/sql/compiler.py",
+  "new_text_sha256": "f710e76b88b5d8437d0dac98158a3650578b41d9f878e9003c509c811e1f18d8",
+  "old_text_sha256": "2144a54ac8d77a3c8444544537e993e53ac856610f05ea3a0f4ecfed8f050e4b"
+}
+sha256: 06eeee227266218d7702f9a957dc67002cc63c9c2c75507a89c7a889a7d2373e
+truncated: false
+
+[ADP ACTION current=37 original=67: api_action Edit]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "file_path": "django/db/models/sql/compiler.py",
+  "new_text_sha256": "602f5a57eb91284889f272fdb5f542a478c405e8e8cfe27aaa4494b5d4cba587",
+  "old_text_sha256": "96b4c99963873613d62f45bebd5a005a0333078a5aa9dfee8311910b81544f90"
+}
+sha256: 58d58cf5f2848c367f7ce94da24b8ea253d59925cc45024a9bbd3005eba70fbe
+truncated: false
+
+[ADP ACTION current=38 original=69: api_action Edit]
+path: django/db/models/sql/compiler.py
+payload:
+{
+  "file_path": "django/db/models/sql/compiler.py",
+  "new_text_sha256": "4d7b14cd7d326f552563a0d2870cf9558f7c9fc66b1c4f3ebedfde38844a7efb",
+  "old_text_sha256": "f710e76b88b5d8437d0dac98158a3650578b41d9f878e9003c509c811e1f18d8"
+}
+sha256: ce5a177bd662fcc6ca86878aaaebfeafb8b9c2bdf62e96c38bd3fe4c169cc312
+truncated: false
+
+[ADP ACTION current=39 original=73: code_action bash]
+payload:
+python3 test_multiline_order_by.py
+sha256: 84a7ab2343d1338105a54dcdb7eb440abc73e54eb356456239d6627fe8640695
+truncated: false
+
+[ADP OBSERVATION current=40 original=74 source=environment]
+name: Bash:toolu_011bvPknGCiYuancBXFgYUx7
+excerpt:
+Number of order_by clauses: 3
+
+Order by clauses:
+
+1. SQL: "(\n            case when status in ('accepted', 'verification')\n                 then 2 else 1 end) DESC"
+   Params: []
+
+2. SQL: "(\n            case when status in ('accepted', 'verification')\n                 then (accepted_datetime, preferred_datetime)\n                 else null end) ASC"
+   Params: []
+
+3. SQL: "(\n            case when status not in ('accepted', 'verification')\n                 then (accepted_datetime, preferred_datetime, created_at)\n                 else null end) DESC"
+   Params: []
+
+✓ PASS: All 3 order_by clauses are present
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 2a668f854f9eccc7d7de7127cacbe64596ad89cb49967f7a236502ba1f13d7ad
+truncated: false
+
+[ADP ACTION current=41 original=75: code_action bash]
+payload:
+python3 -m pytest tests/queries/test_query.py -xvs 2>&1 | head -100
+sha256: 8e75e3980444d899ae826c338c2fe21ca86ee29fdd84d4ab7e5b58bb0e606ffe
+truncated: false
+
+[ADP OBSERVATION current=42 original=76 source=environment]
+name: Bash:toolu_011i5uZnC9gupF1snKfCvH7h
+excerpt:
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+rootdir: ./swebench_9_15/testbed
+plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+collecting ... collected 0 items / 1 error
+
+==================================== ERRORS ====================================
+_________________ ERROR collecting tests/queries/test_query.py _________________
+tests/queries/test_query.py:14: in <module>
+    from .models import Author, Item, ObjectC, Ranking
+tests/queries/models.py:9: in <module>
+    class DumbCategory(models.Model):
+django/db/models/base.py:103: in __new__
+    app_config = apps.get_containing_app_config(module)
+django/apps/registry.py:252: in get_containing_app_config
+    self.check_apps_ready()
+django/apps/registry.py:134: in check_apps_ready
+    settings.INSTALLED_APPS
+django/conf/__init__.py:76: in __getattr__
+    self._setup(name)
+django/conf/__init__.py:57: in _setup
+    raise ImproperlyConfigured(
+E   django.core.exceptions.ImproperlyConfigured: Requested setting INSTALLED_APPS, but settings are not configured. You must either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing settings.
+=========================== short test summary info ============================
+ERROR tests/queries/test_query.py - django.core.exceptions.ImproperlyConfigur...
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+=============================== 1 error in 0.59s ===============================
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/pyth
+sha256: 678df05e698bdb020b5b977be17e44f2fcfbb1f4f2bc37614e0e35651c3b78cb
+truncated: true
+
+[ADP ACTION current=43 original=77: code_action bash]
+payload:
+python3 tests/runtests.py queries.tests --settings=test_sqlite -v 2 2>&1 | head -200
+sha256: 02516d2f0f13efaf482b9dc2674be531cd955854e401dbd639126dd82398455c
+truncated: false
+
+[ADP OBSERVATION current=44 original=78 source=environment]
+name: Bash:toolu_01JeGkhmQoH8fBNmeAtd2w3Y
+excerpt:
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+test_evaluated_queryset_as_argument (queries.tests.CloneTests)
+#13227 -- If a queryset is already evaluated, it can still be used as a query arg ... ok
+test_no_fields_cloning (queries.tests.CloneTests)
+Cloning a queryset does not get out of hand. While complete ... ok
+test_no_model_options_cloning (queries.tests.CloneTests)
+Cloning a queryset does not get out of hand. While complete ... ok
+test_ticket8597 (queries.tests.ComparisonTests) ... ok
+test_in_list_limit (queries.tests.ConditionalTests) ... ok
+test_infinite_loop (queries.tests.ConditionalTests) ... ok
+test_null_ordering_added (queries.tests.ConditionalTests) ... skipped "Database doesn't support feature(s): requires_explicit_null_ordering_when_grouping"
+test_ticket7371 (queries.tests.CustomPkTests) ... ok
+test_no_extra_params (queries.tests.DefaultValuesInsertTest)
+Can create an instance of a model with only the PK field (#17056)." ... ok
+test_disjunction_promotion1 (queries.tests.DisjunctionPromotionTests) ... ok
+test_disjunction_promotion2 (queries.tests.DisjunctionPromotionTests) ... ok
+test_disjunction_promotion3 (queries.tests.DisjunctionPromotionTests) ... ok
+test_disjunction_promotion3_demote (queries.tests.DisjunctionPromotionTests) ... ok
+test_disjunction_promotion4 (queries.tests.DisjunctionPromotionTests) ... ok
+test_disjunction_promotion4_demote (queries.tests.DisjunctionPromotionTests) ... ok
+test_disjunction_promotion5_demote (queries.tests.DisjunctionPromotionTests) ... ok
+test_disjun
+sha256: 7369ba8b2804c8923c9bf4d1047101abdc5fcb85747f03729d654dbc34cd5140
+truncated: true
+
+[ADP ACTION current=45 original=79: code_action bash]
+payload:
+python3 tests/runtests.py queries.tests --settings=test_sqlite -v 0 2>&1 | tail -50
+sha256: 1f45adefd79276e899b531c4e99f7d4edad66560c90387746a45e632dceef387
+truncated: false
+
+[ADP OBSERVATION current=46 original=80 source=environment]
+name: Bash:toolu_01X6xR3eGvVpZcWGSv7uz5Ly
+excerpt:
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+----------------------------------------------------------------------
+Ran 279 tests in 0.442s
+
+OK (skipped=3, expected failures=2)
+System check identified no issues (1 silenced).
+sha256: 3d6ee84f26d5687e337d69d49154dafda0d42890848c943a6045e04185347eaf
+truncated: false
+
+[ADP ACTION current=47 original=81: api_action Write]
+path: test_fix_comprehensive.py
+payload:
+{
+  "content_sha256": "eef15d48217d8efa2e1ec1f84a249d4a2259d547e72f89902ed2acb72ab9d42c",
+  "file_path": "test_fix_comprehensive.py"
+}
+sha256: 49f97e0e03c8ac3d12685bdb69f3c4e56033439d399a946e2d871ca6bb062e7f
+truncated: false
+
+[ADP ACTION current=48 original=83: code_action bash]
+payload:
+python3 test_fix_comprehensive.py
+sha256: 3ccfabb0b77c105cb89be66da370e91d53e827e2b3de3eba6f383fd66fb147ae
+truncated: false
+
+[ADP OBSERVATION current=49 original=84 source=environment]
+name: Bash:toolu_01NVxW2yQ2befnDvqCQpGT7s
+excerpt:
+======================================================================
+Running comprehensive tests for multiline RawSQL order_by fix
+======================================================================
+Test 1: Unix line endings...
+  ✓ PASS: 2 order_by clauses preserved
+
+Test 2: Different SQL with same last line...
+  ✓ PASS: All 3 different clauses with same last line preserved
+
+Test 3: Single-line RawSQL...
+  ✓ PASS: Single-line RawSQL works correctly
+
+Test 4: Duplicate detection...
+  ✓ PASS: Duplicate detection still works
+
+Test 5: Original bug report example...
+  ✓ PASS: Original bug report example works correctly
+
+Test 6: Mixed tabs and spaces...
+  ✓ PASS: Mixed whitespace handled correctly
+
+======================================================================
+ALL TESTS PASSED!
+======================================================================
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 67de60eb5911eac2877977c1e3284f50200043ddd14bc9adb6dea004b2542332
+truncated: false

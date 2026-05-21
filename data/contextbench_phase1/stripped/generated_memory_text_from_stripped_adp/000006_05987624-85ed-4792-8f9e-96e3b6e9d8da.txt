@@ -1,0 +1,414 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 05987624-85ed-4792-8f9e-96e3b6e9d8da
+- repo: matplotlib/matplotlib
+- instance_id: matplotlib__matplotlib-24334
+- base_commit: 332937997d03e0c173be6d9fc1841e9186e857df
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+[ENH]: Axes.set_xticks/Axis.set_ticks only validates kwargs if ticklabels are set, but they should
+### Problem
+
+Per the doc of `Axis.set_ticks`:
+```
+        **kwargs
+            `.Text` properties for the labels. These take effect only if you
+            pass *labels*. In other cases, please use `~.Axes.tick_params`.
+```
+This means that in e.g. `ax.set_xticks([0, 1], xticklabels=["a", "b"])`, the incorrect `xticklabels` silently do nothing; they are not even validated (because `labels` has not been passed).
+
+### Proposed solution
+
+We should at least check that `kwargs` are valid Text properties in all cases; we could even consider making any kwargs an error if `labels` is not set.
+
+FILES INSPECTED
+---------------
+- lib/matplotlib/axis.py [Grep: 2, Read: 4]
+- lib/matplotlib/axes/_base.py [Grep: 1, Read: 1]
+- lib/matplotlib/artist.py [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [2] Grep pattern='def set_ticks' path='testbed'
+- [3] Grep pattern='def set_ticks'
+- [5] Grep pattern='def set_ticks' path='lib/matplotlib/axis.py'
+- [7] Grep pattern='def set_xticks'
+- [10] Grep pattern='def set_xticks' path='lib/matplotlib/axes/_base.py'
+- [30] Grep pattern='def set_ticklabels' path='lib/matplotlib/axis.py'
+- [34] Grep pattern='def _internal_update'
+- [36] Grep pattern='def _internal_update' path='lib/matplotlib/artist.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] cd testbed && find . -name "*.py" -path "*axis*" -type f | grep -E "(axis|tick)" | head -20
+- [diagnostic] find lib/matplotlib -name "*.py" -exec grep -l "set_xticks" {} \;
+- [diagnostic] grep -n "set_xticks" lib/matplotlib/axes/_base.py | head -5
+- [test] python test_issue.py
+- [test] cd ./swebench_9_15 && python test_issue.py
+- [test] python testbed/test_issue.py
+- [diagnostic] ls ./swebench_9_15/testbed/test_issue.py
+- [test] python ./swebench_9_15/testbed/test_issue.py
+- [test] python3 ./swebench_9_15/testbed/test_issue.py
+- [other/reproduction] python3 -c "import matplotlib.text as mtext; t = mtext.Text(); print(dir(t))" | grep -i "^set_"
+- [test] python3 ./swebench_9_15/testbed/test_validation.py
+- [test] python3 ./swebench_9_15/testbed/test_issue.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: dlopen(/Applications/ADFRsuite-1.0/lib/python2.7/site-packages/matplotlib/_png.so, 0x0002): Library not loaded: /usr/local/lib/libpng12.0.dylib
+- ERROR: No exception was raised for invalid kwarg 'xticklabels'
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #3]
+  Found 4 files
+  lib/mpl_toolkits/axisartist/axis_artist.py
+  lib/matplotlib/colorbar.py
+  lib/matplotlib/axis.py
+  lib/matplotlib/axes/_secondary_axes.py
+- [Grep Result after action #5]
+  1990:    def set_ticks(self, ticks, labels=None, *, minor=False, **kwargs):
+  1991-        """
+  1992-        Set this Axis' tick locations and optionally labels.
+  1993-
+  1994-        If necessary, the view limits of the Axis are expanded so that all
+  1995-        given ticks are visible.
+  1996-
+  1997-        Parameters
+  1998-        ----------
+  1999-        ticks : list of floats
+  2000-            List of tick locations.  The axis `.Locator` is replaced by a
+  2001-            `~.ticker.FixedLocator`.
+  2002-
+  2003-            Some tick formatters will not label arbitrary tick positions;
+  2004-            e.g. log formatters only label decade ticks by default. In
+  2005-            such a case you can set a formatter explicitly on the axis
+  2006-            using `.Axis.set_major_formatter` or provide formatted
+  2007-            *labels* yourself.
+  2008-        labels : list of str, optional
+  2009-            List of tick labels. If not set, the labels are generated with
+  2010-            the axis tick `.Formatter`.
+  2011-        minor : bool, default: False
+  2012-            If ``False``, set the major ticks; if ``True``, the minor ticks.
+  2013-        **kwargs
+  2014-            `.Text` properties for the la
+  [... truncated ...]
+- [Diagnostic Output after action #8]
+  lib/matplotlib/axes/_base.py
+  lib/matplotlib/colorbar.py
+  lib/matplotlib/tests/test_determinism.py
+  lib/matplotlib/tests/test_backend_pdf.py
+  lib/matplotlib/tests/test_backend_pgf.py
+  lib/matplotlib/tests/test_spines.py
+  lib/matplotlib/tests/test_ticker.py
+  lib/matplotlib/tests/test_image.py
+  lib/matplotlib/tests/test_text.py
+  lib/matplotlib/tests/test_axes.py
+  lib/matplotlib/tests/test_ttconv.py
+  lib/matplotlib/projections/polar.py
+  lib/matplotlib/widgets.py
+  lib/matplotlib/pyplot.py
+- [Grep Result after action #10]
+  No matches found
+- [Diagnostic Output after action #12]
+  3741:    set_xticks = _axis_method_wrapper("xaxis", "set_ticks")
+  3747:        doc_sub={"Axis.set_ticks": "Axes.set_xticks"})
+- [Read Result after action #14]
+    3730→                raise TypeError("Cannot pass both 'left' and 'xmin'")
+    3731→            left = xmin
+    3732→        if xmax is not None:
+    3733→            if right is not None:
+    3734→                raise TypeError("Cannot pass both 'right' and 'xmax'")
+    3735→            right = xmax
+    3736→        return self.xaxis._set_lim(left, right, emit=emit, auto=auto)
+    3737→
+    3738→    get_xscale = _axis_method_wrapper("xaxis", "get_scale")
+    3739→    set_xscale = _axis_method_wrapper("xaxis", "_set_axes_scale")
+    3740→    get_xticks = _axis_method_wrapper("xaxis", "get_ticklocs")
+    3741→    set_xticks = _axis_method_wrapper("xaxis", "set_ticks")
+    3742→    get_xmajorticklabels = _axis_method_wrapper("xaxis", "get_majorticklabels")
+    3743→    get_xminorticklabels = _axis_method_wrapper("xaxis", "get_minorticklabels")
+    3744→    get_xticklabels = _axis_method_wrapper("xaxis", "get_ticklabels")
+    3745→    set_xticklabels = _axis_method_wrapper(
+    3746→        "xaxis", "_set_ticklabels",
+    3747→        doc_sub={"Axis.set_ticks": "Axes.set_xticks"})
+    3748→
+    3749→    def get_ylabel(self):
+    3750→        """
+    3751→        Get the ylabel text string.
+    3752→        """
+    3753→
+  [... truncated ...]
+- [Read Result after action #16]
+    1990→    def set_ticks(self, ticks, labels=None, *, minor=False, **kwargs):
+    1991→        """
+    1992→        Set this Axis' tick locations and optionally labels.
+    1993→
+    1994→        If necessary, the view limits of the Axis are expanded so that all
+    1995→        given ticks are visible.
+    1996→
+    1997→        Parameters
+    1998→        ----------
+    1999→        ticks : list of floats
+    2000→            List of tick locations.  The axis `.Locator` is replaced by a
+    2001→            `~.ticker.FixedLocator`.
+    2002→
+    2003→            Some tick formatters will not label arbitrary tick positions;
+    2004→            e.g. log formatters only label decade ticks by default. In
+    2005→            such a case you can set a formatter explicitly on the axis
+    2006→            using `.Axis.set_major_formatter` or provide formatted
+    2007→            *labels* yourself.
+    2008→        labels : list of str, optional
+    2009→            List of tick labels. If not set, the labels are generated with
+    2010→            the axis tick `.Formatter`.
+    2011→        minor : bool, default: False
+    2012→            If ``False``, set the major ticks; if ``True``, the minor ticks.
+    2013→        **kwarg
+  [... truncated ...]
+- [Test Output after action #18]
+  Exit code 1
+    File "test_issue.py", line 13
+      print(f"  OK: Exception raised: {e}")
+                                         ^
+  SyntaxError: invalid syntax
+- [Test Output after action #20]
+  Exit code 2
+  python: can't open file 'test_issue.py': [Errno 2] No such file or directory
+- [Test Output after action #22]
+  Exit code 2
+  python: can't open file 'testbed/test_issue.py': [Errno 2] No such file or directory
+- [Diagnostic Output after action #24]
+  ./swebench_9_15/testbed/test_issue.py
+- [Test Output after action #26]
+  Exit code 1
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_issue.py", line 2, in <module>
+      import matplotlib.pyplot as plt
+    File "/Applications/ADFRsuite-1.0/lib/python2.7/site-packages/matplotlib/pyplot.py", line 26, in <module>
+      from matplotlib.figure import Figure, figaspect
+    File "/Applications/ADFRsuite-1.0/lib/python2.7/site-packages/matplotlib/figure.py", line 32, in <module>
+      from matplotlib.image import FigureImage
+    File "/Applications/ADFRsuite-1.0/lib/python2.7/site-packages/matplotlib/image.py", line 22, in <module>
+      import matplotlib._png as _png
+  ImportError: dlopen(/Applications/ADFRsuite-1.0/lib/python2.7/site-packages/matplotlib/_png.so, 0x0002): Library not loaded: /usr/local/lib/libpng12.0.dylib
+    Referenced from: <9684E068-2BAD-0B64-0034-B33FAB28CAF8> /Applications/ADFRsuite-1.0/lib/python2.7/site-packages/matplotlib/_png.so
+    Reason: tried: '/usr/local/lib/libpng12.0.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/usr/local/lib/libpng12.0.dylib' (no such file), '/usr/local/lib/libpng12.0.dylib' (no such file), '/usr/lib/libpng12.0.dylib' (no such file, not in dyld cache)
+- [Test Output after action #28]
+  Test 1: Invalid kwargs without labels parameter
+    ERROR: No exception was raised for invalid kwarg 'xticklabels'
+
+  Test 2: Invalid kwargs with labels parameter
+    OK: Exception raised: Text.set() got an unexpected keyword argument 'xticklabels'
+
+  Test 3: Valid kwargs with labels parameter
+    OK: Valid kwargs accepted with labels
+
+  Test 4: Valid kwargs without labels parameter
+    WARNING: Valid kwargs without labels did not raise error (current behavior)
+
+  ======================================================================
+  EXPECTED BEHAVIOR:
+  - Test 1 should raise an error (invalid kwargs)
+  - Test 2 should raise an error (invalid kwargs)
+  - Test 3 should pass (valid kwargs with labels)
+  - Test 4 could either error or validate kwargs
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Grep Result after action #30]
+  1841:    def set_ticklabels(self, ticklabels, *, minor=False, **kwargs):
+  1842-        r"""
+  1843-        [*Discouraged*] Set the text values of the tick labels.
+  1844-
+  1845-        .. admonition:: Discouraged
+  1846-
+  1847-            The use of this method is discouraged, because of the dependency
+  1848-            on tick positions. In most cases, you'll want to use
+  1849-            ``set_[x/y]ticks(positions, labels)`` instead.
+  1850-
+  1851-            If you are using this method, you should always fix the tick
+  1852-            positions before, e.g. by using `.Axis.set_ticks` or by explicitly
+  1853-            setting a `~.ticker.FixedLocator`. Otherwise, ticks are free to
+  1854-            move and the labels may end up in unexpected positions.
+  1855-
+  1856-        Parameters
+  1857-        ----------
+  1858-        ticklabels : sequence of str or of `.Text`\s
+  1859-            Texts for labeling each tick location in the sequence set by
+  1860-            `.Axis.set_ticks`; the number of labels must match the number of
+  1861-            locations.
+  1862-        minor : bool
+  1863-            If True, set minor ticks instead of major ticks.
+  1864-        **kwargs
+  1865-            Text properties.
+  1
+  [... truncated ...]
+- [Read Result after action #32]
+    1841→    def set_ticklabels(self, ticklabels, *, minor=False, **kwargs):
+    1842→        r"""
+    1843→        [*Discouraged*] Set the text values of the tick labels.
+    1844→
+    1845→        .. admonition:: Discouraged
+    1846→
+    1847→            The use of this method is discouraged, because of the dependency
+    1848→            on tick positions. In most cases, you'll want to use
+    1849→            ``set_[x/y]ticks(positions, labels)`` instead.
+    1850→
+    1851→            If you are using this method, you should always fix the tick
+    1852→            positions before, e.g. by using `.Axis.set_ticks` or by explicitly
+    1853→            setting a `~.ticker.FixedLocator`. Otherwise, ticks are free to
+    1854→            move and the labels may end up in unexpected positions.
+    1855→
+    1856→        Parameters
+    1857→        ----------
+    1858→        ticklabels : sequence of str or of `.Text`\s
+    1859→            Texts for labeling each tick location in the sequence set by
+    1860→            `.Axis.set_ticks`; the number of labels must match the number of
+    1861→            locations.
+    1862→        minor : bool
+    1863→            If True, set minor ticks instead of major ticks.
+    1864→
+  [... truncated ...]
+- [Grep Result after action #34]
+  Found 1 file
+  lib/matplotlib/artist.py
+- [Grep Result after action #36]
+  1179:    def _internal_update(self, kwargs):
+  1180-        """
+  1181-        Update artist properties without prenormalizing them, but generating
+  1182-        errors as if calling `set`.
+  1183-
+  1184-        The lack of prenormalization is to maintain backcompatibility.
+  1185-        """
+  1186-        return self._update_props(
+  1187-            kwargs, "{cls.__name__}.set() got an unexpected keyword argument "
+  1188-            "{prop_name!r}")
+  1189-
+  1190-    def set(self, **kwargs):
+  1191-        # docstring and signature are auto-generated via
+  1192-        # Artist._update_set_signature_and_docstring() at the end of the
+  1193-        # module.
+  1194-        return self._internal_update(cbook.normalize_kwargs(kwargs, self))
+  1195-
+  1196-    @contextlib.contextmanager
+  1197-    def _cm_set(self, **kwargs):
+  1198-        """
+  1199-        `.Artist.set` context-manager that restores original values at exit.
+- [Test Output after action #41]
+  Valid kwargs: OK
+  Invalid kwargs: OK - Text.set() got an unexpected keyword argument 'xticklabels'
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Read Result after action #43]
+    1990→    def set_ticks(self, ticks, labels=None, *, minor=False, **kwargs):
+    1991→        """
+    1992→        Set this Axis' tick locations and optionally labels.
+    1993→
+    1994→        If necessary, the view limits of the Axis are expanded so that all
+    1995→        given ticks are visible.
+    1996→
+    1997→        Parameters
+    1998→        ----------
+    1999→        ticks : list of floats
+    2000→            List of tick locations.  The axis `.Locator` is replaced by a
+    2001→            `~.ticker.FixedLocator`.
+    2002→
+    2003→            Some tick formatters will not label arbitrary tick positions;
+    2004→            e.g. log formatters only label decade ticks by default. In
+    2005→            such a case you can set a formatter explicitly on the axis
+    2006→            using `.Axis.set_major_formatter` or provide formatted
+    2007→            *labels* yourself.
+    2008→        labels : list of str, optional
+    2009→            List of tick labels. If not set, the labels are generated with
+    2010→            the axis tick `.Formatter`.
+    2011→        minor : bool, default: False
+    2012→            If ``False``, set the major ticks; if ``True``, the minor ticks.
+    2013→        **kwarg
+  [... truncated ...]
+- [Read Result after action #45]
+       1→"""
+       2→Classes for the ticks and x and y axis.
+       3→"""
+       4→
+       5→import datetime
+       6→import functools
+       7→import logging
+       8→from numbers import Number
+       9→
+      10→import numpy as np
+      11→
+      12→import matplotlib as mpl
+      13→from matplotlib import _api, cbook
+      14→import matplotlib.artist as martist
+      15→import matplotlib.colors as mcolors
+      16→import matplotlib.lines as mlines
+      17→import matplotlib.scale as mscale
+      18→import matplotlib.text as mtext
+      19→import matplotlib.ticker as mticker
+      20→import matplotlib.transforms as mtransforms
+      21→import matplotlib.units as munits
+      22→
+      23→_log = logging.getLogger(__name__)
+      24→
+      25→GRIDLINE_INTERPOLATION_STEPS = 180
+      26→
+      27→# This list is being used for compatibility with Axes.grid, which
+      28→# allows all Line2D kwargs.
+      29→_line_inspector = martist.ArtistInspector(mlines.Line2D)
+      30→_line_param_names = _line_inspector.get_setters()
+      31→_line_param_aliases = [list(d)[0] for d in _line_inspector.aliasd.values()]
+      32→_gridline_param_names = ['grid_' + name
+      33→                         for name in _line_param_names + _line_param_aliases]
+      34→
+
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- lib/matplotlib/axis.py
+  Tool: Edit action #47
+  old_text_sha256: 9bf8d906783433d4aacc1268649891dfd8c23f565f477cbc496e5989d0597e35
+  new_text_sha256: 34459cc90520255ab5dabd72b5fee5107a359d421694d59740b7ba39fd287bff
+- test_validation.py
+  Tool: Write action #40
+  new_text_sha256: 897b3a13998781f833394304ae301a1545a2ab0544a77c04549904d6470cb52d
+- test_fix_verification.py
+  Tool: Write action #50
+  new_text_sha256: c84b28628b30ea16113af34b3fdbac9cb8ae223d6c7022231fb7dd36eac14e51
+- test_yaxis.py
+  Tool: Write action #53
+  new_text_sha256: 1b98b44cef36620b24db8b7a1f25991dac6d96934c9b9c254afcbecf88555c85
+- test_final_demo.py
+  Tool: Write action #63
+  new_text_sha256: 4cc0f72c34e12612107b4485f50207835207bbaa04ab49d3bb98e248dffff47f
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

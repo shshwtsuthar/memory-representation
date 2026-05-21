@@ -1,0 +1,504 @@
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: cfd3944e-e0d8-444a-8eb3-6b32a5a5ccee
+- repo: astropy/astropy
+- instance_id: astropy__astropy-12907
+- base_commit: d16bfe05a744909de4b27f5875fe0d4ed41ce607
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: astropy/astropy
+instance_id: astropy__astropy-12907
+base_commit: d16bfe05a744909de4b27f5875fe0d4ed41ce607
+problem_statement:
+Modeling's `separability_matrix` does not compute separability correctly for nested CompoundModels
+Consider the following model:
+
+```python
+from astropy.modeling import models as m
+from astropy.modeling.separable import separability_matrix
+
+cm = m.Linear1D(10) & m.Linear1D(5)
+```
+
+It's separability matrix as you might expect is a diagonal:
+
+```python
+>>> separability_matrix(cm)
+array([[ True, False],
+       [False,  True]])
+```
+
+If I make the model more complex:
+```python
+>>> separability_matrix(m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5))
+array([[ True,  True, False, False],
+       [ True,  True, False, False],
+       [False, False,  True, False],
+       [False, False, False,  True]])
+```
+
+The output matrix is again, as expected, the outputs and inputs to the linear models are separable and independent of each other.
+
+If however, I nest these compound models:
+```python
+>>> separability_matrix(m.Pix2Sky_TAN() & cm)
+array([[ True,  True, False, False],
+       [ True,  True, False, False],
+       [False, False,  True,  True],
+       [False, False,  True,  True]])
+```
+Suddenly the inputs and outputs are no longer separable?
+
+This feels like a bug to me, but I might be missing something?
+sha256: 76f07ecc14843d559fece4ce2548cd3147449f1ec423c617667db796d36f39cb
+truncated: false
+
+[ADP ACTION current=1 original=3: code_action bash]
+payload:
+cd ./swebench_9_15/testbed && find . -name "separable.py" -type f | head -5
+sha256: 9a12836eb718377591420672f15e19cda8bd8dbb3138f039098933b64507f6e4
+truncated: false
+
+[ADP ACTION current=2 original=9: code_action bash]
+payload:
+ls -la testbed 2>&1 | head -20
+sha256: 7087f8cd9fe7fbd32f3a3a91907249a2a0907d21786236a6e47a093fcc1bed4e
+truncated: false
+
+[ADP ACTION current=3 original=29: code_action bash]
+payload:
+find . -name "separable.py" -type f
+sha256: 664c7eb860139b0cdc1ca7107a202df91f91ab4a92893bcb7b741a2faf418b70
+truncated: false
+
+[ADP OBSERVATION current=4 original=30 source=environment]
+name: Bash:toolu_014ptaD9MYEsrnppos9noJd6
+excerpt:
+./astropy/modeling/separable.py
+sha256: ec86abb157afe293b97d1c1b7f69e776b7f63d69d4dc67261f6a3cd5da34fdcb
+truncated: false
+
+[ADP ACTION current=5 original=31: api_action Read]
+path: astropy/modeling/separable.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/astropy/modeling/separable.py"
+}
+sha256: 3a48b951cafd7c1007c18be1aa32d785710d165fcecea7ebdff9cfebed3f2785
+truncated: false
+
+[ADP OBSERVATION current=6 original=32 source=environment]
+name: Read:toolu_018G83eebSWyYTVviGz1oqZG
+excerpt:
+     1→# Licensed under a 3-clause BSD style license - see LICENSE.rst
+     2→
+     3→"""
+     4→Functions to determine if a model is separable, i.e.
+     5→if the model outputs are independent.
+     6→
+     7→It analyzes ``n_inputs``, ``n_outputs`` and the operators
+     8→in a compound model by stepping through the transforms
+     9→and creating a ``coord_matrix`` of shape (``n_outputs``, ``n_inputs``).
+    10→
+    11→
+    12→Each modeling operator is represented by a function which
+    13→takes two simple models (or two ``coord_matrix`` arrays) and
+    14→returns an array of shape (``n_outputs``, ``n_inputs``).
+    15→
+    16→"""
+    17→
+    18→import numpy as np
+    19→
+    20→from .core import Model, ModelDefinitionError, CompoundModel
+    21→from .mappings import Mapping
+    22→
+    23→
+    24→__all__ = ["is_separable", "separability_matrix"]
+    25→
+    26→
+    27→def is_separable(transform):
+    28→    """
+    29→    A separability test for the outputs of a transform.
+    30→
+    31→    Parameters
+    32→    ----------
+    33→    transform : `~astropy.modeling.core.Model`
+    34→        A (compound) model.
+    35→
+    36→    Returns
+    37→    -------
+    38→    is_separable : ndarray
+    39→        A boolean array with size ``transform.n_outputs`` where
+    40→        each element indicates whether the output is independent
+    41→        and the result of a separable transform.
+    42→
+    43→    Examples
+    44→    --------
+    45→    >>> from astropy.modeling.models import Shift, Scale, Rotation2D, Polynomial2D
+    46→    >>> is_separable(Shift(1) & Shift(2) | Scale(1) & Scale(2))
+    47→        array([ True,  True]...)
+    48→    >>> is_separable(Shift(1) & Shift(2) | Rotation2D(2))
+    49→        array([False, False]...)
+    50→    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1]) | \
+    51→        Polynomial2D(1) & Polynomial2D(2))
+    52→        array([False, False]...)
+    53→    >>> is_separable(Shift(1) & Shift(2) | Mapping([0, 1, 0, 1
+sha256: 016e55b311a9a095a58382a76ac36c76098f3825fddb2a030902628a1a6fe875
+truncated: true
+
+[ADP ACTION current=7 original=37: code_action bash]
+payload:
+python test_issue.py
+sha256: 73510e7a35f80e0e4c2a162b332cf5173e3086dd087d5fb78dd370f4f062a847
+truncated: false
+
+[ADP OBSERVATION current=8 original=38 source=environment]
+name: Bash:toolu_01JZ26ANHYSixPkLQYXGBjja:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 11
+    print(f"separability_matrix(m.Linear1D(10) & m.Linear1D(5)):")
+                                                                ^
+SyntaxError: invalid syntax
+sha256: 7b087b673bf3bef8a00a1b8d56e4554f714ca237b7ac1e66dacd376266c39071
+truncated: false
+
+[ADP ACTION current=9 original=39: code_action bash]
+payload:
+python --version
+sha256: 353d239c6a0e91e6c47ab62b10b649a20abe927d6369db85712e6bdad8e70c2a
+truncated: false
+
+[ADP OBSERVATION current=10 original=40 source=environment]
+name: Bash:toolu_01DtswFfb5JZ8F65HQgczWcw
+excerpt:
+Python 2.7.3
+sha256: c6d9bd2d561b074688a302920b8e73838fd3f7b4043465431748a1e3b85691fe
+truncated: false
+
+[ADP ACTION current=11 original=41: code_action bash]
+payload:
+python3 --version
+sha256: 6d276aab9c1670aaf1108d7e95ffa7f5bf1d01433569eb71f44fef9f63c2e6e9
+truncated: false
+
+[ADP OBSERVATION current=12 original=42 source=environment]
+name: Bash:toolu_01WQkWsAwEFNG9RWyZBYftNP
+excerpt:
+Python 3.8.8
+sha256: acd1c6d0a01b9418a3ac077015cf0ed3f607b78b23b8e2400bef63b5ad40366d
+truncated: false
+
+[ADP ACTION current=13 original=43: code_action bash]
+payload:
+python3 test_issue.py
+sha256: 1dea52468d033dbc2c7eab8b3906def60d30ca88f1852130e06458b8e10afcfb
+truncated: false
+
+[ADP ACTION current=14 original=51: api_action Read]
+path: astropy/modeling/separable.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/astropy/modeling/separable.py",
+  "limit": 30,
+  "offset": 219
+}
+sha256: 6adb6074c50b666e9eee6865a322a74bdcdf52c89f226fa456c517f31fceaf05
+truncated: false
+
+[ADP OBSERVATION current=15 original=52 source=environment]
+name: Read:toolu_01HcN64W71jxCMyCNjWxxbsx
+excerpt:
+   219→def _cstack(left, right):
+   220→    """
+   221→    Function corresponding to '&' operation.
+   222→
+   223→    Parameters
+   224→    ----------
+   225→    left, right : `astropy.modeling.Model` or ndarray
+   226→        If input is of an array, it is the output of `coord_matrix`.
+   227→
+   228→    Returns
+   229→    -------
+   230→    result : ndarray
+   231→        Result from this operation.
+   232→
+   233→    """
+   234→    noutp = _compute_n_outputs(left, right)
+   235→
+   236→    if isinstance(left, Model):
+   237→        cleft = _coord_matrix(left, 'left', noutp)
+   238→    else:
+   239→        cleft = np.zeros((noutp, left.shape[1]))
+   240→        cleft[: left.shape[0], : left.shape[1]] = left
+   241→    if isinstance(right, Model):
+   242→        cright = _coord_matrix(right, 'right', noutp)
+   243→    else:
+   244→        cright = np.zeros((noutp, right.shape[1]))
+   245→        cright[-right.shape[0]:, -right.shape[1]:] = 1
+   246→
+   247→    return np.hstack([cleft, cright])
+   248→
+
+sha256: 2e691741800fa281f951284155a397b1614d7996df4242b8c50d4114f98b6ccd
+truncated: false
+
+[ADP ACTION current=16 original=55: api_action Edit]
+path: astropy/modeling/separable.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/astropy/modeling/separable.py",
+  "new_text_sha256": "379a5858b4062623cac0b0e33e5603f8d5deb3f3a21e64394c44c1cc7e7d2344",
+  "old_text_sha256": "40ba22741df143eea4c3855976bcf56acdd71272f33a3737284fb71cdbd0c85a"
+}
+sha256: 50700fb8ea8c242ce76877fbdd5d94e4ad137df07cc7da17c40cc0dd8bbb3f81
+truncated: false
+
+[ADP ACTION current=17 original=59: code_action bash]
+payload:
+find . -path "*/tests/*" -name "*separable*" -type f | head -5
+sha256: 03bf20598a1fe33dfda8ad2909d96ad625fb3f41ab5bfedc22e25cd565f0de37
+truncated: false
+
+[ADP OBSERVATION current=18 original=60 source=environment]
+name: Bash:toolu_01Pmhhdnqmid7bzAGm8papq7
+excerpt:
+./astropy/modeling/tests/test_separable.py
+sha256: e8a94888bb5ae03529a32a7934170a36d26a21c6f768c156ad078b353f8aca54
+truncated: false
+
+[ADP ACTION current=19 original=61: api_action Read]
+path: astropy/modeling/tests/test_separable.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/astropy/modeling/tests/test_separable.py"
+}
+sha256: 5a8335a0c9430c6ddcc35bb08be8fdc5db21f1e791aa0593a86fa65a4135da4b
+truncated: false
+
+[ADP OBSERVATION current=20 original=62 source=environment]
+name: Read:toolu_016UT7kWDdXJfJ7LijDvtz2t
+excerpt:
+     1→# Licensed under a 3-clause BSD style license - see LICENSE.rst
+     2→"""
+     3→Test separability of models.
+     4→
+     5→"""
+     6→# pylint: disable=invalid-name
+     7→import pytest
+     8→import numpy as np
+     9→from numpy.testing import assert_allclose
+    10→
+    11→from astropy.modeling import custom_model, models
+    12→from astropy.modeling.models import Mapping
+    13→from astropy.modeling.separable import (_coord_matrix, is_separable, _cdot,
+    14→                                        _cstack, _arith_oper, separability_matrix)
+    15→from astropy.modeling.core import ModelDefinitionError
+    16→
+    17→
+    18→sh1 = models.Shift(1, name='shift1')
+    19→sh2 = models.Shift(2, name='sh2')
+    20→scl1 = models.Scale(1, name='scl1')
+    21→scl2 = models.Scale(2, name='scl2')
+    22→map1 = Mapping((0, 1, 0, 1), name='map1')
+    23→map2 = Mapping((0, 0, 1), name='map2')
+    24→map3 = Mapping((0, 0), name='map3')
+    25→rot = models.Rotation2D(2, name='rotation')
+    26→p2 = models.Polynomial2D(1, name='p2')
+    27→p22 = models.Polynomial2D(2, name='p22')
+    28→p1 = models.Polynomial1D(1, name='p1')
+    29→
+    30→
+    31→compound_models = {
+    32→    'cm1': (map3 & sh1 | rot & sh1 | sh1 & sh2 & sh1,
+    33→            (np.array([False, False, True]),
+    34→             np.array([[True, False], [True, False], [False, True]]))
+    35→            ),
+    36→    'cm2': (sh1 & sh2 | rot | map1 | p2 & p22,
+    37→            (np.array([False, False]),
+    38→             np.array([[True, True], [True, True]]))
+    39→            ),
+    40→    'cm3': (map2 | rot & scl1,
+    41→            (np.array([False, False, True]),
+    42→             np.array([[True, False], [True, False], [False, True]]))
+    43→            ),
+    44→    'cm4': (sh1 & sh2 | map2 | rot & scl1,
+    45→            (np.array([False, False, True]),
+    46→             np.array([[True, False], [True, False], [False, True]]))
+    47→            ),
+    48→    'cm5': (map3 | sh1 & sh2
+sha256: 31eec144c07ac1f3c9359e9f3761ec7dea6c353261d3a05e6fc6fce06e46801a
+truncated: true
+
+[ADP ACTION current=21 original=63: api_action Edit]
+path: astropy/modeling/tests/test_separable.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/astropy/modeling/tests/test_separable.py",
+  "new_text_sha256": "a846480b6a6e12a136fd2c1c675eb5fa68b12e4461821fe1d409a65b1be385d4",
+  "old_text_sha256": "947be422de03f11adf144db1f93192dedd6bf6bbb8d3b0732f3064b3403e0b18"
+}
+sha256: 7a31d8d2c689cc113751e9fe7ce9dfa6c4b562317a4d7074ff3020c07cf42fa7
+truncated: false
+
+[ADP ACTION current=22 original=65: code_action bash]
+payload:
+python3 -c "import sys; sys.path.insert(0, '.'); from astropy.modeling import models; print('Success')" 2>&1 | head -20
+sha256: 523c677828b37fa5db5ed2c6f668244b066a0b0e632427d93ab1a91d82f589aa
+truncated: false
+
+[ADP OBSERVATION current=23 original=66 source=environment]
+name: Bash:toolu_01NCLunwG6jF9npf68TQ95yA
+excerpt:
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Traceback (most recent call last):
+  File "./astropy/__init__.py", line 143, in _initialize_astropy
+    from .utils import _compiler  # noqa: F401
+ImportError: cannot import name '_compiler' from 'astropy.utils' (./astropy/utils/__init__.py)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "./astropy/__init__.py", line 176, in <module>
+sha256: 0425b2e540fdebe473b5ee7dea54df3c4b142c19d2ace40b2c4da12f6a0bd34c
+truncated: false
+
+[ADP ACTION current=24 original=67: api_action Write]
+path: test_fix.py
+payload:
+{
+  "content_sha256": "aa1152062a43b29fe37150c220cbe0679eb8f6588091cc4c395315c9be8d2ae6",
+  "file_path": "./swebench_9_15/testbed/test_fix.py"
+}
+sha256: 0f773b737a240ff5bfbcc949d27da8e0653a7e96d59be4c88d1aa3d895ed9804
+truncated: false
+
+[ADP ACTION current=25 original=69: code_action bash]
+payload:
+python3 test_fix.py
+sha256: c5c6181b0dbf6b92ce5a5925e0cedd7387f4e5d9472d20352a3247d10c0ef466
+truncated: false
+
+[ADP ACTION current=26 original=71: api_action Read]
+path: astropy/__init__.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/astropy/__init__.py",
+  "limit": 20,
+  "offset": 140
+}
+sha256: 1a67f4f1255a7904e606564bf6bf7ce185417c043cbcee1d21cec0c1e742c948
+truncated: false
+
+[ADP ACTION current=27 original=75: api_action Write]
+path: standalone_test.py
+payload:
+{
+  "content_sha256": "0b53562f7f856381708c3e398dc3f29e0b494211824e2bb46d2489045f1bc0fe",
+  "file_path": "./swebench_9_15/testbed/standalone_test.py"
+}
+sha256: 74417d91d8ba6a91394f5f60dc9a51a3f2f2f67345576ee6220d801eba27727b
+truncated: false
+
+[ADP ACTION current=28 original=77: code_action bash]
+payload:
+python3 standalone_test.py 2>&1 | head -100
+sha256: a4888844eac8e1a48e91ac4e16acfbbaea36162cd6b3fd21d65749e6bf2ba30f
+truncated: false
+
+[ADP ACTION current=29 original=79: api_action Write]
+path: verify_fix.py
+payload:
+{
+  "content_sha256": "412f0fc6012cd5d49faaca1c5c70f4dc6c092ecc81ec99b3d15e9e5113aa332d",
+  "file_path": "./swebench_9_15/testbed/verify_fix.py"
+}
+sha256: fbb51073feb81eefb32508ae4731a300f4a3a3009e185eaef7beeed5f6a70d58
+truncated: false
+
+[ADP ACTION current=30 original=81: code_action bash]
+payload:
+python3 verify_fix.py
+sha256: 81652377e625f1a49e7225e3fb44efa3b561874ac5b4c367e617b4d74b4f0eb8
+truncated: false
+
+[ADP OBSERVATION current=31 original=82 source=environment]
+name: Bash:toolu_015TxubvwDKgrGa9eFb1cQQb
+excerpt:
+======================================================================
+Testing _cstack fix for nested compound models
+======================================================================
+
+Input matrices:
+Left matrix (2x2 non-separable, like Pix2Sky_TAN):
+[[1. 1.]
+ [1. 1.]]
+
+Right matrix (2x2 diagonal/separable, like Linear1D & Linear1D):
+[[1. 0.]
+ [0. 1.]]
+
+======================================================================
+BUGGY VERSION (before fix):
+======================================================================
+[[1. 1. 0. 0.]
+ [1. 1. 0. 0.]
+ [0. 0. 1. 1.]
+ [0. 0. 1. 1.]]
+
+Problem: Rows 2 and 3 are [0, 0, 1, 1] - incorrectly shows outputs 2 and 3
+         as non-separable (both depend on inputs 2 and 3)!
+
+======================================================================
+FIXED VERSION (after fix):
+======================================================================
+[[1. 1. 0. 0.]
+ [1. 1. 0. 0.]
+ [0. 0. 1. 0.]
+ [0. 0. 0. 1.]]
+
+Correct: Row 2 is [0, 0, 1, 0] and row 3 is [0, 0, 0, 1] -
+         outputs 2 and 3 are correctly shown as separable!
+
+======================================================================
+VERIFICATION:
+======================================================================
+Expected result:
+[[1. 1. 0. 0.]
+ [1. 1. 0. 0.]
+ [0. 0. 1. 0.]
+ [0. 0. 0. 1.]]
+
+Fixed result matches expected: True
+Buggy result matches expected: False
+
+======================================================================
+✓ SUCCESS: The fix correctly preserves separability!
+======================================================================
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ign
+sha256: cadba97e6e242edf88d825f3b1428b272c359823aa9a10bdcb7801c955f390e5
+truncated: true

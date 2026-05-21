@@ -1,0 +1,169 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 45c9f062-309e-49ed-bc72-76ff859b8511
+- repo: scikit-learn/scikit-learn
+- instance_id: scikit-learn__scikit-learn-13497
+- base_commit: 26f690961a52946dd2f53bf0fdd4264b2ae5be90
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Comparing string to array in _estimate_mi
+In ``_estimate_mi`` there is ``discrete_features == 'auto'`` but discrete features can be an array of indices or a boolean mask.
+This will error in future versions of numpy.
+Also this means we never test this function with discrete features != 'auto', it seems?
+
+FILES INSPECTED
+---------------
+- sklearn/feature_selection/mutual_info_.py [Read: 1]
+- sklearn/feature_selection/tests/test_mutual_info.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [2] Grep pattern='def _estimate_mi' path='testbed'
+- [6] Grep pattern='test.*mutual_info|test.*_estimate_mi' path='testbed'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find testbed -name "*.py" -type f | head -20
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [test] cd testbed && python -m pytest sklearn/feature_selection/tests/test_mutual_info.py::test_mutual_info_classif_mixed -xvs 2>&1 | head -50
+- [other/reproduction] python verify_fix.py
+- [other/reproduction] python ./swebench_9_15/verify_fix.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named _check_build
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #2]
+  Found 1 file
+  testbed/sklearn/feature_selection/mutual_info_.py
+- [Read Result after action #4]
+       1→# Author: Nikolay Mayorov <n59_ru@hotmail.com>
+       2→# License: 3-clause BSD
+       3→
+       4→import numpy as np
+       5→from scipy.sparse import issparse
+       6→from scipy.special import digamma
+       7→
+       8→from ..metrics.cluster.supervised import mutual_info_score
+       9→from ..neighbors import NearestNeighbors
+      10→from ..preprocessing import scale
+      11→from ..utils import check_random_state
+      12→from ..utils.fixes import _astype_copy_false
+      13→from ..utils.validation import check_X_y
+      14→from ..utils.multiclass import check_classification_targets
+      15→
+      16→
+      17→def _compute_mi_cc(x, y, n_neighbors):
+      18→    """Compute mutual information between two continuous variables.
+      19→
+      20→    Parameters
+      21→    ----------
+      22→    x, y : ndarray, shape (n_samples,)
+      23→        Samples of two continuous random variables, must have an identical
+      24→        shape.
+      25→
+      26→    n_neighbors : int
+      27→        Number of nearest neighbors to search for each point, see [1]_.
+      28→
+      29→    Returns
+      30→    -------
+      31→    mi : float
+      32→        Estimated mutual information. If it turned out to be negative it is
+      33→        re
+  [... truncated ...]
+- [Grep Result after action #6]
+  Found 3 files
+  testbed/sklearn/metrics/cluster/tests/test_supervised.py
+  testbed/sklearn/feature_selection/tests/test_mutual_info.py
+  testbed/sklearn/feature_selection/tests/test_feature_select.py
+- [Read Result after action #8]
+       1→
+       2→import numpy as np
+       3→from scipy.sparse import csr_matrix
+       4→
+       5→from sklearn.utils import check_random_state
+       6→from sklearn.utils.testing import (assert_array_equal, assert_almost_equal,
+       7→                                   assert_raises, assert_equal,
+       8→                                   assert_greater)
+       9→from sklearn.feature_selection.mutual_info_ import (
+      10→    mutual_info_regression, mutual_info_classif, _compute_mi)
+      11→
+      12→
+      13→def test_compute_mi_dd():
+      14→    # In discrete case computations are straightforward and can be done
+      15→    # by hand on given vectors.
+      16→    x = np.array([0, 1, 1, 0, 0])
+      17→    y = np.array([1, 0, 0, 0, 1])
+      18→
+      19→    H_x = H_y = -(3/5) * np.log(3/5) - (2/5) * np.log(2/5)
+      20→    H_xy = -1/5 * np.log(1/5) - 2/5 * np.log(2/5) - 2/5 * np.log(2/5)
+      21→    I_xy = H_x + H_y - H_xy
+      22→
+      23→    assert_almost_equal(_compute_mi(x, y, True, True), I_xy)
+      24→
+      25→
+      26→def test_compute_mi_cc():
+      27→    # For two continuous variables a good approach is to test on bivariate
+      28→    # normal distribution, where mutual information is known.
+      29→
+
+  [... truncated ...]
+- [Test Output after action #11]
+  Exit code 1
+    File "test_issue.py", line 25
+  SyntaxError: Non-ASCII character '\xe2' in file test_issue.py on line 25, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+- [Test Output after action #13]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 11, in <module>
+      from sklearn.feature_selection.mutual_info_ import mutual_info_classif, mutual_info_regression
+    File "./swebench_9_15/testbed/sklearn/__init__.py", line 75, in <module>
+      from . import __check_build
+    File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 46, in <module>
+      raise_build_error(e)
+    File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 41, in raise_build_error
+      %s""" % (e, local_dir, ''.join(dir_content).strip(), msg))
+  ImportError: No module named _check_build
+  ___________________________________________________________________________
+  Contents of ./swebench_9_15/testbed/sklearn/__check_build:
+  __init__.py               __pycache__               _check_build.c
+  setup.py                  __init__.pyc              _check_build.pyx
+  ___________________________________________________________________________
+  It seems that scikit-learn has not been built correctly.
+
+  If you have installed scikit-learn from source, please do not forget
+  to build the package before using it: run `python setup.py install` or
+  `make` in the source directory.
+
+  If you
+  [... truncated ...]
+- [Test Output after action #15]
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sklearn/feature_selection/mutual_info_.py
+  Tool: Edit action #10
+  old_text_sha256: 494deca5bba73bd51b1d5e7e87a907afe768c3b4915610f10d04e6079984c35c
+  new_text_sha256: 1fbe09ce4ec70ed6c5970d8ec23417f34ea984a28f2743d2d4ac0b41e5ad0a82
+- swebench_9_15/verify_fix.py
+  Tool: Write action #17
+  new_text_sha256: eed91a4c3183dd9834d4adf7b166ef33bf9a2560fde37a2eaa493125ac07c089
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

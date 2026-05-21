@@ -1,0 +1,408 @@
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 5db1ab0c-062d-4892-b98a-263664a29981
+- repo: django/django
+- instance_id: django__django-11039
+- base_commit: d5276398046ce4a102776a1e67dcac2884d80dfe
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+sqlmigrate wraps it's outpout in BEGIN/COMMIT even if the database doesn't support transactional DDL
+Description
+
+        (last modified by Simon Charette)
+
+The migration executor only adds the outer BEGIN/COMMIT ​if the migration is atomic and ​the schema editor can rollback DDL but the current sqlmigrate logic only takes migration.atomic into consideration.
+The issue can be addressed by
+Changing sqlmigrate ​assignment of self.output_transaction to consider connection.features.can_rollback_ddl as well.
+Adding a test in tests/migrations/test_commands.py based on ​an existing test for non-atomic migrations that mocks connection.features.can_rollback_ddl to False instead of overdidding MIGRATION_MODULES to point to a non-atomic migration.
+I marked the ticket as easy picking because I included the above guidelines but feel free to uncheck it if you deem it inappropriate.
+
+FILES INSPECTED
+---------------
+- swebench_9_15/testbed [Grep: 3]
+- django/core/management/commands/sqlmigrate.py [Read: 1]
+- django/db/migrations/executor.py [Read: 1]
+- django/db/backends/base/schema.py [Grep: 1]
+- django/core/management/base.py [Grep: 1, Read: 1]
+- tests/migrations/test_commands.py [Grep: 1, Read: 4]
+
+SEARCH ANCHORS
+--------------
+- [2] Grep pattern='class.*Migration.*Executor' path='swebench_9_15/testbed'
+- [3] Glob path='swebench_9_15/testbed' glob='**/management/commands/sqlmigrate.py'
+- [7] Glob path='swebench_9_15/testbed' glob='**/migrations/executor.py'
+- [11] Grep pattern='can_rollback_ddl' path='swebench_9_15/testbed'
+- [13] Grep pattern='can_rollback_ddl' path='django/db/backends/base/schema.py'
+- [15] Grep pattern='output_transaction' path='swebench_9_15/testbed'
+- [17] Grep pattern='output_transaction' path='django/core/management/base.py'
+- [21] Glob path='swebench_9_15/testbed' glob='**/migrations/test_commands.py'
+- [23] Grep pattern='test.*sqlmigrate' path='tests/migrations/test_commands.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15/testbed -type f -name "*.py" -path "*/management/commands/sqlmigrate.py" 2>/dev/null | head -5
+- [test] cd testbed && python -m pytest tests/migrations/test_commands.py::MigrateTests::test_sqlmigrate_for_non_transactional_databases -xvs
+- [test] python -m pytest tests/migrations/test_commands.py::MigrateTests::test_sqlmigrate_for_non_transactional_databases -xvs
+- [test] python tests/runtests.py migrations.test_commands.MigrateTests.test_sqlmigrate_for_non_transactional_databases
+- [other/reproduction] which python && python --version
+- [other/reproduction] which python3 && python3 --version
+- [test] python3 tests/runtests.py migrations.test_commands.MigrateTests.test_sqlmigrate_for_non_transactional_databases
+- [test] python3 tests/runtests.py migrations.test_commands.MigrateTests.test_sqlmigrate_forwards migrations.test_commands.MigrateTests.test_sqlmigrate_backwards migrations.test_commands.MigrateTests.test_sqlmigrate_for_non_atomic_migration
+- [test] python3 tests/runtests.py migrations.test_commands.MigrateTests --parallel 1 2>&1 | head -100
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named django
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #3]
+  ./swebench_9_15/testbed/django/core/management/commands/sqlmigrate.py
+- [Read Result after action #5]
+       1→from django.apps import apps
+       2→from django.core.management.base import BaseCommand, CommandError
+       3→from django.db import DEFAULT_DB_ALIAS, connections
+       4→from django.db.migrations.executor import MigrationExecutor
+       5→from django.db.migrations.loader import AmbiguityError
+       6→
+       7→
+       8→class Command(BaseCommand):
+       9→    help = "Prints the SQL statements for the named migration."
+      10→
+      11→    output_transaction = True
+      12→
+      13→    def add_arguments(self, parser):
+      14→        parser.add_argument('app_label', help='App label of the application containing the migration.')
+      15→        parser.add_argument('migration_name', help='Migration name to print the SQL for.')
+      16→        parser.add_argument(
+      17→            '--database', default=DEFAULT_DB_ALIAS,
+      18→            help='Nominates a database to create SQL for. Defaults to the "default" database.',
+      19→        )
+      20→        parser.add_argument(
+      21→            '--backwards', action='store_true',
+      22→            help='Creates SQL to unapply the migration, rather than to apply it',
+      23→        )
+      24→
+      25→    def execute(self, *args, **options):
+      26→
+  [... truncated ...]
+- [Glob Result after action #7]
+  ./swebench_9_15/testbed/django/db/migrations/executor.py
+- [Read Result after action #9]
+       1→from django.apps.registry import apps as global_apps
+       2→from django.db import migrations, router
+       3→
+       4→from .exceptions import InvalidMigrationPlan
+       5→from .loader import MigrationLoader
+       6→from .recorder import MigrationRecorder
+       7→from .state import ProjectState
+       8→
+       9→
+      10→class MigrationExecutor:
+      11→    """
+      12→    End-to-end migration execution - load migrations and run them up or down
+      13→    to a specified set of targets.
+      14→    """
+      15→
+      16→    def __init__(self, connection, progress_callback=None):
+      17→        self.connection = connection
+      18→        self.loader = MigrationLoader(self.connection)
+      19→        self.recorder = MigrationRecorder(self.connection)
+      20→        self.progress_callback = progress_callback
+      21→
+      22→    def migration_plan(self, targets, clean_start=False):
+      23→        """
+      24→        Given a set of targets, return a list of (Migration instance, backwards?).
+      25→        """
+      26→        plan = []
+      27→        if clean_start:
+      28→            applied = set()
+      29→        else:
+      30→            applied = set(self.loader.applied_migrations)
+      31→        f
+  [... truncated ...]
+- [Grep Result after action #11]
+  Found 12 files
+  tests/schema/tests.py
+  tests/migrations/test_operations.py
+  tests/migrations/test_executor.py
+  tests/cache/tests.py
+  docs/ref/schema-editor.txt
+  docs/ref/migration-operations.txt
+  django/db/backends/sqlite3/features.py
+  django/db/backends/postgresql/features.py
+  django/db/backends/base/schema.py
+  django/db/backends/base/operations.py
+  django/db/backends/base/features.py
+  django/core/management/commands/createcachetable.py
+- [Grep Result after action #13]
+  94-        self.collect_sql = collect_sql
+  95-        if self.collect_sql:
+  96-            self.collected_sql = []
+  97:        self.atomic_migration = self.connection.features.can_rollback_ddl and atomic
+  98-
+  99-    # State-managing methods
+  100-
+  --
+  118-        """Execute the given SQL statement, with optional parameters."""
+  119-        # Don't perform the transactional DDL check if SQL is being collected
+  120-        # as it's not going to be executed anyway.
+  121:        if not self.collect_sql and self.connection.in_atomic_block and not self.connection.features.can_rollback_ddl:
+  122-            raise TransactionManagementError(
+  123-                "Executing DDL statements while in a transaction on databases "
+  124-                "that can't perform a rollback is prohibited."
+- [Grep Result after action #15]
+  Found 7 files
+  tests/user_commands/tests.py
+  tests/user_commands/management/commands/transaction.py
+  docs/howto/custom-management-commands.txt
+  django/core/management/commands/sqlsequencereset.py
+  django/core/management/commands/sqlmigrate.py
+  django/core/management/commands/sqlflush.py
+  django/core/management/base.py
+- [Grep Result after action #17]
+  190-        A short description of the command, which will be printed in
+  191-        help messages.
+  192-
+  193:    ``output_transaction``
+  194-        A boolean indicating whether the command outputs SQL
+  195-        statements; if ``True``, the output will automatically be
+  196-        wrapped with ``BEGIN;`` and ``COMMIT;``. Default value is
+  --
+  218-
+  219-    # Configuration shortcuts that alter various logic.
+  220-    _called_from_command_line = False
+  221:    output_transaction = False  # Whether to wrap the output in a "BEGIN; COMMIT;"
+  222-    requires_migrations_checks = False
+  223-    requires_system_checks = True
+  224-    # Arguments, common to all commands, which aren't defined by the argument
+  --
+  363-            self.check_migrations()
+  364-        output = self.handle(*args, **options)
+  365-        if output:
+  366:            if self.output_transaction:
+  367-                connection = connections[options.get('database', DEFAULT_DB_ALIAS)]
+  368-                output = '%s\n%s\n%s' % (
+  369-                    self.style.SQL_KEYWORD(connection.ops.start_transaction_sql()),
+- [Glob Result after action #21]
+  ./swebench_9_15/testbed/tests/migrations/test_commands.py
+- [Grep Result after action #23]
+  524:    def test_sqlmigrate_forwards(self):
+  562:    def test_sqlmigrate_backwards(self):
+  607:    def test_sqlmigrate_for_non_atomic_migration(self):
+  1580:    def test_sqlmigrate_nonexistent_app_label(self):
+  1584:    def test_sqlmigrate_app_name_specified_as_label(self):
+- [Read Result after action #25]
+     607→    def test_sqlmigrate_for_non_atomic_migration(self):
+     608→        """
+     609→        Transaction wrappers aren't shown for non-atomic migrations.
+     610→        """
+     611→        out = io.StringIO()
+     612→        call_command("sqlmigrate", "migrations", "0001", stdout=out)
+     613→        output = out.getvalue().lower()
+     614→        queries = [q.strip() for q in output.splitlines()]
+     615→        if connection.ops.start_transaction_sql():
+     616→            self.assertNotIn(connection.ops.start_transaction_sql().lower(), queries)
+     617→        self.assertNotIn(connection.ops.end_transaction_sql().lower(), queries)
+     618→
+     619→    @override_settings(
+     620→        INSTALLED_APPS=[
+     621→            "migrations.migrations_test_apps.migrated_app",
+     622→            "migrations.migrations_test_apps.migrated_unapplied_app",
+     623→            "migrations.migrations_test_apps.unmigrated_app",
+     624→        ],
+     625→    )
+     626→    def test_regression_22823_unmigrated_fk_to_migrated_model(self):
+     627→        """
+     628→        Assuming you have 3 apps, `A`, `B`, and `C`, such that:
+     629→
+     630→        * `A` has migrations
+     631→        * `B` has a migration
+  [... truncated ...]
+- [Read Result after action #27]
+     524→    def test_sqlmigrate_forwards(self):
+     525→        """
+     526→        sqlmigrate outputs forward looking SQL.
+     527→        """
+     528→        out = io.StringIO()
+     529→        call_command("sqlmigrate", "migrations", "0001", stdout=out)
+     530→        output = out.getvalue().lower()
+     531→
+     532→        index_tx_start = output.find(connection.ops.start_transaction_sql().lower())
+     533→        index_op_desc_author = output.find('-- create model author')
+     534→        index_create_table = output.find('create table')
+     535→        index_op_desc_tribble = output.find('-- create model tribble')
+     536→        index_op_desc_unique_together = output.find('-- alter unique_together')
+     537→        index_tx_end = output.find(connection.ops.end_transaction_sql().lower())
+     538→
+     539→        self.assertGreater(index_tx_start, -1, "Transaction start not found")
+     540→        self.assertGreater(
+     541→            index_op_desc_author, index_tx_start,
+     542→            "Operation description (author) not found or found before transaction start"
+     543→        )
+     544→        self.assertGreater(
+     545→            index_create_table, index_op_desc_author,
+     546→
+  [... truncated ...]
+- [Read Result after action #29]
+       1→import datetime
+       2→import importlib
+       3→import io
+       4→import os
+       5→import sys
+       6→from unittest import mock
+       7→
+       8→from django.apps import apps
+       9→from django.core.management import CommandError, call_command
+      10→from django.db import (
+      11→    ConnectionHandler, DatabaseError, connection, connections, models,
+      12→)
+      13→from django.db.backends.base.schema import BaseDatabaseSchemaEditor
+      14→from django.db.backends.utils import truncate_name
+      15→from django.db.migrations.exceptions import InconsistentMigrationHistory
+      16→from django.db.migrations.recorder import MigrationRecorder
+      17→from django.test import TestCase, override_settings
+      18→
+      19→from .models import UnicodeModel, UnserializableModel
+      20→from .routers import TestRouter
+      21→from .test_base import MigrationTestBase
+      22→
+      23→
+      24→class MigrateTests(MigrationTestBase):
+      25→    """
+      26→    Tests running the migrate command.
+      27→    """
+      28→    databases = {'default', 'other'}
+      29→
+      30→    @override_settings(MIGRATION_MODULES={"migrations": "migrations.test_migrations"})
+      31→    def test_migrate(self):
+      32→        """
+
+  [... truncated ...]
+- [Read Result after action #31]
+     500→            '[ ]  mutate_state_b.0001_initial\n'
+     501→            '[ ]  mutate_state_b.0002_add_field\n',
+     502→            out.getvalue()
+     503→        )
+     504→        # Multiple apps: args order shouldn't matter (the same result is
+     505→        # expected as above).
+     506→        out = io.StringIO()
+     507→        call_command('showmigrations', 'author_app', 'mutate_state_b', format='plan', stdout=out)
+     508→        self.assertEqual(
+     509→            '[ ]  author_app.0001_initial\n'
+     510→            '[ ]  book_app.0001_initial\n'
+     511→            '[ ]  author_app.0002_alter_id\n'
+     512→            '[ ]  mutate_state_b.0001_initial\n'
+     513→            '[ ]  mutate_state_b.0002_add_field\n',
+     514→            out.getvalue()
+     515→        )
+     516→
+     517→    @override_settings(INSTALLED_APPS=['migrations.migrations_test_apps.unmigrated_app'])
+     518→    def test_showmigrations_plan_app_label_no_migrations(self):
+     519→        out = io.StringIO()
+     520→        call_command('showmigrations', 'unmigrated_app', format='plan', stdout=out, no_color=True)
+     521→        self.assertEqual('(no migrations)\n', out.getvalue())
+     522→
+     523→    @override_settings
+  [... truncated ...]
+- [Test Output after action #35]
+  Exit code 1
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Test Output after action #37]
+  Exit code 1
+  Traceback (most recent call last):
+    File "tests/runtests.py", line 13, in <module>
+      import django
+  ImportError: No module named django
+- [Test Output after action #43]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Creating test database for alias 'default'...
+  Creating test database for alias 'other'...
+  .
+  ----------------------------------------------------------------------
+  Ran 1 test in 0.011s
+
+  OK
+  Destroying test database for alias 'default'...
+  Destroying test database for alias 'other'...
+- [Test Output after action #45]
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Creating test database for alias 'default'...
+  Creating test database for alias 'other'...
+  ...
+  ----------------------------------------------------------------------
+  Ran 3 tests in 0.051s
+
+  OK
+  Destroying test database for alias 'default'...
+  Destroying test database for alias 'other'...
+- [Test Output after action #47]
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Creating test database for alias 'default'...
+  Creating test database for alias 'other'...
+  ..............................
+  ----------------------------------------------------------------------
+  Ran 30 tests in 0.455s
+
+  OK
+  Destroying test database for alias 'default'...
+  Destroying test database for alias 'other'...
+  Testing against Django installed in './swebench_9_15/testbed/django'
+  System check identified no issues (0 silenced).
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/core/management/commands/sqlmigrate.py
+  Tool: Edit action #20
+  old_text_sha256: 184536505c93bb908cd18d10b95ac7dc23f83ae0e9c976ac3791e4bba0826f3b
+  new_text_sha256: 7d60a95e24a383730f672d1721fbdc297ed62a7603d8dfb5c26948d53c578867
+- tests/migrations/test_commands.py
+  Tool: Edit action #33
+  old_text_sha256: 2493d36037cdb61fdff7c649365144b781b1036b3e6692ab8787f1eded0badc9
+  new_text_sha256: 34b721c1c1925a0aefc815f99f3479280b28d9818572f5ad71457b967d94a7cd
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.

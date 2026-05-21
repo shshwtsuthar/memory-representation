@@ -1,0 +1,213 @@
+STRIPPED RAW CLAUDE CODE TRAJECTORY
+This transcript was rendered from original raw JSONL using the canonical ADP strip manifest.
+
+[RAW line 3 USER]
+PRIOR ISSUE METADATA
+repo: psf/requests
+instance_id: psf__requests-1963
+base_commit: 110048f9837f8441ea536804115e80b69f400277
+problem_statement:
+`Session.resolve_redirects` copies the original request for all subsequent requests, can cause incorrect method selection
+Consider the following redirection chain:
+
+```
+POST /do_something HTTP/1.1
+Host: server.example.com
+...
+
+HTTP/1.1 303 See Other
+Location: /new_thing_1513
+
+GET /new_thing_1513
+Host: server.example.com
+...
+
+HTTP/1.1 307 Temporary Redirect
+Location: //failover.example.com/new_thing_1513
+```
+
+The intermediate 303 See Other has caused the POST to be converted to
+a GET.  The subsequent 307 should preserve the GET.  However, because
+`Session.resolve_redirects` starts each iteration by copying the _original_
+request object, Requests will issue a POST!
+[RAW line 11 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed",
+  "pattern": "def resolve_redirects"
+}
+[RAW line 30 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed",
+  "pattern": "def resolve_redirects"
+}
+[RAW line 31 TOOL RESULT toolu_016Sr7xUxQwtkYJeEATALzCB]
+Found 1 file
+testbed/requests/sessions.py
+[RAW line 33 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/requests/sessions.py"
+}
+[RAW line 34 TOOL RESULT toolu_0137J9c2MUNBNVCawCy88fzz]
+     1→# -*- coding: utf-8 -*-
+     2→
+     3→"""
+     4→requests.session
+     5→~~~~~~~~~~~~~~~~
+     6→
+     7→This module provides a Session object to manage and persist settings across
+     8→requests (cookies, auth, proxies).
+     9→
+    10→"""
+    11→import os
+    12→from collections import Mapping
+    13→from datetime import datetime
+    14→
+    15→from .compat import cookielib, OrderedDict, urljoin, urlparse, builtin_str
+    16→from .cookies import (
+    17→    cookiejar_from_dict, extract_cookies_to_jar, RequestsCookieJar, merge_cookies)
+    18→from .models import Request, PreparedRequest, DEFAULT_REDIRECT_LIMIT
+    19→from .hooks import default_hooks, dispatch_hook
+    20→from .utils import to_key_val_list, default_headers, to_native_string
+    21→from .exceptions import TooManyRedirects, InvalidSchema
+    22→from .structures import CaseInsensitiveDict
+    23→
+    24→from .adapters import HTTPAdapter
+    25→
+    26→from .utils import requote_uri, get_environ_proxies, get_netrc_auth
+    27→
+    28→from .status_codes import codes
+    29→
+    30→# formerly defined here, reexposed here for backward compatibility
+    31→from .models import REDIRECT_STATI
+    32→
+    33→
+    34→def merge_setting(request_setting, session_setting, dict_class=OrderedDict):
+    35→    """
+    36→    Determines appropriate setting for a given request, taking into account the
+    37→    explicit setting on that request, and the setting in the session. If a
+    38→    setting is a dictionary, they will be merged together using `dict_class`
+    39→    """
+    40→
+    41→    if session_setting is None:
+    42→        return request_setting
+    43→
+    44→    if request_setting is None:
+    45→        return session_setting
+    46→
+    47→    # Bypass if not a dictionary (e.g. verify)
+    48→    if not (
+    49→            isinstance(session_setting, Mapping) and
+    50→            isinstance(request_setting, Mapping)
+    51→    ):
+    52→        return request_setting
+    53→
+    54→
+[... truncated ...]
+[RAW line 45 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/requests/sessions.py",
+  "new_text_sha256": "f1098ab536953af37782c077af1ee6ca69a7dd80258a585bc322c5cbebdedf0b",
+  "old_text_sha256": "0ceda33d637bc8ed97cd85fac84ca3dbae3b4bf18d651c95971750c5b32295bb"
+}
+[RAW line 49 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/requests/sessions.py",
+  "limit": 50,
+  "offset": 103
+}
+[RAW line 50 TOOL RESULT toolu_01FsQbSJGNtcxfA3srpuwb5D]
+   103→            method = prepared_request.method
+   104→
+   105→            # Handle redirection without scheme (see: RFC 1808 Section 4)
+   106→            if url.startswith('//'):
+   107→                parsed_rurl = urlparse(resp.url)
+   108→                url = '%s:%s' % (parsed_rurl.scheme, url)
+   109→
+   110→            # The scheme should be lower case...
+   111→            parsed = urlparse(url)
+   112→            url = parsed.geturl()
+   113→
+   114→            # Facilitate non-RFC2616-compliant 'location' headers
+   115→            # (e.g. '/path/to/resource' instead of 'http://domain.tld/path/to/resource')
+   116→            # Compliant with RFC3986, we percent encode the url.
+   117→            if not urlparse(url).netloc:
+   118→                url = urljoin(resp.url, requote_uri(url))
+   119→            else:
+   120→                url = requote_uri(url)
+   121→
+   122→            prepared_request.url = to_native_string(url)
+   123→
+   124→            # http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.3.4
+   125→            if (resp.status_code == codes.see_other and
+   126→                    method != 'HEAD'):
+   127→                method = 'GET'
+   128→
+   129→            # Do what the browsers do, despite standards...
+   130→            # First, turn 302s into GETs.
+   131→            if resp.status_code == codes.found and method != 'HEAD':
+   132→                method = 'GET'
+   133→
+   134→            # Second, if a POST is responded to with a 301, turn it into a GET.
+   135→            # This bizarre behaviour is explained in Issue 1704.
+   136→            if resp.status_code == codes.moved and method == 'POST':
+   137→                method = 'GET'
+   138→
+   139→            prepared_request.method = method
+   140→
+   141→            # https://github.com/kennethreitz/requests/issues/1084
+   142→            if resp.status_code not in (codes.temporary, codes.resume):
+   143→                if 'Content-Length' in prepared_reques
+[... truncated ...]
+[RAW line 57 TOOL Bash]
+cd testbed && python test_issue.py
+[RAW line 58 TOOL RESULT toolu_01AtYki6NrCEAuFZALRd7fQ7]
+Exit code 1
+  File "test_issue.py", line 76
+    print(f"\n1. Initial request: {session.sent_requests[0]['method']} {session.sent_requests[0]['url']}")
+                                                                                                        ^
+SyntaxError: invalid syntax
+[RAW line 62 TOOL Bash]
+cd testbed && python test_issue.py
+[RAW line 63 TOOL RESULT toolu_016EmBHKExdMKN2eRsp9LKNZ]
+Testing redirect chain: POST -> 303 -> GET -> 307 -> GET
+============================================================
+
+1. Initial request: POST http://server.example.com/do_something
+   Response: 303 -> /new_thing_1513
+
+Redirects processed: 2
+
+2. Redirect request: GET http://server.example.com/new_thing_1513
+   Response: 307 -> //failover.example.com/new_thing_1513
+
+3. Redirect request: GET http://failover.example.com/new_thing_1513
+   Response: 200 (final)
+
+============================================================
+VERIFICATION:
+============================================================
+✓ First redirect after 303: GET
+✓ Second redirect after 307: GET
+
+============================================================
+SUCCESS: All redirects used the correct HTTP method!
+============================================================
+[RAW line 65 TOOL Bash]
+cd testbed && python -m pytest tests/ -xvs -k redirect 2>&1 | head -100
+[RAW line 67 TOOL Bash]
+python -m pytest testbed/tests/ -xvs -k redirect 2>&1 | head -100
+[RAW line 68 TOOL RESULT toolu_01SckdxRn2ho1tpnCsvnMQg2]
+/Applications/ADFRsuite-1.0/bin/python: No module named pytest
+[RAW line 70 TOOL Bash]
+ls testbed/tests/ | grep -i session
+[RAW line 72 TOOL Bash]
+find testbed -name "*test*.py" -type f | head -10
+[RAW line 79 TOOL Bash]
+python test_requests.py 2>&1 | head -50
+[RAW line 80 TOOL RESULT toolu_01A1bC9cBfdgWdeRi4jgG4CG]
+Traceback (most recent call last):
+  File "test_requests.py", line 13, in <module>
+    import pytest
+ImportError: No module named pytest
