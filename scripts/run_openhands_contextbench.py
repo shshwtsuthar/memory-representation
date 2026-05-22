@@ -55,6 +55,7 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -81,6 +82,23 @@ REQUIRED_ROW_FIELDS = [
     "target_base_commit",
     "target_instance_id",
     "target_repo",
+]
+FORBIDDEN_PROMPT_PATTERNS = [
+    "FAIL_TO_PASS",
+    "PASS_TO_PASS",
+    "target_fail_to_pass",
+    "target_pass_to_pass",
+    "gold_patch",
+    "test_patch",
+    "model_patch",
+    "diff --git",
+    "<system-reminder>",
+    "</system-reminder>",
+    "reasoning_content",
+    "TodoWrite",
+    "_preds.json",
+    ".claude",
+    ".token_usage",
 ]
 
 
@@ -231,15 +249,24 @@ def run_streaming(
             env=env,
             stdout=out_f,
             stderr=err_f,
+            stdin=subprocess.DEVNULL,
             text=True,
+            start_new_session=True,
         )
         try:
             exit_code = proc.wait(timeout=timeout_seconds)
         except subprocess.TimeoutExpired:
             timed_out = True
-            proc.kill()
-            exit_code = proc.wait()
             err_f.write(f"\n[orchestrator] TIMEOUT after {timeout_seconds} seconds\n")
+            err_f.flush()
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+                exit_code = proc.wait(timeout=10)
+            except Exception:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                finally:
+                    exit_code = proc.wait()
 
     return StreamingCommandResult(
         argv=argv,
@@ -344,6 +371,12 @@ def validate_prompt_file(row: dict[str, Any], repo_root: Path) -> Path:
     if row["target_instance_id"] not in text:
         raise OrchestratorError(
             f"Prompt {prompt_path} does not appear to contain target instance id {row['target_instance_id']}"
+        )
+
+    hits = [p for p in FORBIDDEN_PROMPT_PATTERNS if p in text]
+    if hits:
+        raise OrchestratorError(
+            f"Prompt {prompt_path} contains forbidden patterns: {hits}"
         )
 
     return prompt_path
@@ -453,15 +486,12 @@ def build_openhands_env(args: argparse.Namespace) -> dict[str, str]:
     return env
 
 
-def env_summary(env: dict[str, str]) -> dict[str, Any]:
-    keys = ["LLM_MODEL", "LLM_BASE_URL", "LLM_API_KEY", "OPENHANDS_SUPPRESS_BANNER"]
-    summary: dict[str, Any] = {}
-    for k in keys:
-        if k == "LLM_API_KEY":
-            summary[k + "_PRESENT"] = bool(env.get(k))
-        else:
-            summary[k] = env.get(k, "")
-    return summary
+def env_overrides_for_metadata(env: dict[str, str]) -> dict[str, str]:
+    return {
+        "LLM_MODEL": env.get("LLM_MODEL", ""),
+        "LLM_BASE_URL": env.get("LLM_BASE_URL", ""),
+        "LLM_API_KEY": "<redacted>" if env.get("LLM_API_KEY") else "",
+    }
 
 
 def collect_patch(workspace_dir: Path, patch_path: Path) -> str:
@@ -617,13 +647,15 @@ def execute_one(row: dict[str, Any], args: argparse.Namespace, repo_root: Path, 
             str(prompt_dst.resolve()),
             "--override-with-envs",
         ]
+        if args.always_approve:
+            openhands_argv.append("--always-approve")
         oh_env = build_openhands_env(args)
         write_json(
             command_path,
             {
                 "argv": openhands_argv,
                 "cwd": str(workspace_dir),
-                "env_summary": env_summary(oh_env),
+                "env_overrides": env_overrides_for_metadata(oh_env),
             },
         )
 
@@ -833,6 +865,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=None,
         help="Default: true for smoke, false for full.",
+    )
+    parser.add_argument(
+        "--always-approve",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Pass --always-approve to OpenHands. Default true for non-interactive benchmark runs.",
     )
     return parser.parse_args(argv)
 
