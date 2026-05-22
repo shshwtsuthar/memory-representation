@@ -1,0 +1,64 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: no_memory
+
+No prior context is provided for this run.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: django/django
+Base commit: 67e1afb4a8478af6725e45a9fdcd2a511b2eb005
+Instance ID: django__django-28211
+
+CURRENT_ISSUE
+Inefficient query produced when using OR'ed Q objects
+
+Description
+(last modified by
+Tom Forbes
+)
+When using OR'ed Q objects in a
+.filter()
+call Django could be more intelligent about the query it produces.
+For example, the following two queries both produce
+LEFT OUTER JOIN
+:
+SomeModel.objects.filter(Q(related_objects__field=1) | Q(related_objects__other_field=1)
+SomeModel.objects.filter(Q(related_objects__field=1) | Q())
+In the case of the second query it could be reduced to a
+INNER JOIN
+as the
+OR
+is redundant and it is functionally the same as a
+.filter(related_objects__field=1)
+.
+It is also quite a common pattern to do:
+filters = Q()
+if condition:
+   filters |= Q(x=1)
+if other_condition:
+   filters |= Q(y=2)
+And with the current implementation it will always produce a query that assumes
+filters
+is a valid
+OR
+. Django should/could be more intelligent and detect if there is only one
+OR
+condition, and reduce it.
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

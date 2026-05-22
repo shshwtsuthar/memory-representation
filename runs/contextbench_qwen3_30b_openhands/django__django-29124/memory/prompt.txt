@@ -1,0 +1,611 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: memory
+
+The following is deterministic extractive memory from an officially related prior issue.
+
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 69a597dd-74db-40d8-b566-28d04f93bb85
+- repo: django/django
+- instance_id: django__django-12708
+- base_commit: 447980e72ac01da1594dd3373a03ba40b7ee6f80
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Migration crashes deleting an index_together if there is a unique_together on the same fields
+Description
+
+Happens with Django 1.11.10
+Steps to reproduce:
+1) Create models with 2 fields, add 2 same fields to unique_together and to index_together
+2) Delete index_together -> Fail
+It will fail at django/db/backends/base/schema.py, line 378, in _delete_composed_index(), ValueError: Found wrong number (2) of constraints for as this one will find two constraints, the _uniq and the _idx one. No way to get out of this...
+The worst in my case is that happened as I wanted to refactor my code to use the "new" (Dj 1.11) Options.indexes feature. I am actually not deleting the index, just the way it is declared in my code.
+I think there are 2 different points here:
+1) The deletion of index_together should be possible alone or made coherent (migrations side?) with unique_together
+2) Moving the declaration of an index should not result in an index re-creation
+
+FILES INSPECTED
+---------------
+- django/db/backends/base/schema.py [Read: 4, Grep: 2]
+
+SEARCH ANCHORS
+--------------
+- [5] Grep pattern='def _delete_composed_index' path='django/db/backends/base/schema.py'
+- [9] Grep pattern='def _constraint_names' path='django/db/backends/base/schema.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction]
+- [diagnostic] ls -la testbed 2>&1 | head -20
+- [test] python test_issue.py
+- [other/reproduction] python --version
+- [other/reproduction] python3 --version
+- [test] python3 test_issue.py
+- [test] python3 test_issue.py
+- [test] python3 test_issue.py
+- [test] python3 tests/runtests.py schema --settings=test_sqlite -v 2 2>&1 | head -100
+- [test] python3 tests/runtests.py schema --settings=test_sqlite -v 0
+- [test] python3 tests/runtests.py migrations.test_operations --settings=test_sqlite -v 0
+- [test] python3 test_migration_scenario.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- FAILED with error: Found wrong number (2) of constraints for test_app_testmodel(field1, field2)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #3]
+     350→    def add_index(self, model, index):
+     351→        """Add an index on a model."""
+     352→        self.execute(index.create_sql(model, self), params=None)
+     353→
+     354→    def remove_index(self, model, index):
+     355→        """Remove an index from a model."""
+     356→        self.execute(index.remove_sql(model, self))
+     357→
+     358→    def add_constraint(self, model, constraint):
+     359→        """Add a constraint to a model."""
+     360→        sql = constraint.create_sql(model, self)
+     361→        if sql:
+     362→            self.execute(sql)
+     363→
+     364→    def remove_constraint(self, model, constraint):
+     365→        """Remove a constraint from a model."""
+     366→        sql = constraint.remove_sql(model, self)
+     367→        if sql:
+     368→            self.execute(sql)
+     369→
+     370→    def alter_unique_together(self, model, old_unique_together, new_unique_together):
+     371→        """
+     372→        Deal with a model changing its unique_together. The input
+     373→        unique_togethers must be doubly-nested, not the single-nested
+     374→        ["foo", "bar"] format.
+     375→        """
+     376→        olds = {tuple(fields) for fields in old_unique_together}
+
+  [... truncated ...]
+- [Grep Result after action #5]
+  402:    def _delete_composed_index(self, model, fields, constraint_kwargs, sql):
+- [Read Result after action #7]
+     402→    def _delete_composed_index(self, model, fields, constraint_kwargs, sql):
+     403→        meta_constraint_names = {constraint.name for constraint in model._meta.constraints}
+     404→        meta_index_names = {constraint.name for constraint in model._meta.indexes}
+     405→        columns = [model._meta.get_field(field).column for field in fields]
+     406→        constraint_names = self._constraint_names(
+     407→            model, columns, exclude=meta_constraint_names | meta_index_names,
+     408→            **constraint_kwargs
+     409→        )
+     410→        if len(constraint_names) != 1:
+     411→            raise ValueError("Found wrong number (%s) of constraints for %s(%s)" % (
+     412→                len(constraint_names),
+     413→                model._meta.db_table,
+     414→                ", ".join(columns),
+     415→            ))
+     416→        self.execute(self._delete_constraint_sql(sql, model, constraint_names[0]))
+     417→
+     418→    def alter_db_table(self, model, old_db_table, new_db_table):
+     419→        """Rename the table a model points to."""
+     420→        if (old_db_table == new_db_table or
+     421→            (self.connection.features.ignores_table_name_case and
+
+  [... truncated ...]
+- [Grep Result after action #9]
+  1142:    def _constraint_names(self, model, column_names=None, unique=None,
+- [Read Result after action #11]
+    1142→    def _constraint_names(self, model, column_names=None, unique=None,
+    1143→                          primary_key=None, index=None, foreign_key=None,
+    1144→                          check=None, type_=None, exclude=None):
+    1145→        """Return all constraint names matching the columns and conditions."""
+    1146→        if column_names is not None:
+    1147→            column_names = [
+    1148→                self.connection.introspection.identifier_converter(name)
+    1149→                for name in column_names
+    1150→            ]
+    1151→        with self.connection.cursor() as cursor:
+    1152→            constraints = self.connection.introspection.get_constraints(cursor, model._meta.db_table)
+    1153→        result = []
+    1154→        for name, infodict in constraints.items():
+    1155→            if column_names is None or column_names == infodict['columns']:
+    1156→                if unique is not None and infodict['unique'] != unique:
+    1157→                    continue
+    1158→                if primary_key is not None and infodict['primary_key'] != primary_key:
+    1159→                    continue
+    1160→                if index is not None and infodict['index'] != index:
+
+  [... truncated ...]
+- [Test Output after action #13]
+  Exit code 1
+    File "test_issue.py", line 60
+      print(f"\nConstraints after creation:")
+                                           ^
+  SyntaxError: invalid syntax
+- [Test Output after action #19]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+  Starting test...
+  Model created with both unique_together and index_together
+
+  Constraints after creation:
+    test_app_testmodel_field1_field2_f0eaf8ac_idx: unique=False, index=True, columns=['field1', 'field2']
+    test_app_testmodel_field1_field2_f0eaf8ac_uniq: unique=True, index=True, columns=['field1', 'field2']
+    __primary__: unique=False, index=False, columns=['id']
+
+  Attempting to remove index_together...
+  FAILED with error: Found wrong number (2) of constraints for test_app_testmodel(field1, field2)
+- [Read Result after action #21]
+     370→    def alter_unique_together(self, model, old_unique_together, new_unique_together):
+     371→        """
+     372→        Deal with a model changing its unique_together. The input
+     373→        unique_togethers must be doubly-nested, not the single-nested
+     374→        ["foo", "bar"] format.
+     375→        """
+     376→        olds = {tuple(fields) for fields in old_unique_together}
+     377→        news = {tuple(fields) for fields in new_unique_together}
+     378→        # Deleted uniques
+     379→        for fields in olds.difference(news):
+     380→            self._delete_composed_index(model, fields, {'unique': True}, self.sql_delete_unique)
+     381→        # Created uniques
+     382→        for fields in news.difference(olds):
+     383→            columns = [model._meta.get_field(field).column for field in fields]
+     384→            self.execute(self._create_unique_sql(model, columns))
+     385→
+     386→    def alter_index_together(self, model, old_index_together, new_index_together):
+     387→        """
+     388→        Deal with a model changing its index_together. The input
+     389→        index_togethers must be doubly-nested, not the single-nested
+     390→        ["foo", "bar"] format.
+
+  [... truncated ...]
+- [Test Output after action #24]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+  Starting test...
+  Model created with both unique_together and index_together
+
+  Constraints after creation:
+    test_app_testmodel_field1_field2_f0eaf8ac_idx: unique=False, index=True, columns=['field1', 'field2']
+    test_app_testmodel_field1_field2_f0eaf8ac_uniq: unique=True, index=True, columns=['field1', 'field2']
+    __primary__: unique=False, index=False, columns=['id']
+
+  Attempting to remove index_together...
+  FAILED with error: Found wrong number (2) of constraints for test_app_testmodel(field1, field2)
+- [Test Output after action #26]
+  Starting test...
+  Model created with both unique_together and index_together
+
+  Constraints after creation:
+    test_app_testmodel_field1_field2_f0eaf8ac_idx: unique=False, index=True, columns=['field1', 'field2']
+    test_app_testmodel_field1_field2_f0eaf8ac_uniq: unique=True, index=True, columns=['field1', 'field2']
+    __primary__: unique=False, index=False, columns=['id']
+
+  Attempting to remove index_together...
+  SUCCESS: index_together removed without error
+
+  Constraints after removing index_together:
+    test_app_testmodel_field1_field2_f0eaf8ac_uniq: unique=True, index=True, columns=['field1', 'field2']
+    __primary__: unique=False, index=False, columns=['id']
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #28]
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+  test_extra_args (schema.test_logging.SchemaLoggerTests) ... ok
+  test_add_binaryfield_mediumblob (schema.tests.SchemaTests)
+  Test adding a custom-sized binary field on MySQL (#24846). ... skipped 'MySQL specific'
+  test_add_datefield_and_datetimefield_use_effective_default (schema.tests.SchemaTests)
+  effective_default() should be used for DateField, DateTimeField, and ... ok
+  test_add_field (schema.tests.SchemaTests)
+  Tests adding fields to models ... ok
+  test_add_field_binary (schema.tests.SchemaTests)
+  Tests binary fields get a sane default (#22851) ... ok
+  test_add_field_default_dropped (schema.tests.SchemaTests) ... ok
+  test_add_field_default_transform (schema.tests.SchemaTests)
+  T
+  [... truncated ...]
+- [Test Output after action #30]
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ----------------------------------------------------------------------
+  Ran 131 tests in 0.564s
+
+  OK (skipped=24)
+- [Test Output after action #32]
+  System check identified no issues (0 silenced).
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ----------------------------------------------------------------------
+  Ran 101 tests in 0.677s
+
+  OK
+- [Test Output after action #35]
+  Testing migration scenario from issue #12708...
+
+  1. Creating model with both unique_together and index_together...
+
+  Constraints after model creation:
+    test_app_testmodel_field1_field2_f0eaf8ac_idx: unique=False, index=True, columns=['field1', 'field2']
+    test_app_testmodel_field1_field2_f0eaf8ac_uniq: unique=True, index=True, columns=['field1', 'field2']
+
+  2. Removing index_together via migration operation...
+  Migration operation approach raised: type object 'TestModel' has no attribute '_state'
+  Trying direct alter_index_together method...
+  SUCCESS: index_together removed via alter_index_together
+
+  Constraints after removing index_together:
+    test_app_testmodel_field1_field2_f0eaf8ac_uniq: unique=True, index=True, columns=['field1', 'field2']
+
+  ✓ Verification passed: unique constraint remains, regular index removed
+
+  Test completed successfully!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeErr
+  [... truncated ...]
+- [Test Output after action #38]
+  Testing reverse scenario: removing unique_together when index_together exists...
+
+  1. Creating model with both unique_together and index_together...
+
+  Constraints after model creation:
+    test_app_testmodel_field1_field2_f0eaf8ac_idx: unique=False, index=True, columns=['field1', 'field2']
+    test_app_testmodel_field1_field2_f0eaf8ac_uniq: unique=True, index=True, columns=['field1', 'field2']
+
+  2. Removing unique_together...
+  SUCCESS: unique_together removed
+
+  Constraints after removing unique_together:
+    test_app_testmodel_field1_field2_f0eaf8ac_idx: unique=False, index=True, columns=['field1', 'field2']
+
+  ✓ Verification passed: regular index remains, unique constraint removed
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/backends/base/schema.py
+  Tool: Edit action #23
+  old_text_sha256: aa9d9b91a08e08281f16444a7306748e503168aac2617687189a503ba4379d08
+  new_text_sha256: 541e40084920a519a5d9ce63486e040cb1f819f4c1e0a29c1fff3a516cb03594
+- test_migration_scenario.py
+  Tool: Write action #34
+  new_text_sha256: 037a2091463ccec0403b4d406f36c8ef92c5600e6190c44bf18476d8ec8d10df
+- test_reverse_scenario.py
+  Tool: Write action #37
+  new_text_sha256: df6e7dedd9e00ba36ac0b39e56f8d18ee904af472e2d91bf67546a9db2515968
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: django/django
+Base commit: 55b6f7af0c6ab7f25818445cfbb9e18ddafedcc9
+Instance ID: django__django-29124
+
+CURRENT_ISSUE
+Generated migration orders RemoveField and AlterUniqueTogether incorrectly, causing FieldDoesNotExist
+
+Description
+Removing a field and its corresponding
+unique_together
+entry results in a
+FieldDoesNotExist
+exception when creating/applying the migration.
+This affects Django master + v1.11.10, and both the SQLite and MySQL backends (others not tested).
+(See also
+#29123
+which also only reproduces when
+unique_together
+is used)
+STR:
+Git clone
+​
+https://github.com/edmorley/django-migration-remove-field-testcase
+pip install https://github.com/django/django/archive/master.zip
+./manage.py migrate
+cp testapp/models_new.py testapp/models.py
+./manage.py makemigrations --name broken_migration
+./manage.py migrate
+Expected:
+New migration is created/applied successfully, which converts from the
+​
+original model
+to the
+​
+new model
+.
+Actual:
+The new
+0002_broken_migration.py
+migration incorrectly lists the
+RemoveField
+operation before the
+AlterUniqueTogether
+operation...
+operations
+=
+[
+migrations
+.
+RemoveField
+(
+model_name
+=
+'push'
+,
+name
+=
+'foo'
+,
+),
+migrations
+.
+AlterUniqueTogether
+(
+name
+=
+'push'
+,
+unique_together
+=
+{(
+'repository'
+,
+'revision'
+)},
+),
+]
+Which results in an exception at step 6...
+$
+./manage.py
+migrate
+Operations
+to
+perform:
+Apply
+all
+migrations:
+admin,
+auth,
+contenttypes,
+sessions,
+testapp
+Running
+migrations:
+Applying
+testapp.0002_broken_migration...Traceback
+(
+most
+recent
+call
+last
+)
+:
+File
+".../site-packages/django/db/models/options.py"
+,
+line
+564
+,
+in
+get_field
+return
+self.fields_map
+[
+field_name
+]
+KeyError:
+'foo'
+During
+handling
+of
+the
+above
+exception,
+another
+exception
+occurred:
+
+Traceback
+(
+most
+recent
+call
+last
+)
+:
+...
+File
+".../site-packages/django/db/backends/base/schema.py"
+,
+line
+286
+,
+in
+create_model
+columns
+=
+[
+model._meta.get_field
+(
+field
+)
+.column
+for
+field
+in
+fields
+]
+File
+".../site-packages/django/db/backends/base/schema.py"
+,
+line
+286
+,
+in
+<listcomp>
+columns
+=
+[
+model._meta.get_field
+(
+field
+)
+.column
+for
+field
+in
+fields
+]
+File
+".../site-packages/django/db/models/options.py"
+,
+line
+566
+,
+in
+get_field
+raise
+FieldDoesNotExist
+(
+"%s has no field named '%s'"
+%
+(
+self.object_name,
+field_name
+))
+django.core.exceptions.FieldDoesNotExist:
+Push
+has
+no
+field
+named
+'foo'
+Additional notes:
+If the
+('repository', 'revision')
+entry in
+unique_together
+is omitted from both the original and new models, then the bug does not occur.
+This affects both the SQLite backend and the MySQL backend (others not tested).
+At time of testing, django master was at revision
+6d794fb76212bb8a62fe2cd97cff173054e1c626
+.
+The above was using Python 3.6.2.
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

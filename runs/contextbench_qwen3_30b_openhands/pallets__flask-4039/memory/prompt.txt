@@ -1,0 +1,294 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: memory
+
+The following is deterministic extractive memory from an officially related prior issue.
+
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: ecfb4380-6998-4b87-ab7c-bf76f422d185
+- repo: pallets/flask
+- instance_id: pallets__flask-4045
+- base_commit: d8c37f43724cd9fb0870f77877b7c4c7e38a19e0
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Raise error when blueprint name contains a dot
+This is required since every dot is now significant since blueprints can be nested. An error was already added for endpoint names in 1.0, but should have been added for this as well.
+
+FILES INSPECTED
+---------------
+- src/flask/blueprints.py [Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='**/*blueprint*.py'
+- [3] Glob glob='**/*.py'
+- [5] Glob glob='testbed/src/flask/*blueprint*.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15/testbed -type f -name "*.py" | grep -i blueprint | head -20
+- [test] python test_issue.py
+- [test] python test_issue.py
+- [diagnostic] cd testbed && python -c "from flask import Blueprint; bp = Blueprint('admin.users', __name__)"
+- [test] cd testbed && python -m pytest tests/test_blueprints.py -v -k "test" 2>&1 | head -50
+- [other/reproduction] cd testbed && python3 -c "
+import sys
+sys.path.insert(0, 'src')
+from flask import Blueprint
+
+# Test 1: Blueprint with dot should raise ValueError
+try:
+    bp = Blueprint('admin.users', __name__)
+    print('FAIL: Expected ValueError')
+    sys.exit(1)
+except ValueError as e:
+    print('PASS: Got expected ValueError -', str(e))
+
+# Test 2: Blueprint without dot should work
+try:
+    bp = Blueprint('admin_users', __name__)
+    print('PASS: Valid blueprint name works')
+except Exception as e:
+    print(
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, 'testbed/src')
+from flask import Blueprint
+
+# Test 1: Blueprint with dot should raise ValueError
+try:
+    bp = Blueprint('admin.users', __name__)
+    print('FAIL: Expected ValueError')
+    sys.exit(1)
+except ValueError as e:
+    print('PASS: Got expected ValueError -', str(e))
+
+# Test 2: Blueprint without dot should work
+try:
+    bp = Blueprint('admin_users', __name__)
+    print('PASS: Valid blueprint name works')
+except Exception as e:
+    print('FAIL:
+  [... truncated ...]
+- [other/reproduction] python3 -c "
+import sys
+sys.path.insert(0, 'testbed/src')
+
+# Just test the validation logic directly
+name = 'admin.users'
+if '.' in name:
+    print('PASS: Validation logic correctly detects dot in name')
+else:
+    print('FAIL: Validation logic failed')
+    sys.exit(1)
+
+name = 'admin_users'
+if '.' in name:
+    print('FAIL: Validation logic false positive')
+    sys.exit(1)
+else:
+    print('PASS: Validation logic correctly allows valid name')
+
+print('Logic validation passed!')
+"
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: No module named markupsafe
+- Traceback (most recent call last):
+- ImportError: No module named flask
+- ImportError: cannot import name 'url_quote' from 'werkzeug.urls' (/opt/anaconda3/lib/python3.8/site-packages/werkzeug/urls.py)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #3]
+  ./swebench_9_15/calculate_session_usage.py
+- [Glob Result after action #5]
+  ./swebench_9_15/testbed/src/flask/blueprints.py
+- [Read Result after action #7]
+       1→import typing as t
+       2→from collections import defaultdict
+       3→from functools import update_wrapper
+       4→
+       5→from .scaffold import _endpoint_from_view_func
+       6→from .scaffold import _sentinel
+       7→from .scaffold import Scaffold
+       8→from .typing import AfterRequestCallable
+       9→from .typing import BeforeRequestCallable
+      10→from .typing import ErrorHandlerCallable
+      11→from .typing import TeardownCallable
+      12→from .typing import TemplateContextProcessorCallable
+      13→from .typing import TemplateFilterCallable
+      14→from .typing import TemplateGlobalCallable
+      15→from .typing import TemplateTestCallable
+      16→from .typing import URLDefaultCallable
+      17→from .typing import URLValuePreprocessorCallable
+      18→
+      19→if t.TYPE_CHECKING:
+      20→    from .app import Flask
+      21→
+      22→DeferredSetupFunction = t.Callable[["BlueprintSetupState"], t.Callable]
+      23→
+      24→
+      25→class BlueprintSetupState:
+      26→    """Temporary holder object for registering a blueprint with the
+      27→    application.  An instance of this class is created by the
+      28→    :meth:`~flask.Blueprint.make_setup_state` method and later passed
+      29→    to all regi
+  [... truncated ...]
+- [Test Output after action #10]
+  Exit code 1
+    File "test_issue.py", line 13
+      print(f"PASS: Got expected ValueError: {e}")
+                                                ^
+  SyntaxError: invalid syntax
+- [Test Output after action #12]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 5, in <module>
+      from flask import Blueprint
+    File "./swebench_9_15/testbed/src/flask/__init__.py", line 1, in <module>
+      from markupsafe import escape
+  ImportError: No module named markupsafe
+- [Diagnostic Output after action #14]
+  Exit code 1
+  Traceback (most recent call last):
+    File "<string>", line 1, in <module>
+  ImportError: No module named flask
+- [Test Output after action #16]
+  /Applications/ADFRsuite-1.0/bin/python: No module named pytest
+- [Read Result after action #23]
+     185→            import_name=import_name,
+     186→            static_folder=static_folder,
+     187→            static_url_path=static_url_path,
+     188→            template_folder=template_folder,
+     189→            root_path=root_path,
+     190→        )
+     191→        if "." in name:
+     192→            raise ValueError("Blueprint name should not contain dots")
+     193→        self.name = name
+     194→        self.url_prefix = url_prefix
+
+
+SOURCE EDIT EVIDENCE
+--------------------
+- src/flask/blueprints.py
+  Tool: Edit action #9
+  old_text_sha256: 52d9984887afef9393611d9cb02a1a9cd6dc20d68ba55c5421fe7ae6bff0a712
+  new_text_sha256: aca49969cb8eaafcddad605b6dee6a0bebc0691eea3d88c070736a75f24a9242
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: pallets/flask
+Base commit: d8c37f43724cd9fb0870f77877b7c4c7e38a19e0
+Instance ID: pallets__flask-4039
+
+CURRENT_ISSUE
+Flask 2.0.0 Error Handler not called when Blueprint Name Contains a Period
+When you have a blueprint, and it's name contains a `.` and it has error handlers registered, they are never called.
+
+We have been using blueprints to help organize our application, and we have used `.` to help namespace the blueprint names. And we have registered error handlers on the blueprints. However, when an error occurs, they are never called.
+
+Below is a simple example where you might have an app that has a UI and an API, and for UI errors you may have a custom error view, and for API errors you may want to return JSON.
+
+```
+from flask import Blueprint, Flask, jsonify
+
+app = Flask(__name__)
+ui = Blueprint("app.ui", __name__, url_prefix="/ui")
+api = Blueprint("app.api", __name__, url_prefix="/api")
+
+
+@ui.errorhandler(Exception)
+def ui_error_handler(error):
+    print("ui error handler called")
+    return str(error)
+
+
+@ui.get("/")
+def ui_index():
+    print("ui index called")
+    raise Exception("this is an unhandled exception from the ui")
+
+
+@api.errorhandler(Exception)
+def api_error_handler(error):
+    print("api error handler called")
+    return jsonify(error=str(error))
+
+
+@api.get("/")
+def api_index():
+    print("api index called")
+    raise Exception("this is an unhandled exception from the api")
+
+
+app.register_blueprint(ui)
+app.register_blueprint(api)
+```
+
+Then when you run and do a get on one of the index endpoints you get:
+
+```
+ * Environment: production
+   WARNING: This is a development server. Do not use it in a production deployment.
+   Use a production WSGI server instead.
+ * Debug mode: off
+ * Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)
+api index called
+[2021-05-13 13:14:48,849] ERROR in app: Exception on /api/ [GET]
+Traceback (most recent call last):
+  File "/lib/python3.9/site-packages/flask/app.py", line 2051, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/lib/python3.9/site-packages/flask/app.py", line 1501, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/lib/python3.9/site-packages/flask/app.py", line 1499, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/lib/python3.9/site-packages/flask/app.py", line 1485, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**req.view_args)
+  File "app.py", line 29, in api_index
+    raise Exception("this is an unhandled exception from the api")
+Exception: this is an unhandled exception from the api
+127.0.0.1 - - [13/May/2021 13:14:48] "GET /api/ HTTP/1.1" 500 -
+```
+
+You can see the `api index called` printed, but not the `api error handler called` printed which shows the error handler is never called.
+
+Environment:
+
+- Python version: 3.9
+- Flask version: 2.0.0
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

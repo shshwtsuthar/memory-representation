@@ -1,0 +1,538 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: memory
+
+The following is deterministic extractive memory from an officially related prior issue.
+
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 240da270-4c2a-40e7-a5c0-4d744a3ae261
+- repo: sympy/sympy
+- instance_id: sympy__sympy-16792
+- base_commit: 09786a173e7a0a488f46dd6000177c23e5d24eed
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+autowrap with cython backend fails when array arguments do not appear in wrapped expr
+When using the cython backend for autowrap, it appears that the code is not correctly generated when the function in question has array arguments that do not appear in the final expression. A minimal counterexample is:
+
+```python
+from sympy.utilities.autowrap import autowrap
+from sympy import MatrixSymbol
+import numpy as np
+
+x = MatrixSymbol('x', 2, 1)
+expr = 1.0
+f = autowrap(expr, args=(x,), backend='cython')
+
+f(np.array([[1.0, 2.0]]))
+```
+
+This should of course return `1.0` but instead fails with:
+```python
+TypeError: only size-1 arrays can be converted to Python scalars
+```
+
+A little inspection reveals that this is because the corresponding C function is generated with an incorrect signature:
+
+```C
+double autofunc(double x) {
+
+   double autofunc_result;
+   autofunc_result = 1.0;
+   return autofunc_result;
+
+}
+```
+
+(`x` should be `double *`, not `double` in this case)
+
+I've found that this error won't occur so long as `expr` depends at least in part on each argument. For example this slight modification of the above counterexample works perfectly:
+
+```python
+from sympy.utilities.autowrap import autowrap
+from sympy import MatrixSymbol
+import numpy as np
+
+x = MatrixSymbol('x', 2, 1)
+# now output depends on x
+expr = x[0,0]
+f = autowrap(expr, args=(x,), backend='cython')
+
+# returns 1.0 as expected, without failure
+f(np.array([[1.0, 2.0]]))
+```
+
+This may seem like a silly issue ("why even have `x` as an argument if it doesn't appear in the expression you're trying to evaluate?"). But of course in interfacing with external libraries (e.g. for numerical integration), one often needs functions to have a pre-defined signature regardless of whether a given argument contributes to the output.
+
+I think I've identified the problem in `codegen` and will suggest a PR shortly.
+
+FILES INSPECTED
+---------------
+- sympy/utilities/autowrap.py [Read: 1]
+- sympy/utilities/codegen.py [Read: 8, Grep: 4]
+
+SEARCH ANCHORS
+--------------
+- [10] Glob path='swebench_9_15/testbed' glob='**/autowrap.py'
+- [12] Glob path='swebench_9_15/testbed' glob='**/codegen.py'
+- [18] Grep pattern='def make_routine' path='sympy/utilities/codegen.py'
+- [22] Grep pattern='class C99CodeGen' path='sympy/utilities/codegen.py'
+- [26] Grep pattern='class CCodeGen' path='sympy/utilities/codegen.py'
+- [28] Grep pattern='def routine\\(' path='sympy/utilities/codegen.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction]
+- [diagnostic] ls -la ./swebench_9_15/testbed 2>/dev/null | head -20
+- [diagnostic] find . -name "autowrap.py" -type f 2>/dev/null | head -5
+- [test] python test_issue.py
+- [other/reproduction] python --version && python3 --version
+- [test] python3 test_issue.py
+- [test] python3 test_issue.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Test Output after action #4]
+  Exit code 1
+    File "test_issue.py", line 16
+      print(f"Expression: {expr}")
+                                ^
+  SyntaxError: invalid syntax
+- [Test Output after action #8]
+  Testing autowrap with cython backend...
+
+  === Test 1: Array argument that doesn't appear in expression ===
+  Expression: 1.0
+  Arguments: x (MatrixSymbol of shape 2x1)
+  Autowrap succeeded, calling function...
+  ✗ Test 1 FAILED: TypeError: only size-1 arrays can be converted to Python scalars
+
+  === Test 2: Array argument that appears in expression ===
+  Expression: x[0, 0]
+  Arguments: x (MatrixSymbol of shape 2x1)
+  Autowrap succeeded, calling function...
+  Result: 1.0
+  ✓ Test 2 PASSED
+
+  === Done ===
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/solvers/diophantine.py:3185: SyntaxWarning: "is" with a literal. Did you mean "=="?
+    if feasible is 1:  # it's prime and k == 2
+  ./swebench_9_15/testbed/sympy/plotting/plot.py:644: SyntaxWarning: "is" with a literal. Did you mean "=="?
+    if self.xscale is 'log'
+  [... truncated ...]
+- [Glob Result after action #10]
+  ./swebench_9_15/testbed/sympy/utilities/autowrap.py
+- [Glob Result after action #12]
+  ./swebench_9_15/testbed/sympy/utilities/codegen.py
+- [Read Result after action #14]
+       1→"""Module for compiling codegen output, and wrap the binary for use in
+       2→python.
+       3→
+       4→.. note:: To use the autowrap module it must first be imported
+       5→
+       6→   >>> from sympy.utilities.autowrap import autowrap
+       7→
+       8→This module provides a common interface for different external backends, such
+       9→as f2py, fwrap, Cython, SWIG(?) etc. (Currently only f2py and Cython are
+      10→implemented) The goal is to provide access to compiled binaries of acceptable
+      11→performance with a one-button user interface, i.e.
+      12→
+      13→    >>> from sympy.abc import x,y
+      14→    >>> expr = ((x - y)**(25)).expand()
+      15→    >>> binary_callable = autowrap(expr)
+      16→    >>> binary_callable(1, 2)
+      17→    -1.0
+      18→
+      19→The callable returned from autowrap() is a binary python function, not a
+      20→SymPy object.  If it is desired to use the compiled function in symbolic
+      21→expressions, it is better to use binary_function() which returns a SymPy
+      22→Function object.  The binary callable is attached as the _imp_ attribute and
+      23→invoked when a numerical evaluation is requested with evalf(), or with
+      24→lambdify().
+      25→
+      26→
+  [... truncated ...]
+- [Read Result after action #16]
+       1→"""
+       2→module for generating C, C++, Fortran77, Fortran90, Julia, Rust
+       3→and Octave/Matlab routines that evaluate sympy expressions.
+       4→This module is work in progress.
+       5→Only the milestones with a '+' character in the list below have been completed.
+       6→
+       7→--- How is sympy.utilities.codegen different from sympy.printing.ccode? ---
+       8→
+       9→We considered the idea to extend the printing routines for sympy functions in
+      10→such a way that it prints complete compilable code, but this leads to a few
+      11→unsurmountable issues that can only be tackled with dedicated code generator:
+      12→
+      13→- For C, one needs both a code and a header file, while the printing routines
+      14→  generate just one string. This code generator can be extended to support
+      15→  .pyf files for f2py.
+      16→
+      17→- SymPy functions are not concerned with programming-technical issues, such
+      18→  as input, output and input-output arguments. Other examples are contiguous
+      19→  or non-contiguous arrays, including headers of other libraries such as gsl
+      20→  or others.
+      21→
+      22→- It is highly interesting to evaluate several sympy functions in one C
+
+  [... truncated ...]
+- [Grep Result after action #18]
+  2146:def make_routine(name, expr, argument_sequence=None,
+- [Read Result after action #20]
+    2146→def make_routine(name, expr, argument_sequence=None,
+    2147→                 global_vars=None, language="F95"):
+    2148→    """A factory that makes an appropriate Routine from an expression.
+    2149→
+    2150→    Parameters
+    2151→    ==========
+    2152→
+    2153→    name : string
+    2154→        The name of this routine in the generated code.
+    2155→
+    2156→    expr : expression or list/tuple of expressions
+    2157→        A SymPy expression that the Routine instance will represent.  If
+    2158→        given a list or tuple of expressions, the routine will be
+    2159→        considered to have multiple return values and/or output arguments.
+    2160→
+    2161→    argument_sequence : list or tuple, optional
+    2162→        List arguments for the routine in a preferred order.  If omitted,
+    2163→        the results are language dependent, for example, alphabetical order
+    2164→        or in the same order as the given expressions.
+    2165→
+    2166→    global_vars : iterable, optional
+    2167→        Sequence of global variables used by the routine.  Variables
+    2168→        listed here will not show up as function arguments.
+    2169→
+    2170→    language : string, optional
+    2171→        Specify
+  [... truncated ...]
+- [Grep Result after action #22]
+  1087:class C99CodeGen(CCodeGen):
+- [Read Result after action #24]
+    1087→class C99CodeGen(CCodeGen):
+    1088→    standard = 'C99'
+    1089→
+    1090→class FCodeGen(CodeGen):
+    1091→    """Generator for Fortran 95 code
+    1092→
+    1093→    The .write() method inherited from CodeGen will output a code file and
+    1094→    an interface file, <prefix>.f90 and <prefix>.h respectively.
+    1095→
+    1096→    """
+    1097→
+    1098→    code_extension = "f90"
+    1099→    interface_extension = "h"
+    1100→
+    1101→    def __init__(self, project='project', printer=None):
+    1102→        super(FCodeGen, self).__init__(project)
+    1103→        self.printer = printer or FCodePrinter()
+    1104→
+    1105→    def _get_header(self):
+    1106→        """Writes a common header for the generated files."""
+    1107→        code_lines = []
+    1108→        code_lines.append("!" + "*"*78 + '\n')
+    1109→        tmp = header_comment % {"version": sympy_version,
+    1110→            "project": self.project}
+    1111→        for line in tmp.splitlines():
+    1112→            code_lines.append("!*%s*\n" % line.center(76))
+    1113→        code_lines.append("!" + "*"*78 + '\n')
+    1114→        return code_lines
+    1115→
+    1116→    def _preprocessor_statements(self, prefix):
+    1117→        return []
+    1118→
+    1119→
+  [... truncated ...]
+- [Grep Result after action #26]
+  862:class CCodeGen(CodeGen):
+- [Grep Result after action #28]
+  577:    def routine(self, name, expr, argument_sequence=None, global_vars=None):
+  1319:    def routine(self, name, expr, argument_sequence, global_vars):
+  1528:    def routine(self, name, expr, argument_sequence, global_vars):
+  1764:    def routine(self, name, expr, argument_sequence, global_vars):
+- [Read Result after action #30]
+     577→    def routine(self, name, expr, argument_sequence=None, global_vars=None):
+     578→        """Creates an Routine object that is appropriate for this language.
+     579→
+     580→        This implementation is appropriate for at least C/Fortran.  Subclasses
+     581→        can override this if necessary.
+     582→
+     583→        Here, we assume at most one return value (the l-value) which must be
+     584→        scalar.  Additional outputs are OutputArguments (e.g., pointers on
+     585→        right-hand-side or pass-by-reference).  Matrices are always returned
+     586→        via OutputArguments.  If ``argument_sequence`` is None, arguments will
+     587→        be ordered alphabetically, but with all InputArguments first, and then
+     588→        OutputArgument and InOutArguments.
+     589→
+     590→        """
+     591→
+     592→        if self.cse:
+     593→            from sympy.simplify.cse_main import cse
+     594→
+     595→            if is_sequence(expr) and not isinstance(expr, (MatrixBase, MatrixExpr)):
+     596→                if not expr:
+     597→                    raise ValueError("No expression given")
+     598→                for e in expr:
+     599→                    if not e.is_Equality:
+
+  [... truncated ...]
+- [Read Result after action #32]
+     719→        if argument_sequence is not None:
+     720→            # if the user has supplied IndexedBase instances, we'll accept that
+     721→            new_sequence = []
+     722→            for arg in argument_sequence:
+     723→                if isinstance(arg, IndexedBase):
+     724→                    new_sequence.append(arg.label)
+     725→                else:
+     726→                    new_sequence.append(arg)
+     727→            argument_sequence = new_sequence
+     728→
+     729→            missing = [x for x in arg_list if x.name not in argument_sequence]
+     730→            if missing:
+     731→                msg = "Argument list didn't specify: {0} "
+     732→                msg = msg.format(", ".join([str(m.name) for m in missing]))
+     733→                raise CodeGenArgumentListError(msg, missing)
+     734→
+     735→            # create redundant arguments to produce the requested sequence
+     736→            name_arg_dict = {x.name: x for x in arg_list}
+     737→            new_args = []
+     738→            for symbol in argument_sequence:
+     739→                try:
+     740→                    new_args.append(name_arg_dict[symbol])
+     741→                except KeyError:
+     742→
+  [... truncated ...]
+- [Read Result after action #36]
+    1319→
+    1320→    """
+    1321→
+    1322→    code_extension = "jl"
+    1323→
+    1324→    def __init__(self, project='project', printer=None):
+    1325→        super(JuliaCodeGen, self).__init__(project)
+    1326→        self.printer = printer or JuliaCodePrinter()
+    1327→
+    1328→    def routine(self, name, expr, argument_sequence, global_vars):
+    1329→        """Specialized Routine creation for Julia."""
+    1330→
+    1331→        if is_sequence(expr) and not isinstance(expr, (MatrixBase, MatrixExpr)):
+    1332→            if not expr:
+    1333→                raise ValueError("No expression given")
+    1334→            expressions = Tuple(*expr)
+    1335→        else:
+    1336→            expressions = Tuple(expr)
+    1337→
+    1338→        # local variables
+    1339→        local_vars = {i.label for i in expressions.atoms(Idx)}
+    1340→
+    1341→        # global variables
+    1342→        global_vars = set() if global_vars is None else set(global_vars)
+    1343→
+    1344→        # symbols that should be arguments
+    1345→        old_symbols = expressions.free_symbols - local_vars - global_vars
+    1346→        symbols = set([])
+    1347→        for s in old_symbols:
+    1348→            if isinstance(s, Idx):
+    1349→
+  [... truncated ...]
+- [Read Result after action #41]
+    1764→
+    1765→        code_lines = self._indent_code(''.join(code_lines))
+    1766→
+    1767→        if code_lines:
+    1768→            f.write(code_lines)
+    1769→
+    1770→    dump_m.extension = code_extension
+    1771→    dump_m.__doc__ = CodeGen.dump_code.__doc__
+    1772→
+    1773→    # This list of dump functions is used by CodeGen.write to know which dump
+    1774→    # functions it has to call.
+    1775→    dump_fns = [dump_m]
+    1776→
+    1777→class RustCodeGen(CodeGen):
+    1778→    """Generator for Rust code.
+    1779→
+    1780→    The .write() method inherited from CodeGen will output a code file
+    1781→    <prefix>.rs
+    1782→
+    1783→    """
+    1784→
+    1785→    code_extension = "rs"
+    1786→
+    1787→    def __init__(self, project="project", printer=None):
+    1788→        super(RustCodeGen, self).__init__(project=project)
+    1789→        self.printer = printer or RustCodePrinter()
+    1790→
+    1791→    def routine(self, name, expr, argument_sequence, global_vars):
+    1792→        """Specialized Routine creation for Rust."""
+    1793→
+    1794→        if is_sequence(expr) and not isinstance(expr, (MatrixBase, MatrixExpr)):
+    1795→            if not expr:
+    1796→                raise ValueError("No expression g
+  [... truncated ...]
+- [Read Result after action #43]
+    1863→
+    1864→            # create redundant arguments to produce the requested sequence
+    1865→            name_arg_dict = {x.name: x for x in arg_list}
+    1866→            new_args = []
+    1867→            for symbol in argument_sequence:
+    1868→                try:
+    1869→                    new_args.append(name_arg_dict[symbol])
+    1870→                except KeyError:
+    1871→                    new_args.append(InputArgument(symbol))
+    1872→            arg_list = new_args
+    1873→
+    1874→        return Routine(name, arg_list, return_vals, local_vars, global_vars)
+    1875→
+    1876→
+    1877→    def _get_header(self):
+    1878→        """Writes a common header for the generated files."""
+    1879→        code_lines = []
+    1880→        code_lines.append("/*\n")
+    1881→        tmp = header_comment % {"version": sympy_version,
+    1882→                                "project": self.project}
+
+- [Test Output after action #46]
+  Testing autowrap with cython backend...
+
+  === Test 1: Array argument that doesn't appear in expression ===
+  Expression: 1.0
+  Arguments: x (MatrixSymbol of shape 2x1)
+  Autowrap succeeded, calling function...
+  Result: 1.0
+  ✓ Test 1 PASSED
+
+  === Test 2: Array argument that appears in expression ===
+  Expression: x[0, 0]
+  Arguments: x (MatrixSymbol of shape 2x1)
+  Autowrap succeeded, calling function...
+  Result: 1.0
+  ✓ Test 2 PASSED
+
+  === Done ===
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/utilities/codegen.py:277: SyntaxWarning: "is" with a literal. Did you mean "=="?
+    if dt is "int" and not element.is_integer:
+  ./swebench_9_15/testbed/sympy/utilities/codegen.py:279: SyntaxWarning: "is" with a literal. Did you mean "=="?
+    if dt is "float" and not element.is_real:
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/utilities/codegen.py
+  Tool: Edit action #34
+  old_text_sha256: 0293eac99efc67eb5e2911d0ec41252db85b33c2bce94b4629a0de0390fd6e6d
+  new_text_sha256: bb0128ab874d59bec57072f009ed8d720e121d969a9af05b3180e079cbd55a4e
+- sympy/utilities/codegen.py
+  Tool: Edit action #35
+  old_text_sha256: 97f1b08488f2d8100dd5a7d620e3acb5afe8d08a6c33dea887df12f349ddc7ec
+  new_text_sha256: 45c6b49988198a70969939b20cab7c59451c6f0a86a0b92b25e695c6de007d1e
+- sympy/utilities/codegen.py
+  Tool: Edit action #38
+  old_text_sha256: 10c2800181076fe537c5dc464a8b8979893c76d1d3222a91fc513d8e16ba6874
+  new_text_sha256: 45326d73b50450cc49fc48496e88ad743aa7e183e8c33427fde42e94c4883bdd
+- sympy/utilities/codegen.py
+  Tool: Edit action #39
+  old_text_sha256: 5e01f3e03e76dade93ba6075dae644ed692d7c7e048b65a17e7c6c3c652c01ad
+  new_text_sha256: 255f5dce3b5734f194d45ff206b32e4c07f4efef00364c4e26c014479e03bf36
+- sympy/utilities/codegen.py
+  Tool: Edit action #40
+  old_text_sha256: 5e01f3e03e76dade93ba6075dae644ed692d7c7e048b65a17e7c6c3c652c01ad
+  new_text_sha256: 255f5dce3b5734f194d45ff206b32e4c07f4efef00364c4e26c014479e03bf36
+- sympy/utilities/codegen.py
+  Tool: Edit action #45
+  old_text_sha256: 945c4ccc44804ab8c2ddfc814b610a23ecab4b08f7718a540d07e670a72c6e5f
+  new_text_sha256: ba3a4fc7c55c8e19e5f66bdc6624efd3e9643b2e268e8162ffc771862677d66f
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: sympy/sympy
+Base commit: 09786a173e7a0a488f46dd6000177c23e5d24eed
+Instance ID: sympy__sympy-16689
+
+CURRENT_ISSUE
+codegen generate wrong signature
+When an argument sequence is specified in codegen, any matrix argument that is not present in the expression to be converted will get a default type `double` instead of `double*`.
+For instance :
+
+```python
+import sympy as sy
+from sympy.utilities.codegen import codegen
+
+X = sy.MatrixSymbol('X',3,1)
+Y = sy.MatrixSymbol('Y',3,1)
+z = sy.symbols('z',integer = True)
+
+[(cf, cs), (hf, hs)] = codegen(('testBug', X[0]+X[1]),
+           language='c',argument_sequence = (X,Y,z))
+print(hs)
+```
+
+generates  a function signature : `double testBug(double *X, double Y, int z);`
+
+where `double testBug(double *X, double *Y, int z);`  is expected
+
+But
+
+```python
+[(cf, cs), (hf, hs)] = codegen(('testBug', X[0]+X[1]+Y[0]),
+           language='c',argument_sequence = (X,Y,z))
+print(hs)
+```
+gives the good signature.
+
+I use sympy 1.3
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

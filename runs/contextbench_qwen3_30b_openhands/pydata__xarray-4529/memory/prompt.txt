@@ -1,0 +1,537 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: memory
+
+The following is deterministic extractive memory from an officially related prior issue.
+
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 54115569-500b-460c-8253-b29f4ad46a94
+- repo: pydata/xarray
+- instance_id: pydata__xarray-4493
+- base_commit: a5f53e203c52a7605d5db799864046471115d04f
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+DataSet.update causes chunked dask DataArray to evalute its values eagerly
+**What happened**:
+Used `DataSet.update` to update a chunked dask DataArray, but the DataArray is no longer chunked after the update.
+
+**What you expected to happen**:
+The chunked DataArray should still be chunked after the update
+
+**Minimal Complete Verifiable Example**:
+
+```python
+foo = xr.DataArray(np.random.randn(3, 3), dims=("x", "y")).chunk()  # foo is chunked
+ds = xr.Dataset({"foo": foo, "bar": ("x", [1, 2, 3])})  # foo is still chunked here
+ds  # you can verify that foo is chunked
+```
+```python
+update_dict = {"foo": (("x", "y"), ds.foo[1:, :]), "bar": ("x", ds.bar[1:])}
+update_dict["foo"][1]  # foo is still chunked
+```
+```python
+ds.update(update_dict)
+ds  # now foo is no longer chunked
+```
+
+**Environment**:
+
+<details><summary>Output of <tt>xr.show_versions()</tt></summary>
+
+```
+commit: None
+python: 3.8.3 (default, Jul  2 2020, 11:26:31)
+[Clang 10.0.0 ]
+python-bits: 64
+OS: Darwin
+OS-release: 19.6.0
+machine: x86_64
+processor: i386
+byteorder: little
+LC_ALL: None
+LANG: en_US.UTF-8
+LOCALE: en_US.UTF-8
+libhdf5: 1.10.6
+libnetcdf: None
+
+xarray: 0.16.0
+pandas: 1.0.5
+numpy: 1.18.5
+scipy: 1.5.0
+netCDF4: None
+pydap: None
+h5netcdf: None
+h5py: 2.10.0
+Nio: None
+zarr: None
+cftime: None
+nc_time_axis: None
+PseudoNetCDF: None
+rasterio: None
+cfgrib: None
+iris: None
+bottleneck: None
+dask: 2.20.0
+distributed: 2.20.0
+matplotlib: 3.2.2
+cartopy: None
+seaborn: None
+numbagg: None
+pint: None
+setuptools: 49.2.0.post20200714
+pip: 20.1.1
+conda: None
+pytest: 5.4.3
+IPython: 7.16.1
+sphinx: None
+```
+
+</details>
+Dataset constructor with DataArray triggers computation
+Is it intentional that creating a Dataset with a DataArray and dimension names for a single variable causes computation of that variable?  In other words, why does ```xr.Dataset(dict(a=('d0', xr.DataArray(da.random.random(10)))))``` cause the dask array to compute?
+
+A longer example:
+
+```python
+import dask.array as da
+import xarray as xr
+x = da.random.randint(1, 10, size=(100, 25))
+ds = xr.Dataset(dict(a=xr.DataArray(x, dims=('x', 'y'))))
+type(ds.a.data)
+dask.array.core.Array
+
+# Recreate the dataset with the same array, but also redefine the dimensions
+ds2 = xr.Dataset(dict(a=(('x', 'y'), ds.a))
+type(ds2.a.data)
+numpy.ndarray
+```
+
+FILES INSPECTED
+---------------
+- xarray/core/dataset.py [Grep: 1, Read: 1]
+- xarray [Grep: 2]
+- xarray/core/merge.py [Read: 4, Grep: 3]
+- xarray/core/variable.py [Read: 5, Grep: 3]
+- xarray/core/dataarray.py [Grep: 2, Read: 1]
+- xarray/tests/test_dataset.py [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [7] Glob glob='testbed/xarray/**/*.py'
+- [9] Grep pattern='def update' path='xarray/core/dataset.py'
+- [13] Grep pattern='def dataset_update_method' path='xarray'
+- [17] Grep pattern='def merge_core' path='xarray/core/merge.py'
+- [21] Grep pattern='def coerce_pandas_values' path='xarray/core/merge.py'
+- [25] Grep pattern='def collect_variables_and_indexes' path='xarray/core/merge.py'
+- [29] Grep pattern='def as_variable' path='xarray'
+- [33] Grep pattern='class Variable' path='xarray/core/variable.py'
+- [37] Grep pattern='def as_compatible_data' path='xarray/core/variable.py'
+- [41] Grep pattern='NON_NUMPY_SUPPORTED_ARRAY_TYPES' path='xarray/core/variable.py'
+- [45] Grep pattern='class DataArray' path='xarray/core/dataarray.py'
+- [47] Grep pattern='def variable' path='xarray/core/dataarray.py'
+- [66] Grep pattern='def test_update' path='xarray/tests/test_dataset.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [test] python test_issue.py
+- [other/reproduction] python --version
+- [test] python3 test_issue.py
+- [test] python3 test_issue.py
+- [test] cd testbed && python3 -m pytest xarray/tests/test_dataset.py::TestDataset::test_update -xvs
+- [test] cd testbed && python3 -m pytest xarray/tests/test_dataset.py::TestDataset::test_update -xvs
+- [other/reproduction] which pytest
+- [test] cd testbed && pytest xarray/tests/test_dataset.py::TestDataset::test_update -xvs 2>&1 | head -50
+- [other/reproduction] python3 -c "import pytest; print(pytest.__version__)"
+- [diagnostic] find testbed -name "test_dataset.py" | head -5
+- [diagnostic] ls xarray/tests/test_dataset.py
+- [test] python3 test_fix.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ModuleNotFoundError: No module named 'pytest'
+- Traceback (most recent call last):
+- ModuleNotFoundError: No module named 'pytest'
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Test Output after action #1]
+  Exit code 1
+    File "test_issue.py", line 10
+      print(f"foo is chunked: {hasattr(foo.data, 'chunks')}")
+                                                           ^
+  SyntaxError: invalid syntax
+- [Test Output after action #5]
+  Testing Dataset.update with chunked dask DataArray...
+
+  Test 1: Dataset.update with chunked DataArray
+  foo is chunked: True
+  foo data type: <class 'dask.array.core.Array'>
+  After creating dataset, foo is chunked: True
+  foo data type in dataset: <class 'dask.array.core.Array'>
+  Before update, foo in update_dict is chunked: True
+  foo data type in update_dict: <class 'dask.array.core.Array'>
+  After update, foo is chunked: False
+  foo data type after update: <class 'numpy.ndarray'>
+
+
+  Test 2: Dataset constructor with DataArray triggering computation
+  ds1.a.data type: <class 'dask.array.core.Array'>
+  ds1.a is chunked: True
+  ds2.a.data type: <class 'numpy.ndarray'>
+  ds2.a is chunked: False
+
+
+  BUG: Dataset should preserve chunked dask arrays!
+- [Glob Result after action #7]
+  ./swebench_9_15/testbed/xarray/coding/__init__.py
+  ./swebench_9_15/testbed/xarray/core/__init__.py
+  ./swebench_9_15/testbed/xarray/util/__init__.py
+  ./swebench_9_15/testbed/xarray/__init__.py
+  ./swebench_9_15/testbed/xarray/backends/__init__.py
+  ./swebench_9_15/testbed/xarray/backends/api.py
+  ./swebench_9_15/testbed/xarray/backends/apiv2.py
+  ./swebench_9_15/testbed/xarray/backends/cfgrib_.py
+  ./swebench_9_15/testbed/xarray/backends/common.py
+  ./swebench_9_15/testbed/xarray/backends/file_manager.py
+  ./swebench_9_15/testbed/xarray/backends/h5netcdf_.py
+  ./swebench_9_15/testbed/xarray/backends/locks.py
+  ./swebench_9_15/testbed/xarray/backends/lru_cache.py
+  ./swebench_9_15/testbed/xarray/backends/memory.py
+  ./swebench_9_15/testbed/xarray/backends/netCDF4_.py
+  ./swebench_9_15/testbed/xarray/backends/netcdf3.py
+  ./swebench_9_15/testbed/xarray/backends/plugins.py
+  ./swebench_9_15/testbed/xarray/backends/pseudonetcdf_.py
+  ./swebench_9_15/testbed/xarray/backends/pydap_.py
+  ./swebench_9_15/testbed/xarray/backends/pynio_.py
+  ./swebench_9_15/testbed/xarray/backends/rasterio_.py
+  ./swebench_9_15/testbed/xarray/backends/scipy_.py
+  ./swebench_9_15/testbed/xarray/backends/store.py
+  ./swebench_9_15/testbed/xarray/backend
+  [... truncated ...]
+- [Grep Result after action #9]
+  3883:    def update(self, other: "CoercibleMapping") -> "Dataset":
+- [Read Result after action #11]
+    3883→    def update(self, other: "CoercibleMapping") -> "Dataset":
+    3884→        """Update this dataset's variables with those from another dataset.
+    3885→
+    3886→        Parameters
+    3887→        ----------
+    3888→        other : Dataset or mapping
+    3889→            Variables with which to update this dataset. One of:
+    3890→
+    3891→            - Dataset
+    3892→            - mapping {var name: DataArray}
+    3893→            - mapping {var name: Variable}
+    3894→            - mapping {var name: (dimension name, array-like)}
+    3895→            - mapping {var name: (tuple of dimension names, array-like)}
+    3896→
+    3897→
+    3898→        Returns
+    3899→        -------
+    3900→        updated : Dataset
+    3901→            Updated dataset.
+    3902→
+    3903→        Raises
+    3904→        ------
+    3905→        ValueError
+    3906→            If any dimensions would have inconsistent sizes in the updated
+    3907→            dataset.
+    3908→        """
+    3909→        merge_result = dataset_update_method(self, other)
+    3910→        return self._replace(inplace=True, **merge_result._asdict())
+    3911→
+    3912→    def merge(
+    3913→        self,
+    3914→        other: Union["CoercibleMapping", "DataArr
+  [... truncated ...]
+- [Grep Result after action #13]
+  testbed/xarray/core/merge.py:908:def dataset_update_method(
+- [Read Result after action #15]
+     908→def dataset_update_method(
+     909→    dataset: "Dataset", other: "CoercibleMapping"
+     910→) -> _MergeResult:
+     911→    """Guts of the Dataset.update method.
+     912→
+     913→    This drops a duplicated coordinates from `other` if `other` is not an
+     914→    `xarray.Dataset`, e.g., if it's a dict with DataArray values (GH2068,
+     915→    GH2180).
+     916→    """
+     917→    from .dataarray import DataArray
+     918→    from .dataset import Dataset
+     919→
+     920→    if not isinstance(other, Dataset):
+     921→        other = dict(other)
+     922→        for key, value in other.items():
+     923→            if isinstance(value, DataArray):
+     924→                # drop conflicting coordinates
+     925→                coord_names = [
+     926→                    c
+     927→                    for c in value.coords
+     928→                    if c not in value.dims and c in dataset.coords
+     929→                ]
+     930→                if coord_names:
+     931→                    other[key] = value.drop_vars(coord_names)
+     932→
+     933→    # use ds.coords and not ds.indexes, else str coords are cast to object
+     934→    indexes = {key: dataset.coords[key] for key in dataset.indexes.keys()}
+     935
+  [... truncated ...]
+- [Grep Result after action #17]
+  537:def merge_core(
+- [Read Result after action #19]
+     537→def merge_core(
+     538→    objects: Iterable["CoercibleMapping"],
+     539→    compat: str = "broadcast_equals",
+     540→    join: str = "outer",
+     541→    combine_attrs: Optional[str] = "override",
+     542→    priority_arg: Optional[int] = None,
+     543→    explicit_coords: Optional[Sequence] = None,
+     544→    indexes: Optional[Mapping[Hashable, pd.Index]] = None,
+     545→    fill_value: object = dtypes.NA,
+     546→) -> _MergeResult:
+     547→    """Core logic for merging labeled objects.
+     548→
+     549→    This is not public API.
+     550→
+     551→    Parameters
+     552→    ----------
+     553→    objects : list of mapping
+     554→        All values must be convertable to labeled arrays.
+     555→    compat : {"identical", "equals", "broadcast_equals", "no_conflicts", "override"}, optional
+     556→        Compatibility checks to use when merging variables.
+     557→    join : {"outer", "inner", "left", "right"}, optional
+     558→        How to combine objects with different indexes.
+     559→    combine_attrs : {"drop", "identical", "no_conflicts", "override"}, optional
+     560→        How to combine attributes of objects
+     561→    priority_arg : int, optional
+     562→        Optional argument i
+  [... truncated ...]
+- [Grep Result after action #21]
+  370:def coerce_pandas_values(objects: Iterable["CoercibleMapping"]) -> List["DatasetLike"]:
+- [Read Result after action #23]
+     370→def coerce_pandas_values(objects: Iterable["CoercibleMapping"]) -> List["DatasetLike"]:
+     371→    """Convert pandas values found in a list of labeled objects.
+     372→
+     373→    Parameters
+     374→    ----------
+     375→    objects : list of Dataset or mapping
+     376→        The mappings may contain any sort of objects coercible to
+     377→        xarray.Variables as keys, including pandas objects.
+     378→
+     379→    Returns
+     380→    -------
+     381→    List of Dataset or dictionary objects. Any inputs or values in the inputs
+     382→    that were pandas objects have been converted into native xarray objects.
+     383→    """
+     384→    from .dataarray import DataArray
+     385→    from .dataset import Dataset
+     386→
+     387→    out = []
+     388→    for obj in objects:
+     389→        if isinstance(obj, Dataset):
+     390→            variables: "DatasetLike" = obj
+     391→        else:
+     392→            variables = {}
+     393→            if isinstance(obj, PANDAS_TYPES):
+     394→                obj = dict(obj.iteritems())
+     395→            for k, v in obj.items():
+     396→                if isinstance(v, PANDAS_TYPES):
+     397→                    v = DataArray(v)
+     398→                v
+  [... truncated ...]
+- [Grep Result after action #25]
+  239:def collect_variables_and_indexes(
+- [Read Result after action #27]
+     239→def collect_variables_and_indexes(
+     240→    list_of_mappings: "List[DatasetLike]",
+     241→) -> Dict[Hashable, List[MergeElement]]:
+     242→    """Collect variables and indexes from list of mappings of xarray objects.
+     243→
+     244→    Mappings must either be Dataset objects, or have values of one of the
+     245→    following types:
+     246→    - an xarray.Variable
+     247→    - a tuple `(dims, data[, attrs[, encoding]])` that can be converted in
+     248→      an xarray.Variable
+     249→    - or an xarray.DataArray
+     250→    """
+     251→    from .dataarray import DataArray
+     252→    from .dataset import Dataset
+     253→
+     254→    grouped: Dict[Hashable, List[Tuple[Variable, pd.Index]]] = {}
+     255→
+     256→    def append(name, variable, index):
+     257→        values = grouped.setdefault(name, [])
+     258→        values.append((variable, index))
+     259→
+     260→    def append_all(variables, indexes):
+     261→        for name, variable in variables.items():
+     262→            append(name, variable, indexes.get(name))
+     263→
+     264→    for mapping in list_of_mappings:
+     265→        if isinstance(mapping, Dataset):
+     266→            append_all(mapping.variables, mapping.indexes)
+
+  [... truncated ...]
+- [Grep Result after action #29]
+  testbed/xarray/core/variable.py:86:def as_variable(obj, name=None) -> "Union[Variable, IndexVariable]":
+- [Read Result after action #31]
+      86→def as_variable(obj, name=None) -> "Union[Variable, IndexVariable]":
+      87→    """Convert an object into a Variable.
+      88→
+      89→    Parameters
+      90→    ----------
+      91→    obj : object
+      92→        Object to convert into a Variable.
+      93→
+      94→        - If the object is already a Variable, return a shallow copy.
+      95→        - Otherwise, if the object has 'dims' and 'data' attributes, convert
+      96→          it into a new Variable.
+      97→        - If all else fails, attempt to convert the object into a Variable by
+      98→          unpacking it into the arguments for creating a new Variable.
+      99→    name : str, optional
+     100→        If provided:
+     101→
+     102→        - `obj` can be a 1D array, which is assumed to label coordinate values
+     103→          along a dimension of this given name.
+     104→        - Variables with name matching one of their dimensions are converted
+     105→          into `IndexVariable` objects.
+     106→
+     107→    Returns
+     108→    -------
+     109→    var : Variable
+     110→        The newly created variable.
+     111→
+     112→    """
+     113→    from .dataarray import DataArray
+     114→
+     115→    # TODO: consider extending this met
+  [... truncated ...]
+- [Grep Result after action #33]
+  73:   class Variable:
+  285:class Variable(
+- [Read Result after action #35]
+     285→class Variable(
+     286→    common.AbstractArray, arithmetic.SupportsArithmetic, utils.NdimSizeLenMixin
+     287→):
+     288→    """A netcdf-like variable consisting of dimensions, data and attributes
+     289→    which describe a single Array. A single Variable object is not fully
+     290→    described outside the context of its parent Dataset (if you want such a
+     291→    fully described object, use a DataArray instead).
+     292→
+     293→    The main functional difference between Variables and numpy arrays is that
+     294→    numerical operations on Variables implement array broadcasting by dimension
+     295→    name. For example, adding an Variable with dimensions `('time',)` to
+     296→    another Variable with dimensions `('space',)` results in a new Variable
+     297→    with dimensions `('time', 'space')`. Furthermore, numpy reduce operations
+     298→    like ``mean`` or ``sum`` are overwritten to take a "dimension" argument
+     299→    instead of an "axis".
+     300→
+     301→    Variables are light-weight objects used as the building block for datasets.
+     302→    They are more primitive objects, so operations with them provide marginally
+     303→    higher performance than using DataAr
+  [... truncated ...]
+- [Grep Result after action #37]
+  189:def as_compatible_data(data, fastpath=False):
+- [Read Result after action #39]
+     189→def as_compatible_data(data, fastpath=False):
+     190→    """Prepare and wrap data to put in a Variable.
+     191→
+     192→    - If data does not have the necessary attributes, convert it to ndarray.
+     193→    - If data has dtype=datetime64, ensure that it has ns precision. If it's a
+     194→      pandas.Timestamp, convert it to datetime64.
+     195→    - If data is already a pandas or xarray object (other than an Index), just
+     196→      use the values.
+     197→
+     198→    Finally, wrap it up with an adapter if necessary.
+     199→    """
+     200→    if fastpath and getattr(data, "ndim", 0) > 0:
+     201→        # can't use fastpath (yet) for scalars
+     202→        return _maybe_wrap_data(data)
+     203→
+     204→    if isinstance(data, Variable):
+     205→        return data.data
+     206→
+     207→    if isinstance(data, NON_NUMPY_SUPPORTED_ARRAY_TYPES):
+     208→        return _maybe_wrap_data(data)
+     209→
+     210→    if isinstance(data, tuple):
+     211→        data = utils.to_0d_object_array(data)
+     212→
+     213→    if isinstance(data, pd.Timestamp):
+     214→        # TODO: convert, handle datetime objects, too
+     215→        data = np.datetime64(data.value, "ns")
+     216→
+     217→    if isinstan
+  [... truncated ...]
+- [Grep Result after action #41]
+  55:NON_NUMPY_SUPPORTED_ARRAY_TYPES = (
+  207:    if isinstance(data, NON_NUMPY_SUPPORTED_ARRAY_TYPES):
+
+SOURCE EDIT EVIDENCE
+--------------------
+- xarray/core/variable.py
+  Tool: Edit action #53
+  old_text_sha256: 23d32ab6160942685f5c53e99fe6fefd16472fd9baef10dab90d6ba3645534fb
+  new_text_sha256: 1433049a814ea4c51f58b60747204b165824133ed3658bc0c5493c8033cb0ea9
+- test_fix.py
+  Tool: Write action #70
+  new_text_sha256: ae903bc7efe693075774286a9449f8135ea8c5e3332a42b58ddcb71f22789b85
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: pydata/xarray
+Base commit: a5f53e203c52a7605d5db799864046471115d04f
+Instance ID: pydata__xarray-4529
+
+CURRENT_ISSUE
+Dataset constructor with DataArray triggers computation
+Is it intentional that creating a Dataset with a DataArray and dimension names for a single variable causes computation of that variable?  In other words, why does ```xr.Dataset(dict(a=('d0', xr.DataArray(da.random.random(10)))))``` cause the dask array to compute?
+
+A longer example:
+
+```python
+import dask.array as da
+import xarray as xr
+x = da.random.randint(1, 10, size=(100, 25))
+ds = xr.Dataset(dict(a=xr.DataArray(x, dims=('x', 'y'))))
+type(ds.a.data)
+dask.array.core.Array
+
+# Recreate the dataset with the same array, but also redefine the dimensions
+ds2 = xr.Dataset(dict(a=(('x', 'y'), ds.a))
+type(ds2.a.data)
+numpy.ndarray
+```
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

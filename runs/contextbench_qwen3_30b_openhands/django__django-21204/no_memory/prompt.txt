@@ -1,0 +1,45 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: no_memory
+
+No prior context is provided for this run.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: django/django
+Base commit: 5d12650ed9269acb3cba97fd70e8df2e35a55a54
+Instance ID: django__django-21204
+
+CURRENT_ISSUE
+Query.defer() failure - deferred columns calculated per table instead per alias
+
+Description
+In sql.compiler the deferred columns are calculated per table. This doesn't work correctly as it is possible to have the same table multiple times in the query. For example (using models from tests/queries/models.py):
+qs = Tag.objects.select_related(
+            'parent', 'parent__parent'
+        ).defer(
+            'parent__name', 'parent__parent__category'
+        )
+Currently this causes both name and category to be deferred for the base model, its parent, and parent's parent. The correct interpretation is that for base model all columns are loaded, for parent category is loaded, name is deferred and for parent's parent name is loaded and category is deferred.
+The proper solution is to key the only_load dictionary by alias instead of db_table. This doesn't look to be particularly easy case to solve, as both only_load's construction and usage are somewhat complex.
+The bug has likely existed for as long as defer has existed. I'll mark this as master as I don't see a reason why this must be backpatched. The user-visible result of this bug is that more queries than expected are executed in some rare situations, so this isn't too severe.
+Failing test case at:
+​
+https://github.com/akaariai/django/compare/only_load_bug
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

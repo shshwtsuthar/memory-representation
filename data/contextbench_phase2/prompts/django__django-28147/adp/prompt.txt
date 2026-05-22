@@ -1,0 +1,995 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: adp
+
+The following is a stripped ADP-rendered trajectory from an officially related prior issue.
+
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 84c0398f-6b43-4378-b630-3e5f0a196545
+- repo: django/django
+- instance_id: django__django-13964
+- base_commit: f39634ff229887bf7790c069d0c411b38494ca38
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-13964
+base_commit: f39634ff229887bf7790c069d0c411b38494ca38
+problem_statement:
+Saving parent object after setting on child leads to data loss for parents with non-numeric primary key.
+Description
+
+        (last modified by Charlie DeTar)
+
+Given a model with a foreign key relation to another model that has a non-auto CharField as its primary key:
+class Product(models.Model):
+    sku = models.CharField(primary_key=True, max_length=50)
+class Order(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+If the relation is initialized on the parent with an empty instance that does not yet specify its primary key, and the primary key is subsequently defined, the parent does not "see" the primary key's change:
+with transaction.atomic():
+    order = Order()
+    order.product = Product()
+    order.product.sku = "foo"
+    order.product.save()
+    order.save()
+    assert Order.objects.filter(product_id="").exists() # Succeeds, but shouldn't
+    assert Order.objects.filter(product=order.product).exists() # Fails
+Instead of product_id being populated with product.sku, it is set to emptystring. The foreign key constraint which would enforce the existence of a product with sku="" is deferred until the transaction commits. The transaction does correctly fail on commit with a ForeignKeyViolation due to the non-existence of a product with emptystring as its primary key.
+On the other hand, if the related unsaved instance is initialized with its primary key before assignment to the parent, it is persisted correctly:
+with transaction.atomic():
+    order = Order()
+    order.product = Product(sku="foo")
+    order.product.save()
+    order.save()
+    assert Order.objects.filter(product=order.product).exists() # succeeds
+Committing the transaction also succeeds.
+This may have something to do with how the Order.product_id field is handled at assignment, together with something about handling fetchin
+sha256: 1427137f491d3f423a21913f58fab6b0a1af671fd7c45941c01df0585c3444d9
+truncated: true
+
+[ADP ACTION current=1 original=3: code_action bash]
+payload:
+ls -la testbed 2>&1 | head -20
+sha256: a5b51c049c514e0c825091cfd1d42d00f5c920d52dc8be3c5c7cbf10b052a870
+truncated: false
+
+[ADP ACTION current=2 original=29: code_action bash]
+payload:
+cd ./swebench_9_15/testbed && python test_issue.py
+sha256: f6da228191bcc3ac2f313c2b8fad915cad68407b6189f2525e9e3dbaf31e2e6a
+truncated: false
+
+[ADP OBSERVATION current=3 original=30 source=environment]
+name: Bash:toolu_01S7yJ6DwCRTujpTUeq54ieV:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 54
+    print(f"1. After assignment, order.product_id = {repr(order.product_id)}")
+                                                                            ^
+SyntaxError: invalid syntax
+sha256: a9ff85a33f33fc0605b125a68df93d673791c33dcc9a2fc168a615aa10020317
+truncated: false
+
+[ADP ACTION current=4 original=31: code_action bash]
+payload:
+python --version
+sha256: 1e764e2fdafb26274ce9b8f6d0a4d336f395c6ed371b3175df74e5eef7b91d39
+truncated: false
+
+[ADP OBSERVATION current=5 original=32 source=environment]
+name: Bash:toolu_01H6c4ujaiZBZD6q3QJGJpxV
+excerpt:
+Python 2.7.3
+sha256: c6d9bd2d561b074688a302920b8e73838fd3f7b4043465431748a1e3b85691fe
+truncated: false
+
+[ADP ACTION current=6 original=33: code_action bash]
+payload:
+cd ./swebench_9_15/testbed && python3 test_issue.py
+sha256: 5256c0645dcdb3539a04b7cf00d797c295b24320c8cac5e630f84b62bd0cdb98
+truncated: false
+
+[ADP OBSERVATION current=7 original=34 source=environment]
+name: Bash:toolu_01PhgQcz6ivrLKqEaLJGKB34
+excerpt:
+Testing bug scenario 1: Setting sku AFTER assignment to order
+------------------------------------------------------------
+1. After assignment, order.product_id = ''
+2. After setting sku, order.product.sku = 'foo'
+3. After setting sku, order.product_id = ''
+4. After saving product, order.product_id = ''
+5. After saving order, order.product_id = ''
+
+❌ Transaction failed with error: Product matching query does not exist.
+This is expected due to ForeignKey constraint violation
+
+============================================================
+Testing scenario 2: Setting sku BEFORE assignment to order
+------------------------------------------------------------
+1. After assignment, order.product_id = 'bar'
+2. After saving product, order.product_id = 'bar'
+3. After saving order, order.product_id = 'bar'
+
+4. Order.objects.filter(product=order.product).exists() = True
+
+✓ This works correctly!
+
+============================================================
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: bef740cea17af8351fdc06168fdc905f10908ef11a8fec835f3c93e4c5c0e24b
+truncated: false
+
+[ADP ACTION current=8 original=37: api_action Grep]
+payload:
+{
+  "output_mode": "files_with_matches",
+  "pattern": "class ForwardManyToOneDescriptor"
+}
+sha256: 57fca38d589c75e1e310e8a836afc28512d3a038704c46548e4dd9950bb8fdcd
+truncated: false
+
+[ADP OBSERVATION current=9 original=38 source=environment]
+name: Grep:toolu_01HeyL9L3RkiMzbbcEkXisFj
+excerpt:
+Found 1 file
+django/db/models/fields/related_descriptors.py
+sha256: 0341736d8af5fbae69c44cb4e75bfe5a2e854ce6753f193dfda7678511f9854c
+truncated: false
+
+[ADP ACTION current=10 original=39: api_action Read]
+path: django/db/models/fields/related_descriptors.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/fields/related_descriptors.py",
+  "limit": 100
+}
+sha256: f5b9c2031b896e2f5b9bc9b0024df04cd4ebe48092d27d07eda742e82388e91a
+truncated: false
+
+[ADP OBSERVATION current=11 original=40 source=environment]
+name: Read:toolu_01D8Pi2fDB6g2jKLs1zyD2bc
+excerpt:
+     1→"""
+     2→Accessors for related objects.
+     3→
+     4→When a field defines a relation between two models, each model class provides
+     5→an attribute to access related instances of the other model class (unless the
+     6→reverse accessor has been disabled with related_name='+').
+     7→
+     8→Accessors are implemented as descriptors in order to customize access and
+     9→assignment. This module defines the descriptor classes.
+    10→
+    11→Forward accessors follow foreign keys. Reverse accessors trace them back. For
+    12→example, with the following models::
+    13→
+    14→    class Parent(Model):
+    15→        pass
+    16→
+    17→    class Child(Model):
+    18→        parent = ForeignKey(Parent, related_name='children')
+    19→
+    20→ ``child.parent`` is a forward many-to-one relation. ``parent.children`` is a
+    21→reverse many-to-one relation.
+    22→
+    23→There are three types of relations (many-to-one, one-to-one, and many-to-many)
+    24→and two directions (forward and reverse) for a total of six combinations.
+    25→
+    26→1. Related instance on the forward side of a many-to-one relation:
+    27→   ``ForwardManyToOneDescriptor``.
+    28→
+    29→   Uniqueness of foreign key values is irrelevant to accessing the related
+    30→   instance, making the many-to-one and one-to-one cases identical as far as
+    31→   the descriptor is concerned. The constraint is checked upstream (unicity
+    32→   validation in forms) or downstream (unique indexes in the database).
+    33→
+    34→2. Related instance on the forward side of a one-to-one
+    35→   relation: ``ForwardOneToOneDescriptor``.
+    36→
+    37→   It avoids querying the database when accessing the parent link field in
+    38→   a multi-table inheritance scenario.
+    39→
+    40→3. Related instance on the reverse side of a one-to-one relation:
+    41→   ``ReverseOneToOneDescriptor``.
+    42→
+    43→   One-to-one relations are asymmetrical, despite the apparent symmetry of the
+    44→   na
+sha256: 21849023f30e2688a8bd4b5c0a351ea05875132b93ea49945fb8095cffcaad1c
+truncated: true
+
+[ADP ACTION current=12 original=41: api_action Read]
+path: django/db/models/fields/related_descriptors.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/fields/related_descriptors.py",
+  "limit": 100,
+  "offset": 100
+}
+sha256: c7fb1a82540097ecb07529efa7c9072fc47941477e3f4f5e7a26eb925f155758
+truncated: false
+
+[ADP OBSERVATION current=13 original=42 source=environment]
+name: Read:toolu_019vjhpoJGMQCxFDFqbf3kjZ
+excerpt:
+   100→        # The exception can't be created at initialization time since the
+   101→        # related model might not be resolved yet; `self.field.model` might
+   102→        # still be a string model reference.
+   103→        return type(
+   104→            'RelatedObjectDoesNotExist',
+   105→            (self.field.remote_field.model.DoesNotExist, AttributeError), {
+   106→                '__module__': self.field.model.__module__,
+   107→                '__qualname__': '%s.%s.RelatedObjectDoesNotExist' % (
+   108→                    self.field.model.__qualname__,
+   109→                    self.field.name,
+   110→                ),
+   111→            }
+   112→        )
+   113→
+   114→    def is_cached(self, instance):
+   115→        return self.field.is_cached(instance)
+   116→
+   117→    def get_queryset(self, **hints):
+   118→        return self.field.remote_field.model._base_manager.db_manager(hints=hints).all()
+   119→
+   120→    def get_prefetch_queryset(self, instances, queryset=None):
+   121→        if queryset is None:
+   122→            queryset = self.get_queryset()
+   123→        queryset._add_hints(instance=instances[0])
+   124→
+   125→        rel_obj_attr = self.field.get_foreign_related_value
+   126→        instance_attr = self.field.get_local_related_value
+   127→        instances_dict = {instance_attr(inst): inst for inst in instances}
+   128→        related_field = self.field.foreign_related_fields[0]
+   129→        remote_field = self.field.remote_field
+   130→
+   131→        # FIXME: This will need to be revisited when we introduce support for
+   132→        # composite fields. In the meantime we take this practical approach to
+   133→        # solve a regression on 1.6 when the reverse manager in hidden
+   134→        # (related_name ends with a '+'). Refs #21410.
+   135→        # The check for len(...) == 1 is a special case that allows the query
+   136→        # to be join-less and smaller. Refs #21760.
+   137→        if remote_field.is_h
+sha256: 9e34a84598715a0df41c906c9a11c0e409cca079f8a3cd15ab9fccd2075f13e1
+truncated: true
+
+[ADP ACTION current=14 original=43: api_action Read]
+path: django/db/models/fields/related_descriptors.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/fields/related_descriptors.py",
+  "limit": 100,
+  "offset": 200
+}
+sha256: a61b16a23a20c6eeaba163e0be8b494007daa9d4dbdd268d14b706cb58927346
+truncated: false
+
+[ADP OBSERVATION current=15 original=44 source=environment]
+name: Read:toolu_01CnJU16viHaUBdBWCtpSsze
+excerpt:
+   200→        else:
+   201→            return rel_obj
+   202→
+   203→    def __set__(self, instance, value):
+   204→        """
+   205→        Set the related instance through the forward relation.
+   206→
+   207→        With the example above, when setting ``child.parent = parent``:
+   208→
+   209→        - ``self`` is the descriptor managing the ``parent`` attribute
+   210→        - ``instance`` is the ``child`` instance
+   211→        - ``value`` is the ``parent`` instance on the right of the equal sign
+   212→        """
+   213→        # An object must be an instance of the related class.
+   214→        if value is not None and not isinstance(value, self.field.remote_field.model._meta.concrete_model):
+   215→            raise ValueError(
+   216→                'Cannot assign "%r": "%s.%s" must be a "%s" instance.' % (
+   217→                    value,
+   218→                    instance._meta.object_name,
+   219→                    self.field.name,
+   220→                    self.field.remote_field.model._meta.object_name,
+   221→                )
+   222→            )
+   223→        elif value is not None:
+   224→            if instance._state.db is None:
+   225→                instance._state.db = router.db_for_write(instance.__class__, instance=value)
+   226→            if value._state.db is None:
+   227→                value._state.db = router.db_for_write(value.__class__, instance=instance)
+   228→            if not router.allow_relation(value, instance):
+   229→                raise ValueError('Cannot assign "%r": the current database router prevents this relation.' % value)
+   230→
+   231→        remote_field = self.field.remote_field
+   232→        # If we're setting the value of a OneToOneField to None, we need to clear
+   233→        # out the cache on any old related object. Otherwise, deleting the
+   234→        # previously-related object will also cause this object to be deleted,
+   235→        # which is wrong.
+   236→        if value is None:
+
+sha256: 057e6e00b9bdffc9b1b8f14708cf1a0f0a3cd27cfa412d4e46a921b55cc68c3c
+truncated: true
+
+[ADP ACTION current=16 original=45: api_action Grep]
+payload:
+{
+  "output_mode": "files_with_matches",
+  "pattern": "def save_base"
+}
+sha256: f810657524808af6c40eb0b4060c627b6a572a4908ea9dd98358e64af0bed4ff
+truncated: false
+
+[ADP OBSERVATION current=17 original=46 source=environment]
+name: Grep:toolu_01552VriTFtguvCZ3gXwnUwz
+excerpt:
+Found 1 file
+django/db/models/base.py
+sha256: 366a9c829c607d23bc01c15c46cedeff9914932f32780124067d79a74070a513
+truncated: false
+
+[ADP ACTION current=18 original=47: api_action Grep]
+path: django/db/models/base.py
+payload:
+{
+  "-A": 5,
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/django/db/models/base.py",
+  "pattern": "def save\\("
+}
+sha256: 0e3f836e5bf44f0356cdc03b63c16d4dda25657978e3157db8c4792aca6861ea
+truncated: false
+
+[ADP OBSERVATION current=19 original=48 source=environment]
+name: Grep:toolu_01XSxuLPqCQsBJjtAZ1t1TLJ
+excerpt:
+672:    def save(self, force_insert=False, force_update=False, using=None,
+673-             update_fields=None):
+674-        """
+675-        Save the current instance. Override this in a subclass if you want to
+676-        control the saving process.
+677-
+sha256: 2fdf60611614eac6efb8a31c1b95a6a9f53b5a0a6f8442cfe56d2e0434c91c9a
+truncated: false
+
+[ADP ACTION current=20 original=49: api_action Read]
+path: django/db/models/base.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/base.py",
+  "limit": 100,
+  "offset": 672
+}
+sha256: b53ee40513d9fc30b5d76c9eda2403c1a07ecefb7709b68105d446f537f999a8
+truncated: false
+
+[ADP OBSERVATION current=21 original=50 source=environment]
+name: Read:toolu_01WbX6FWeRrhLL4FXx9svRLe
+excerpt:
+   672→    def save(self, force_insert=False, force_update=False, using=None,
+   673→             update_fields=None):
+   674→        """
+   675→        Save the current instance. Override this in a subclass if you want to
+   676→        control the saving process.
+   677→
+   678→        The 'force_insert' and 'force_update' parameters can be used to insist
+   679→        that the "save" must be an SQL insert or update (or equivalent for
+   680→        non-SQL backends), respectively. Normally, they should not be set.
+   681→        """
+   682→        self._prepare_related_fields_for_save(operation_name='save')
+   683→
+   684→        using = using or router.db_for_write(self.__class__, instance=self)
+   685→        if force_insert and (force_update or update_fields):
+   686→            raise ValueError("Cannot force both insert and updating in model saving.")
+   687→
+   688→        deferred_fields = self.get_deferred_fields()
+   689→        if update_fields is not None:
+   690→            # If update_fields is empty, skip the save. We do also check for
+   691→            # no-op saves later on for inheritance cases. This bailout is
+   692→            # still needed for skipping signal sending.
+   693→            if not update_fields:
+   694→                return
+   695→
+   696→            update_fields = frozenset(update_fields)
+   697→            field_names = set()
+   698→
+   699→            for field in self._meta.concrete_fields:
+   700→                if not field.primary_key:
+   701→                    field_names.add(field.name)
+   702→
+   703→                    if field.name != field.attname:
+   704→                        field_names.add(field.attname)
+   705→
+   706→            non_model_fields = update_fields.difference(field_names)
+   707→
+   708→            if non_model_fields:
+   709→                raise ValueError(
+   710→                    'The following fields do not exist in this model, are m2m '
+   711→                    'fields, or are non-c
+sha256: 331254a480630c66cc1faf03674c2805c663dd449e5708e234a3be02db30dfd2
+truncated: true
+
+[ADP ACTION current=22 original=51: api_action Grep]
+path: django/db/models/base.py
+payload:
+{
+  "-A": 30,
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/django/db/models/base.py",
+  "pattern": "def _prepare_related_fields_for_save"
+}
+sha256: 7a1196853f7c35170312a85d459403202442ea6394724e2b1fbc11c2733838f1
+truncated: false
+
+[ADP OBSERVATION current=23 original=52 source=environment]
+name: Grep:toolu_0158xWV3WjZPkf9Ser4Ws4VG
+excerpt:
+911:    def _prepare_related_fields_for_save(self, operation_name):
+912-        # Ensure that a model instance without a PK hasn't been assigned to
+913-        # a ForeignKey or OneToOneField on this model. If the field is
+914-        # nullable, allowing the save would result in silent data loss.
+915-        for field in self._meta.concrete_fields:
+916-            # If the related field isn't cached, then an instance hasn't been
+917-            # assigned and there's no need to worry about this check.
+918-            if field.is_relation and field.is_cached(self):
+919-                obj = getattr(self, field.name, None)
+920-                if not obj:
+921-                    continue
+922-                # A pk may have been assigned manually to a model instance not
+923-                # saved to the database (or auto-generated in a case like
+924-                # UUIDField), but we allow the save to proceed and rely on the
+925-                # database to raise an IntegrityError if applicable. If
+926-                # constraints aren't supported by the database, there's the
+927-                # unavoidable risk of data corruption.
+928-                if obj.pk is None:
+929-                    # Remove the object from a related instance cache.
+930-                    if not field.remote_field.multiple:
+931-                        field.remote_field.delete_cached_value(obj)
+932-                    raise ValueError(
+933-                        "%s() prohibited to prevent data loss due to unsaved "
+934-                        "related object '%s'." % (operation_name, field.name)
+935-                    )
+936-                elif getattr(self, field.attname) is None:
+937-                    # Use pk from related object if it has been saved after
+938-                    # an assignment.
+939-                    setattr(self, field.attname, obj.pk)
+940-                # If the relationship's pk/to_field was changed, clear the
+941-                # cached relationship.
+sha256: 53db659c82d60a47cd2182b1eab6c89605b998626302c4f0b270c66c3bd422e5
+truncated: false
+
+[ADP ACTION current=24 original=53: api_action Grep]
+path: django/db/models/base.py
+payload:
+{
+  "-A": 40,
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/django/db/models/base.py",
+  "pattern": "def _prepare_related_fields_for_save"
+}
+sha256: 16a69d66d6a1c06c8b1f9dde22f4c953757662aa0028f5e38f313d48a8df2a3f
+truncated: false
+
+[ADP OBSERVATION current=25 original=54 source=environment]
+name: Grep:toolu_01EPvJCQGvhi45zurhsoLjfc
+excerpt:
+911:    def _prepare_related_fields_for_save(self, operation_name):
+912-        # Ensure that a model instance without a PK hasn't been assigned to
+913-        # a ForeignKey or OneToOneField on this model. If the field is
+914-        # nullable, allowing the save would result in silent data loss.
+915-        for field in self._meta.concrete_fields:
+916-            # If the related field isn't cached, then an instance hasn't been
+917-            # assigned and there's no need to worry about this check.
+918-            if field.is_relation and field.is_cached(self):
+919-                obj = getattr(self, field.name, None)
+920-                if not obj:
+921-                    continue
+922-                # A pk may have been assigned manually to a model instance not
+923-                # saved to the database (or auto-generated in a case like
+924-                # UUIDField), but we allow the save to proceed and rely on the
+925-                # database to raise an IntegrityError if applicable. If
+926-                # constraints aren't supported by the database, there's the
+927-                # unavoidable risk of data corruption.
+928-                if obj.pk is None:
+929-                    # Remove the object from a related instance cache.
+930-                    if not field.remote_field.multiple:
+931-                        field.remote_field.delete_cached_value(obj)
+932-                    raise ValueError(
+933-                        "%s() prohibited to prevent data loss due to unsaved "
+934-                        "related object '%s'." % (operation_name, field.name)
+935-                    )
+936-                elif getattr(self, field.attname) is None:
+937-                    # Use pk from related object if it has been saved after
+938-                    # an assignment.
+939-                    setattr(self, field.attname, obj.pk)
+940-                # If the relationship's pk/to_field was changed, clear the
+941-                # cached relationship.
+
+sha256: 26bdbbbe9a13e0e470ea61c531740ae2b55d0db55520324feebf88fbc72d0031
+truncated: true
+
+[ADP ACTION current=26 original=55: api_action Edit]
+path: django/db/models/base.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/base.py",
+  "new_text_sha256": "456ffe1931a57315cbc278d56fe6724debec145d1e330d6b5897a0f049c76048",
+  "old_text_sha256": "b5ad315f95f6cbd95c93f6ad99cb02619089e84ec47c542fa8f624b1cff65065"
+}
+sha256: 8db00fd5c8d01bfe1a486fa16ecdb944b57887f198badb19085672161078ec2d
+truncated: false
+
+[ADP ACTION current=27 original=57: code_action bash]
+payload:
+python3 test_issue.py
+sha256: c55ef1cf8168b5bd348056971605a462d47af6fa489279e8d76594ae6b2a84fe
+truncated: false
+
+[ADP OBSERVATION current=28 original=58 source=environment]
+name: Bash:toolu_01KSQYvXEvSYSSyDxvQ7Wmg8
+excerpt:
+Testing bug scenario 1: Setting sku AFTER assignment to order
+------------------------------------------------------------
+1. After assignment, order.product_id = ''
+2. After setting sku, order.product.sku = 'foo'
+3. After setting sku, order.product_id = ''
+4. After saving product, order.product_id = ''
+
+❌ Transaction failed with error: 'product'
+This is expected due to ForeignKey constraint violation
+
+============================================================
+Testing scenario 2: Setting sku BEFORE assignment to order
+------------------------------------------------------------
+1. After assignment, order.product_id = 'bar'
+2. After saving product, order.product_id = 'bar'
+3. After saving order, order.product_id = 'bar'
+
+4. Order.objects.filter(product=order.product).exists() = True
+
+✓ This works correctly!
+
+============================================================
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 0174b2ecb98668e43f32c61e309798d3b72ab777f347d0edc1d258c0bc4dedac
+truncated: false
+
+[ADP ACTION current=29 original=61: code_action bash]
+payload:
+python3 test_issue_debug.py
+sha256: 2f2be99ca91fe79f9185d40e1030f38caade20751cdeb525e5919c74b169e5ec
+truncated: false
+
+[ADP OBSERVATION current=30 original=62 source=environment]
+name: Bash:toolu_01TTGJSvirg7wmu5Tnu3cVQF:error
+excerpt:
+Exit code 1
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Traceback (most recent call last):
+  File "test_issue_debug.py", line 90, in <module>
+    order.save()
+  File "./swebench_9_15/testbed/django/db/models/base.py", line 682, in save
+    self._prepare_related_fields_for_save(operation_name='save')
+  File "test_issue_debug.py", line 85, in debug_prepare
+    return original_prepare(self, operation_name)
+  File "./swebench_9_15/testbed/django/db/models/base.py", line 944, in _prepare_related_fields_for_save
+    field.delete_cached_value(self)
+  File "./swebench_9_15/testbed/django/db/models/fields/mixins.py", line 28, in delete_cached_value
+    del instance._state.fields_cache[self.get_cache_name()]
+KeyError: 'product'
+
+Testing with detailed output:
+------------------------------------------------------------
+1. Created order, order.product_id = None
+2. Assigned Product(), order.product_id = ''
+3. order.product.sku = ''
+4. order.product.pk = ''
+5. Set sku='foo', order.product.sku = 'foo'
+6. order.product.pk = 'foo'
+7. order.product_id = ''
+8. After product.save(), order.product.pk = 'foo'
+9. order.product_id = ''
+
+10. About to call order.save()...
+
+=== In _prepare_related_fields_for_save for Order ===
+Field: product
+  obj.pk = 'foo'
+  field.attname = product_id
+  getattr(self, field.attname) = ''
+  field.target_field.attname = sku
+  getattr(obj, field.target_field.attname) = 'foo'
+  Match? False
+sha256: 73dea3481e72d7ff7d374ba7f51b1e6422bb44b2ef1ca88d754f3dc70b9fd102
+truncated: false
+
+[ADP ACTION current=31 original=63: api_action Edit]
+path: django/db/models/base.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/base.py",
+  "new_text_sha256": "64a64d9f86de0dd8b0c130b858803c42927e32ae08fa6dce47b1717adec59d1e",
+  "old_text_sha256": "456ffe1931a57315cbc278d56fe6724debec145d1e330d6b5897a0f049c76048"
+}
+sha256: 0ffcbe7e3aad621bc1ae35f4da92c06d126f485c6ef0eb2e05930fc3a10d455d
+truncated: false
+
+[ADP ACTION current=32 original=65: api_action Grep]
+path: django/db/models/fields
+payload:
+{
+  "-A": 3,
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/django/db/models/fields",
+  "pattern": "def is_cached"
+}
+sha256: 9909dd5fbbca8080d0f4ff78f850c383d38a45acdf78d76c6409b693bc046433
+truncated: false
+
+[ADP OBSERVATION current=33 original=66 source=environment]
+name: Grep:toolu_01QxvPK8P5MxwBcPnCNsJW6h
+excerpt:
+django/db/models/fields/mixins.py:21:    def is_cached(self, instance):
+./swebench_9_15/testbed/django/db/models/fields/mixins.py-22-        return self.get_cache_name() in instance._state.fields_cache
+./swebench_9_15/testbed/django/db/models/fields/mixins.py-23-
+django/db/models/fields/mixins.py-24-    def set_cached_value(self, instance, value):
+--
+django/db/models/fields/related_descriptors.py:114:    def is_cached(self, instance):
+./swebench_9_15/testbed/django/db/models/fields/related_descriptors.py-115-        return self.field.is_cached(instance)
+./swebench_9_15/testbed/django/db/models/fields/related_descriptors.py-116-
+django/db/models/fields/related_descriptors.py-117-    def get_queryset(self, **hints):
+--
+django/db/models/fields/related_descriptors.py:359:    def is_cached(self, instance):
+./swebench_9_15/testbed/django/db/models/fields/related_descriptors.py-360-        return self.related.is_cached(instance)
+./swebench_9_15/testbed/django/db/models/fields/related_descriptors.py-361-
+django/db/models/fields/related_descriptors.py-362-    def get_queryset(self, **hints):
+sha256: 528ebef6b9cdd9e55e8204a1364b19185174f53deda74e30ee2e6061fa036a76
+truncated: false
+
+[ADP ACTION current=34 original=67: api_action Grep]
+path: django/db/models/fields
+payload:
+{
+  "-A": 3,
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/django/db/models/fields",
+  "pattern": "def delete_cached_value"
+}
+sha256: a05dfe1007453ede62c93de0f929c420fcdf767253e0c489800d26656b16cb7c
+truncated: false
+
+[ADP OBSERVATION current=35 original=68 source=environment]
+name: Grep:toolu_01XpkiKvPHJqSJb4ftxkLaWc
+excerpt:
+django/db/models/fields/mixins.py:27:    def delete_cached_value(self, instance):
+./swebench_9_15/testbed/django/db/models/fields/mixins.py-28-        del instance._state.fields_cache[self.get_cache_name()]
+./swebench_9_15/testbed/django/db/models/fields/mixins.py-29-
+./swebench_9_15/testbed/django/db/models/fields/mixins.py-30-
+sha256: 22264cba7872d45085181569543ecdb336182eb334f83b018db05dd110e5b030
+truncated: false
+
+[ADP ACTION current=36 original=69: code_action bash]
+payload:
+python3 test_issue_debug.py
+sha256: 37cb11d03f5bf19bf71aa985834bd1d606910d47f0b9f129c7f427df5b41b222
+truncated: false
+
+[ADP OBSERVATION current=37 original=70 source=environment]
+name: Bash:toolu_01VrrL9dw3vRpmuZdRPVvKN5
+excerpt:
+Testing with detailed output:
+------------------------------------------------------------
+1. Created order, order.product_id = None
+2. Assigned Product(), order.product_id = ''
+3. order.product.sku = ''
+4. order.product.pk = ''
+5. Set sku='foo', order.product.sku = 'foo'
+6. order.product.pk = 'foo'
+7. order.product_id = ''
+8. After product.save(), order.product.pk = 'foo'
+9. order.product_id = ''
+
+10. About to call order.save()...
+
+=== In _prepare_related_fields_for_save for Order ===
+Field: product
+  obj.pk = 'foo'
+  field.attname = product_id
+  getattr(self, field.attname) = ''
+  field.target_field.attname = sku
+  getattr(obj, field.target_field.attname) = 'foo'
+  Match? False
+11. After order.save(), order.product_id = 'foo'
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: bb1a61269b80e658c6bdc30558124584a6270008457bad2d69fb9177119dc398
+truncated: false
+
+[ADP ACTION current=38 original=71: code_action bash]
+payload:
+python3 test_issue.py
+sha256: d3fc1173f60dd1a6ab5579af16aa804fa9267702e10fa6a07a686dca3248012e
+truncated: false
+
+[ADP OBSERVATION current=39 original=72 source=environment]
+name: Bash:toolu_01Nc5xNuXGD1c5pPTMMsP1S4
+excerpt:
+Testing bug scenario 1: Setting sku AFTER assignment to order
+------------------------------------------------------------
+1. After assignment, order.product_id = ''
+2. After setting sku, order.product.sku = 'foo'
+3. After setting sku, order.product_id = ''
+4. After saving product, order.product_id = ''
+5. After saving order, order.product_id = 'foo'
+
+6. Order.objects.filter(product_id='').exists() = False
+7. Order.objects.filter(product=order.product).exists() = True
+
+============================================================
+Testing scenario 2: Setting sku BEFORE assignment to order
+------------------------------------------------------------
+1. After assignment, order.product_id = 'bar'
+2. After saving product, order.product_id = 'bar'
+3. After saving order, order.product_id = 'bar'
+
+4. Order.objects.filter(product=order.product).exists() = True
+
+✓ This works correctly!
+
+============================================================
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 61279340fc27d335dd7bade209f664ca389297b15075f9fc16d138b199d1dd0a
+truncated: false
+
+[ADP ACTION current=40 original=75: code_action bash]
+payload:
+python3 tests/runtests.py foreign_object --verbosity=2 2>&1 | head -100
+sha256: eb7d9103525b1b00a90bfbc024a8a2f3a52d93b724782410d24c6c6a474a27c0
+truncated: false
+
+[ADP OBSERVATION current=41 original=76 source=environment]
+name: Bash:toolu_01RyEKkaQdUUwkykkNDSLvEp
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django'
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Importing application foreign_object
+Skipping setup of unused database(s): other.
+Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+Operations to perform:
+  Synchronize unmigrated apps: auth, contenttypes, foreign_object, messages, sessions, staticfiles
+  Apply all migrations: admin, sites
+Synchronizing apps without migrations:
+  Creating tables...
+    Creating table django_content_type
+    Creating table auth_permission
+    Creating table auth_group
+    Creating table auth_user
+    Creating table django_session
+    Creating table foreign_object_article
+    Creating table foreign_object_newsarticle
+    Creating table foreign_object_articletranslation
+    Creating table foreign_object_articletag
+    Creating table foreign_object_articleidea
+    Creating table foreign_object_address
+    Creating table foreign_object_customer
+    Creating table foreign_object_contact
+    Creating table foreign_object_slugpage
+    Creating table foreign_object_country
+    Creating table foreign_object_person
+    Creating table foreign_object_group
+    Creating table foreign_object_membership
+    Creating table foreign_object_friendship
+    Running deferred SQL...
+Running migrations:
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying sites.0001_initial... OK
+  Applying sites.0002_alter_domain_unique... OK
+System check identified no issues (0 silenced).
+sha256: 7af49f3a502f425823047c47e24f91714a14c0753c2cbfbfd16663f6ab40cec9
+truncated: true
+
+[ADP ACTION current=42 original=77: code_action bash]
+payload:
+python3 tests/runtests.py many_to_one --verbosity=2 2>&1 | tail -50
+sha256: 11095c84e06756af5d6182f6a81def416f9208635553228550000a1ef4463dba
+truncated: false
+
+[ADP OBSERVATION current=43 original=78 source=environment]
+name: Bash:toolu_015MDcLPbYe38viARzwbssDE
+excerpt:
+Running migrations:
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying sites.0001_initial... OK
+  Applying sites.0002_alter_domain_unique... OK
+System check identified no issues (0 silenced).
+test_add (many_to_one.tests.ManyToOneTests) ... ok
+test_add_after_prefetch (many_to_one.tests.ManyToOneTests) ... ok
+test_add_remove_set_by_pk_raises (many_to_one.tests.ManyToOneTests) ... ok
+test_add_then_remove_after_prefetch (many_to_one.tests.ManyToOneTests) ... ok
+test_assign (many_to_one.tests.ManyToOneTests) ... ok
+test_assign_fk_id_none (many_to_one.tests.ManyToOneTests) ... ok
+test_assign_fk_id_value (many_to_one.tests.ManyToOneTests) ... ok
+test_cached_foreign_key_with_to_field_not_cleared_by_save (many_to_one.tests.ManyToOneTests) ... ok
+test_cached_relation_invalidated_on_save (many_to_one.tests.ManyToOneTests)
+Model.save() invalidates stale ForeignKey relations after a primary key ... ok
+test_clear_after_prefetch (many_to_one.tests.ManyToOneTests) ... ok
+test_create (many_to_one.tests.ManyToOneTests) ... ok
+test_create_relation_with_gettext_lazy (many_to_one.tests.ManyToOneTests) ... ok
+test_deepcopy_and_circular_references (many_to_one.tests.ManyToOneTests) ... ok
+test_delete (many_to_one.tests.ManyToOneTests) ... ok
+test_explicit_fk (many_to_one.tests.ManyToOneTests) ... ok
+test_fk_assignment_and_related_object_cache (many_to_one.tests.ManyToOneTests) ... ok
+test_fk_instantiation_outside_model (many_to_one.tests.ManyToOneTests) ... ok
+test_fk_to_bigautofield (many_to_one.tests.ManyToOneTests) ... ok
+test_fk_to_smallautofield (many_to_one.tests.ManyToOneTests) ... ok
+test_get (many_to_one.tests.ManyToOneTests) ... ok
+test_hasattr_related_object (many_to_one.tests.ManyToOneTests) ... ok
+test_manager_class_caching (many_to_one.tests.ManyToOneTests) ... ok
+test_multiple_foreignkeys (many_to_one.tests.ManyToOneTests) ... ok
+test_related_object (many_to_one.tes
+sha256: 5b040da831db41102eed1bb07ee901d0c0607ced2dd54148d2b237b66ffbe0ff
+truncated: true
+
+[ADP ACTION current=44 original=79: api_action Write]
+path: test_django_issue.py
+payload:
+{
+  "content_sha256": "99213eee67818bb172cb93b760df48a65e5f72620ba74867bee11cf76eca444c",
+  "file_path": "./swebench_9_15/testbed/test_django_issue.py"
+}
+sha256: 647f845c171d5ff49a690d24e39c8f50fe4d8204ce8b146a306e10971e780a63
+truncated: false
+
+[ADP ACTION current=45 original=81: code_action bash]
+payload:
+python3 tests/runtests.py test_django_issue --verbosity=2
+sha256: 5fe923693df2ca9deb85cb7a4043b874a0b025e1367763330a440b410b00aae1
+truncated: false
+
+[ADP OBSERVATION current=46 original=82 source=environment]
+name: Bash:toolu_01YRMCpn6ftEjgETKzUFYSqB:error
+excerpt:
+Exit code 1
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+test_change_pk_of_related_object_before_save (test_django_issue.NonNumericPrimaryKeyForeignKeyTests)
+Test that changing the primary key of a related object before saving ... ERROR
+test_set_fk_to_object_with_pk_already_set (test_django_issue.NonNumericPrimaryKeyForeignKeyTests)
+Test the baseline case where the primary key is set before assignment. ... ERROR
+test_set_fk_to_unsaved_object_then_set_pk (test_django_issue.NonNumericPrimaryKeyForeignKeyTests)
+Test that setting a foreign key to an unsaved object and then setting ... ERROR
+
+======================================================================
+ERROR: test_change_pk_of_related_object_before_save (test_django_issue.NonNumericPrimaryKeyForeignKeyTests)
+Test that changing the primary key of a related object before saving
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "./swebench_9_15/testbed/django/db/backends/utils.py", line 84, in _execute
+    return self.cursor.execute(sql, params)
+  File "./swebench_9_15/testbed/django/db/backends/sqlite3/base.py", line 422, in execute
+    return Database.Cursor.execute(self, query, params)
+sqlite3.OperationalError: no such table: test_app_product
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "./swebench_9_15/testbed/test_django_issue.py", line 88, in test_change_pk_of_related_object_before_save
+    product.save()
+  File ".
+sha256: 53f478fab05c7eaf1086f20bca7be810093d613c44d42a469fc533d4b46b2f7c
+truncated: true
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: django/django
+Base commit: 4b4e68a7a6847e8b449923bb882bed01f0d7b2a8
+Instance ID: django__django-28147
+
+CURRENT_ISSUE
+Saving parent object after setting on child leads to unexpected data loss
+
+Description
+(last modified by
+Erwin Junge
+)
+When saving a parent object after setting it on a child object and then saving the child object, no error is thrown but the FK relation is saved with a NULL value.
+Failing testcase:
+# Create parent and child, save parent, save child, parent_id should be set
+        p = Parent()
+        c = Child(parent=p)
+        p.save()
+        c.save()
+        c.refresh_from_db()
+        self.assertIs(c.parent, p)
+Patch available:
+​
+https://github.com/django/django/pull/8434
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

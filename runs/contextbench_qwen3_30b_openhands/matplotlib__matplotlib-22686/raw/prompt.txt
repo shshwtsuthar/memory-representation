@@ -1,0 +1,552 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: raw
+
+The following is a stripped raw transcript from an officially related prior issue.
+
+STRIPPED RAW CLAUDE CODE TRAJECTORY
+This transcript was rendered from original raw JSONL using the canonical ADP strip manifest.
+
+[RAW line 4 USER]
+PRIOR ISSUE METADATA
+repo: matplotlib/matplotlib
+instance_id: matplotlib__matplotlib-22711
+base_commit: f670fe78795b18eb1118707721852209cd77ad51
+problem_statement:
+[Bug]: cannot give init value for RangeSlider widget
+### Bug summary
+
+I think `xy[4] = .25, val[0]` should be commented in /matplotlib/widgets. py", line 915, in set_val
+as it prevents to initialized value for RangeSlider
+
+### Code for reproduction
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.widgets import RangeSlider
+
+# generate a fake image
+np.random.seed(19680801)
+N = 128
+img = np.random.randn(N, N)
+
+fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+fig.subplots_adjust(bottom=0.25)
+
+im = axs[0].imshow(img)
+axs[1].hist(img.flatten(), bins='auto')
+axs[1].set_title('Histogram of pixel intensities')
+
+# Create the RangeSlider
+slider_ax = fig.add_axes([0.20, 0.1, 0.60, 0.03])
+slider = RangeSlider(slider_ax, "Threshold", img.min(), img.max(),valinit=[0.0,0.0])
+
+# Create the Vertical lines on the histogram
+lower_limit_line = axs[1].axvline(slider.val[0], color='k')
+upper_limit_line = axs[1].axvline(slider.val[1], color='k')
+
+
+def update(val):
+    # The val passed to a callback by the RangeSlider will
+    # be a tuple of (min, max)
+
+    # Update the image's colormap
+    im.norm.vmin = val[0]
+    im.norm.vmax = val[1]
+
+    # Update the position of the vertical lines
+    lower_limit_line.set_xdata([val[0], val[0]])
+    upper_limit_line.set_xdata([val[1], val[1]])
+
+    # Redraw the figure to ensure it updates
+    fig.canvas.draw_idle()
+
+
+slider.on_changed(update)
+plt.show()
+```
+
+
+### Actual outcome
+
+```python
+  File "<ipython-input-52-b704c53e18d4>", line 19, in <module>
+    slider = RangeSlider(slider_ax, "Threshold", img.min(), img.max(),valinit=[0.0,0.0])
+
+  File "/Users/Vincent/opt/anaconda3/envs/py38/lib/python3.8/site-packages/matplotlib/widgets.py", line 778, in __init__
+    self.set_val(valinit)
+
+  File "/Users/Vincent/opt/anaconda3/envs/py38/lib/python3.8/site-packages/matplotlib/widgets.py", line 915, in set_val
+    xy[4] = val[0], .25
+
+IndexError: index 4 is out of bounds for axis 0 with size 4
+```
+
+### Expected outcome
+
+range slider with user initial values
+
+### Additional information
+
+error can be removed by commenting this line
+```python
+
+    def set_val(self, val):
+        """
+        Set slider value to *val*.
+
+        Parameters
+        ----------
+        val : tuple or array-like of float
+        """
+        val = np.sort(np.asanyarray(val))
+        if val.shape != (2,):
+            raise ValueError(
+                f"val must have shape (2,) but has shape {val.shape}"
+            )
+        val[0] = self._min_in_bounds(val[0])
+        val[1] = self._max_in_bounds(val[1])
+        xy = self.poly.xy
+        if self.orientation == "vertical":
+            xy[0] = .25, val[0]
+            xy[1] = .25, val[1]
+            xy[2] = .75, val[1]
+            xy[3] = .75, val[0]
+            # xy[4] = .25, val[0]
+        else:
+            xy[0] = val[0], .25
+            xy[1] = val[0], .75
+            xy[2] = val[1], .75
+            xy[3] = val[1], .25
+            # xy[4] = val[0], .25
+        self.poly.xy = xy
+        self.valtext.set_text(self._format(val))
+        if self.drawon:
+            self.ax.figure.canvas.draw_idle()
+        self.val = val
+        if self.eventson:
+            self._observers.process("changed", val)
+
+```
+
+### Operating system
+
+OSX
+
+### Matplotlib Version
+
+3.5.1
+
+### Matplotlib Backend
+
+_No response_
+
+### Python version
+
+3.8
+
+### Jupyter version
+
+_No response_
+
+### Installation
+
+pip
+[RAW line 7 TOOL Bash]
+find ./swebench_9_15 -name "widgets.py" -path "*/matplotlib/*" | head -5
+[RAW line 10 TOOL Glob]
+{
+  "pattern": "**/widgets.py"
+}
+[RAW line 19 TOOL Bash]
+ls -la testbed 2>&1 | head -20
+[RAW line 37 TOOL Bash]
+find testbed -name "widgets.py" -type f
+[RAW line 38 TOOL RESULT toolu_01Rzn65kuhx6oeLMvuhHJeyR]
+testbed/lib/matplotlib/widgets.py
+testbed/lib/matplotlib/testing/widgets.py
+[RAW line 40 TOOL Grep]
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/lib/matplotlib/widgets.py",
+  "pattern": "class RangeSlider"
+}
+[RAW line 41 TOOL RESULT toolu_01QZzJRt47SRYmiUUeY2xVoG]
+588:class RangeSlider(SliderBase):
+[RAW line 43 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/lib/matplotlib/widgets.py",
+  "limit": 200,
+  "offset": 588
+}
+[RAW line 44 TOOL RESULT toolu_01HGVEkKnRhM6ivp4S6vMJAs]
+   588→class RangeSlider(SliderBase):
+   589→    """
+   590→    A slider representing a range of floating point values. Defines the min and
+   591→    max of the range via the *val* attribute as a tuple of (min, max).
+   592→
+   593→    Create a slider that defines a range contained within [*valmin*, *valmax*]
+   594→    in Axes *ax*. For the slider to remain responsive you must maintain a
+   595→    reference to it. Call :meth:`on_changed` to connect to the slider event.
+   596→
+   597→    Attributes
+   598→    ----------
+   599→    val : tuple of float
+   600→        Slider value.
+   601→    """
+   602→
+   603→    def __init__(
+   604→        self,
+   605→        ax,
+   606→        label,
+   607→        valmin,
+   608→        valmax,
+   609→        valinit=None,
+   610→        valfmt=None,
+   611→        closedmin=True,
+   612→        closedmax=True,
+   613→        dragging=True,
+   614→        valstep=None,
+   615→        orientation="horizontal",
+   616→        track_color='lightgrey',
+   617→        handle_style=None,
+   618→        **kwargs,
+   619→    ):
+   620→        """
+   621→        Parameters
+   622→        ----------
+   623→        ax : Axes
+   624→            The Axes to put the slider in.
+   625→
+   626→        label : str
+   627→            Slider label.
+   628→
+   629→        valmin : float
+   630→            The minimum value of the slider.
+   631→
+   632→        valmax : float
+   633→            The maximum value of the slider.
+   634→
+   635→        valinit : tuple of float or None, default: None
+   636→            The initial positions of the slider. If None the initial positions
+   637→            will be at the 25th and 75th percentiles of the range.
+   638→
+   639→        valfmt : str, default: None
+   640→            %-format string used to format the slider values.  If None, a
+   641→            `.ScalarFormatter` is used instead.
+   642→
+   643→        closedmin : bool, default: True
+   644→            Whether the slider interval is close
+[... truncated ...]
+[RAW line 46 TOOL Grep]
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/lib/matplotlib/widgets.py",
+  "pattern": "def set_val"
+}
+[RAW line 47 TOOL RESULT toolu_01CXCVdyizvVLCPpdNfrNiAM]
+545:    def set_val(self, val):
+888:    def set_val(self, val):
+1264:    def set_val(self, val):
+[RAW line 49 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/lib/matplotlib/widgets.py",
+  "limit": 50,
+  "offset": 888
+}
+[RAW line 50 TOOL RESULT toolu_01N864wyV68CNLzBNypaj8uh]
+   888→    def set_val(self, val):
+   889→        """
+   890→        Set slider value to *val*.
+   891→
+   892→        Parameters
+   893→        ----------
+   894→        val : tuple or array-like of float
+   895→        """
+   896→        val = np.sort(val)
+   897→        _api.check_shape((2,), val=val)
+   898→        val[0] = self._min_in_bounds(val[0])
+   899→        val[1] = self._max_in_bounds(val[1])
+   900→        xy = self.poly.xy
+   901→        if self.orientation == "vertical":
+   902→            xy[0] = .25, val[0]
+   903→            xy[1] = .25, val[1]
+   904→            xy[2] = .75, val[1]
+   905→            xy[3] = .75, val[0]
+   906→            xy[4] = .25, val[0]
+   907→        else:
+   908→            xy[0] = val[0], .25
+   909→            xy[1] = val[0], .75
+   910→            xy[2] = val[1], .75
+   911→            xy[3] = val[1], .25
+   912→            xy[4] = val[0], .25
+   913→        self.poly.xy = xy
+   914→        self.valtext.set_text(self._format(val))
+   915→        if self.drawon:
+   916→            self.ax.figure.canvas.draw_idle()
+   917→        self.val = val
+   918→        if self.eventson:
+   919→            self._observers.process("changed", val)
+   920→
+   921→    def on_changed(self, func):
+   922→        """
+   923→        Connect *func* as callback function to changes of the slider value.
+   924→
+   925→        Parameters
+   926→        ----------
+   927→        func : callable
+   928→            Function to call when slider is changed. The function
+   929→            must accept a numpy array with shape (2,) as its argument.
+   930→
+   931→        Returns
+   932→        -------
+   933→        int
+   934→            Connection id (which can be used to disconnect *func*).
+   935→        """
+   936→        return self._observers.connect('changed', lambda val: func(val))
+   937→
+
+[RAW line 53 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/lib/matplotlib/widgets.py",
+  "limit": 20,
+  "offset": 705
+}
+[RAW line 54 TOOL RESULT toolu_01SH6cGpHDxbztNtY1yctEUj]
+   705→        if orientation == "vertical":
+   706→            self.track = Rectangle(
+   707→                (.25, 0), .5, 2,
+   708→                transform=ax.transAxes,
+   709→                facecolor=track_color
+   710→            )
+   711→            ax.add_patch(self.track)
+   712→            self.poly = ax.axhspan(valinit[0], valinit[1], 0, 1, **kwargs)
+   713→            handleXY_1 = [.5, valinit[0]]
+   714→            handleXY_2 = [.5, valinit[1]]
+   715→        else:
+   716→            self.track = Rectangle(
+   717→                (0, .25), 1, .5,
+   718→                transform=ax.transAxes,
+   719→                facecolor=track_color
+   720→            )
+   721→            ax.add_patch(self.track)
+   722→            self.poly = ax.axvspan(valinit[0], valinit[1], 0, 1, **kwargs)
+   723→            handleXY_1 = [valinit[0], .5]
+   724→            handleXY_2 = [valinit[1], .5]
+
+[RAW line 60 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/lib/matplotlib/widgets.py",
+  "new_text_sha256": "0b80448e30770bb804c8e3e004389949affd955dc803cef24380360b33f714d0",
+  "old_text_sha256": "62a6196736aa5cfc5bbd4413fb8adcf5277535ce5b67445c8d9b6e44fbe3e297"
+}
+[RAW line 68 TOOL Write]
+{
+  "content_sha256": "b3a9c22b97fceac1172e935a415c248f041c1afc9d60e857bd93f264e037ecbb",
+  "file_path": "./swebench_9_15/test_rangeslider.py"
+}
+[RAW line 72 TOOL Bash]
+python test_rangeslider.py
+[RAW line 73 TOOL RESULT toolu_01Jb1germKxiT9HpdDPK9Qds]
+Exit code 1
+  File "test_rangeslider.py", line 47
+    print(f"Slider values: {slider.val}")
+                                       ^
+SyntaxError: invalid syntax
+[RAW line 75 TOOL Bash]
+python --version
+[RAW line 76 TOOL RESULT toolu_01Sr8yTTgcQNwDcGwag7iTuJ]
+Python 2.7.3
+[RAW line 78 TOOL Bash]
+python3 test_rangeslider.py
+[RAW line 79 TOOL RESULT toolu_0177Q4W9UeCyucuv2QQ1JPZT]
+Test passed! RangeSlider created successfully with valinit=[0.0, 0.0]
+Slider values: [0. 0.]
+[RAW line 82 TOOL Write]
+{
+  "content_sha256": "5cc52bf144a56ce5d612032fc8d7c03e0f4a7e5c1fb01f0ec04e8a2ad656529b",
+  "file_path": "./swebench_9_15/test_rangeslider_comprehensive.py"
+}
+[RAW line 86 TOOL Bash]
+python3 test_rangeslider_comprehensive.py
+[RAW line 87 TOOL RESULT toolu_019BEKtCVzqrGTY5KbxghJNV]
+Test 1: Horizontal slider with valinit=[0.0, 0.0]
+  Success! Slider values: [0. 0.]
+Test 2: Horizontal slider with valinit=[-1.0, 1.0]
+  Success! Slider values: [-1.  1.]
+Test 3: Vertical slider with valinit=[0.0, 0.0]
+  Success! Slider values: [0. 0.]
+Test 4: Vertical slider with valinit=[-2.0, 3.0]
+  Success! Slider values: [-2.  3.]
+Test 5: Testing set_val method
+  Success! Slider values after set_val: [1. 2.]
+
+All tests passed!
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: matplotlib/matplotlib
+Base commit: e779b97174ff3ab2737fbdffb432ef8689201602
+Instance ID: matplotlib__matplotlib-22686
+
+CURRENT_ISSUE
+[Bug]: cannot give init value for RangeSlider widget
+### Bug summary
+
+I think `xy[4] = .25, val[0]` should be commented in /matplotlib/widgets. py", line 915, in set_val
+as it prevents to initialized value for RangeSlider
+
+### Code for reproduction
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.widgets import RangeSlider
+
+# generate a fake image
+np.random.seed(19680801)
+N = 128
+img = np.random.randn(N, N)
+
+fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+fig.subplots_adjust(bottom=0.25)
+
+im = axs[0].imshow(img)
+axs[1].hist(img.flatten(), bins='auto')
+axs[1].set_title('Histogram of pixel intensities')
+
+# Create the RangeSlider
+slider_ax = fig.add_axes([0.20, 0.1, 0.60, 0.03])
+slider = RangeSlider(slider_ax, "Threshold", img.min(), img.max(),valinit=[0.0,0.0])
+
+# Create the Vertical lines on the histogram
+lower_limit_line = axs[1].axvline(slider.val[0], color='k')
+upper_limit_line = axs[1].axvline(slider.val[1], color='k')
+
+
+def update(val):
+    # The val passed to a callback by the RangeSlider will
+    # be a tuple of (min, max)
+
+    # Update the image's colormap
+    im.norm.vmin = val[0]
+    im.norm.vmax = val[1]
+
+    # Update the position of the vertical lines
+    lower_limit_line.set_xdata([val[0], val[0]])
+    upper_limit_line.set_xdata([val[1], val[1]])
+
+    # Redraw the figure to ensure it updates
+    fig.canvas.draw_idle()
+
+
+slider.on_changed(update)
+plt.show()
+```
+
+
+### Actual outcome
+
+```python
+  File "<ipython-input-52-b704c53e18d4>", line 19, in <module>
+    slider = RangeSlider(slider_ax, "Threshold", img.min(), img.max(),valinit=[0.0,0.0])
+
+  File "/Users/Vincent/opt/anaconda3/envs/py38/lib/python3.8/site-packages/matplotlib/widgets.py", line 778, in __init__
+    self.set_val(valinit)
+
+  File "/Users/Vincent/opt/anaconda3/envs/py38/lib/python3.8/site-packages/matplotlib/widgets.py", line 915, in set_val
+    xy[4] = val[0], .25
+
+IndexError: index 4 is out of bounds for axis 0 with size 4
+```
+
+### Expected outcome
+
+range slider with user initial values
+
+### Additional information
+
+error can be removed by commenting this line
+```python
+
+    def set_val(self, val):
+        """
+        Set slider value to *val*.
+
+        Parameters
+        ----------
+        val : tuple or array-like of float
+        """
+        val = np.sort(np.asanyarray(val))
+        if val.shape != (2,):
+            raise ValueError(
+                f"val must have shape (2,) but has shape {val.shape}"
+            )
+        val[0] = self._min_in_bounds(val[0])
+        val[1] = self._max_in_bounds(val[1])
+        xy = self.poly.xy
+        if self.orientation == "vertical":
+            xy[0] = .25, val[0]
+            xy[1] = .25, val[1]
+            xy[2] = .75, val[1]
+            xy[3] = .75, val[0]
+            # xy[4] = .25, val[0]
+        else:
+            xy[0] = val[0], .25
+            xy[1] = val[0], .75
+            xy[2] = val[1], .75
+            xy[3] = val[1], .25
+            # xy[4] = val[0], .25
+        self.poly.xy = xy
+        self.valtext.set_text(self._format(val))
+        if self.drawon:
+            self.ax.figure.canvas.draw_idle()
+        self.val = val
+        if self.eventson:
+            self._observers.process("changed", val)
+
+```
+
+### Operating system
+
+OSX
+
+### Matplotlib Version
+
+3.5.1
+
+### Matplotlib Backend
+
+_No response_
+
+### Python version
+
+3.8
+
+### Jupyter version
+
+_No response_
+
+### Installation
+
+pip
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

@@ -1,0 +1,201 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: no_memory
+
+No prior context is provided for this run.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: django/django
+Base commit: 3a9b8b25d48c5768633e73edc5ddca20c3fd716c
+Instance ID: django__django-33461
+
+CURRENT_ISSUE
+Unescaped HTML rendering in the technical 500 response via SafeString usage in Exception instance's args.
+
+Description
+This was previously reported to the security email address on
+16 Jan 2022, 15:07
+; as of
+25 Jan 2022, 08:56
+after a couple of email exchanges with Florian it's been OK'd to disclose it in public (that's my understanding after re-reading it thrice to make super sure).
+Despite my best efforts [and the eyes of the security team] I can't come up with a plausible scenario in which it's actually an issue.
+I'm going to copy-paste most of my side of the email thread to avoid having to come up with better wording, I'll also be providing two attachments demonstrating the issue.
+Findings based on email + attachment 1
+Requirements:
+DEBUG=True
+to get the technical 500
+Templates much be constructed from at least partial user data.
+TemplateDoesNotExist
+(or possibly
+TemplateSyntaxError
+... somehow) must be raised, and the message needs to somehow contain user data.
+The only way I've managed to establish it could demonstrably and hypothetically happen is:
+Developer's template system allows the construction of templates (e.g Database loader, or fragments joined together from form output in the admin to dynamically create CMS templates or whatever)
+Developer's template system must allow for dynamic extends, and for reasons unknown isn't using variable resolution for it but is instead doing something akin to:
+data = '{{% extends "{}" %}}'.format(template_name)
+, and is allowing the user to select the base template (e.g. from a dropdown) but isn't sanitising it (e.g. with a form's
+ChoicesField
+)
+Developer has left
+DEBUG
+turned on
+How it works:
+Given the string
+{% extends "anything" %}
+the
+"anything"
+token part is turned into a
+Variable
+(or a
+FilterExpression
+wrapping over one). The
+Variable
+is detected as a 'constant' within
+Variable.__init__
+and as such is stored as
+self.literal
+, and optimistically considered safe via
+mark_safe()
+.
+That it's marked safe is the root of the problem, but unfortunately, that appears to be a partially documented function of DTL - that
+{{ '<html>' }}
+isn't escaped - and tests fail if it's removed. It is documented that the RHS of filters work that way, and if you extrapolate enough it's readily apparent, but it's never expressly said or demonstrated that I could find. If I knew about it at any point in the last 10 years, I've long since forgotten it :)
+Anyway, from there onwards it's a
+SafeString
+containing our XSS. The
+SafeString
+is given directly to
+find_template
+, which goes to the Engine's
+find_template
+.
+The
+Engine.find_template
+will raise
+TemplateDoesNotExist
+and provide the
+SafeString
+as the
+name
+argument, which is also
+args[0]
+- the latter is important shortly.
+Because a
+TemplateDoesNotExist
+is thrown and
+render_annotated
+detects that the engine is in debug mode, it ultimately calls
+Template.get_exception_info
+which ends up doing
+str(exception.args[0])
+... but str() on a SafeString returns the same SafeString instance; that is
+id(str(my_safe_str))
+and
+id(my_safe_str)
+are the same, presumably due to a str() optimisation to avoid copying down in the C.
+So if the template name given to the extends tag contains HTML (... how?!) it'll throw, and then the SafeString gets output in the technical 500 as
+{{ template_info.message }}
+but it's already been marked safe, so the HTML is written directly, rather than escaped.
+Findings based on email + attachment 2
+Basically the same, whilst the extends method was the only one I've been able to make work in the original email, it's really just
+SafeString
+in
+args[0]
+of an exception that is caught and passes through
+Template.get_exception_info
+. This time to demonstrate that, it makes use of a template filter and some erroneously
+mark_safe
+'d user data, and the fact that there are a couple of ways to use a
+SafeString
+that
+don't
+result in a str() instance. (e.g.
+.partition()
+)
+Mitigation ideas
+Forcibly coerce the value to an actual string inside of
+get_exception_info
+, by doing something like
+str(exception.args[0]).strip()
+. That'd work for all string subclasses which don't have a custom strip method that does something clever.
+force_str()
+won't cut it, AFAIK.
+add
+escape()
+to the
+str(exception.args[0])
+call as has been done with
+self.source
+on the lines previous.
+Use
+|force_escape
+filter in the technical 500 on
+{{ template_info.message }}
+; the
+|escape
+filter won't work because it's actually
+conditional_escape
+.
+Likely
+|force_escape
+or
+escape()
+is the correct solution, the latter would make the escaping consistent in both the text and HTML exception reporters, while the
+|force_escape
+would affect only the HTML one where it is actually parsed as
+text/html
+.
+Instructions for attachments
+Both attachments should present the browser's alert box when the XSS occurs.
+Attachment 1
+Run the file by doing
+python te500xss.py runserver
+Navigate to the
+/syntax
+URL to see the apparently intentional self-inflicted XSS. That's
+not
+the XSS we care about; that's just ticket
+#5945
+Visit
+/block
+and
+/include
+to see normal expected behaviour; the former doesn't error, the latter does error but does so safely (despite being the same error message).
+Visit
+/extends
+and see the actual XSS on the 500 error page. This is unexpected given the
+/include
+one was safe, but is expected if you know about how quoted variables really truly work.
+Attachment 2
+Run the file by doing
+python te500xss2.py runserver
+Navigate to
+/good
+to see the output in the happy path, forcibly escaped by Django's autoescaper due to coercion to a new
+str()
+.
+Navigate to
+/bad
+to see the XSS again; this is because
+str.partition
+failed to find a match in the template filter, and at least in Python 3.9 returns the original str as the LHS of the partition tuple, rather than a copy - which means its still a trusted
+SafeString
+.
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

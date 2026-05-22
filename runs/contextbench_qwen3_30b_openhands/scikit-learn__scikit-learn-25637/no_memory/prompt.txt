@@ -1,0 +1,77 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: no_memory
+
+No prior context is provided for this run.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: scikit-learn/scikit-learn
+Base commit: e3d1f9ac39e4bf0f31430e779acc50fb05fe1b64
+Instance ID: scikit-learn__scikit-learn-25637
+
+CURRENT_ISSUE
+Support nullable pandas dtypes in LabelBinarizer
+### Describe the workflow you want to enable
+
+I would like to be able to pass the nullable pandas dtypes ("Int64", "Float64", "boolean") into sklearn's LabelBinarizer. Because the dtypes become object dtype when converted to numpy arrays we get `ValueError: Unknown label type:`:
+
+Repro with sklearn 1.2.1:
+
+```python
+    import pandas as pd
+    import pytest
+    from sklearn.preprocessing import LabelBinarizer
+
+    for dtype in ["Int64", "Float64", "boolean"]:
+
+        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
+
+        lb = LabelBinarizer()
+
+        with pytest.raises(ValueError, match="Unknown label type:"):
+            lb.fit(y_true.unique())
+
+```
+
+### Describe your proposed solution
+
+We should get the same behavior as when int64, float64, and bool dtypes are used, which is no error:
+
+```python
+    import pandas as pd
+    from sklearn.preprocessing import LabelBinarizer
+
+    for dtype in ["int64", "float64", "bool"]:
+        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
+
+        lb = LabelBinarizer()
+
+        lb.fit(y_true.unique())
+        y_one_hot_true = lb.transform(y_true)
+```
+
+### Describe alternatives you've considered, if relevant
+
+Our current workaround is to convert the data to numpy arrays with the corresponding dtype that works prior to passing it into LabelBinarizer
+
+### Additional context
+
+_No response_
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

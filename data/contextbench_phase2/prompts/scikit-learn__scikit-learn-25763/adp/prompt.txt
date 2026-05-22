@@ -1,0 +1,674 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: adp
+
+The following is a stripped ADP-rendered trajectory from an officially related prior issue.
+
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 76702ea7-3c9c-4866-9c1c-aaea0196c177
+- repo: scikit-learn/scikit-learn
+- instance_id: scikit-learn__scikit-learn-25500
+- base_commit: 4db04923a754b6a2defa1b172f55d492b85d165e
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: scikit-learn/scikit-learn
+instance_id: scikit-learn__scikit-learn-25500
+base_commit: 4db04923a754b6a2defa1b172f55d492b85d165e
+problem_statement:
+CalibratedClassifierCV doesn't work with `set_config(transform_output="pandas")`
+### Describe the bug
+
+CalibratedClassifierCV with isotonic regression doesn't work when we previously set `set_config(transform_output="pandas")`.
+The IsotonicRegression seems to return a dataframe, which is a problem for `_CalibratedClassifier`  in `predict_proba` where it tries to put the dataframe in a numpy array row `proba[:, class_idx] = calibrator.predict(this_pred)`.
+
+### Steps/Code to Reproduce
+
+```python
+import numpy as np
+from sklearn import set_config
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.linear_model import SGDClassifier
+
+set_config(transform_output="pandas")
+model = CalibratedClassifierCV(SGDClassifier(), method='isotonic')
+model.fit(np.arange(90).reshape(30, -1), np.arange(30) % 2)
+model.predict(np.arange(90).reshape(30, -1))
+```
+
+### Expected Results
+
+It should not crash.
+
+### Actual Results
+
+```
+../core/model_trainer.py:306: in train_model
+    cv_predictions = cross_val_predict(pipeline,
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/sklearn/model_selection/_validation.py:968: in cross_val_predict
+    predictions = parallel(
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/parallel.py:1085: in __call__
+    if self.dispatch_one_batch(iterator):
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/parallel.py:901: in dispatch_one_batch
+    self._dispatch(tasks)
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/parallel.py:819: in _dispatch
+    job = self._backend.apply_async(batch, callback=cb)
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/_parallel_backends.py:208: in apply_async
+    result = ImmediateResult(func)
+../../..
+sha256: 42ae07297bd5be0fe8df20e89c402dc88a9eeaf5b7eec51708685862e0b81182
+truncated: true
+
+[ADP ACTION current=1 original=3: code_action bash]
+payload:
+ls -la testbed 2>&1 | head -20
+sha256: 04f9f2290e8c4538b3f4c097614c8272cb08003d7be0c64683667a0168edb2c7
+truncated: false
+
+[ADP ACTION current=2 original=13: api_action Read]
+path: sklearn/calibration.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "limit": 30,
+  "offset": 750
+}
+sha256: 9967b67652fada3781b3f278c95a4a0f34900e7fb0c17dea9d337eb1e66e91d9
+truncated: false
+
+[ADP OBSERVATION current=3 original=14 source=environment]
+name: Read:toolu_01FpbtXgK9VURWeqmUVqywck
+excerpt:
+   750→        predictions = _compute_predictions(pred_method, method_name, X, n_classes)
+   751→
+   752→        label_encoder = LabelEncoder().fit(self.classes)
+   753→        pos_class_indices = label_encoder.transform(self.estimator.classes_)
+   754→
+   755→        proba = np.zeros((_num_samples(X), n_classes))
+   756→        for class_idx, this_pred, calibrator in zip(
+   757→            pos_class_indices, predictions.T, self.calibrators
+   758→        ):
+   759→            if n_classes == 2:
+   760→                # When binary, `predictions` consists only of predictions for
+   761→                # clf.classes_[1] but `pos_class_indices` = 0
+   762→                class_idx += 1
+   763→            proba[:, class_idx] = calibrator.predict(this_pred)
+   764→
+   765→        # Normalize the probabilities
+   766→        if n_classes == 2:
+   767→            proba[:, 0] = 1.0 - proba[:, 1]
+   768→        else:
+   769→            denominator = np.sum(proba, axis=1)[:, np.newaxis]
+   770→            # In the edge case where for each class calibrator returns a null
+   771→            # probability for a given sample, use the uniform distribution
+   772→            # instead.
+   773→            uniform_proba = np.full_like(proba, 1 / n_classes)
+   774→            proba = np.divide(
+   775→                proba, denominator, out=uniform_proba, where=denominator != 0
+   776→            )
+   777→
+   778→        # Deal with cases where the predicted probability minimally exceeds 1.0
+   779→        proba[(1.0 < proba) & (proba <= 1.0 + 1e-5)] = 1.0
+
+sha256: 963f9a8af8c704f89a797b9f48a54008ad3a3c947fb49c9540b44cde4a298fba
+truncated: false
+
+[ADP ACTION current=4 original=15: api_action Read]
+path: sklearn/calibration.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "limit": 100,
+  "offset": 700
+}
+sha256: b57671f41e2743698a4d6be277019498b61caee6954419c6b48a3368efde9762
+truncated: false
+
+[ADP OBSERVATION current=5 original=16 source=environment]
+name: Read:toolu_01TXybs4VxnViQzJ6LxTL7QD
+excerpt:
+   700→    return pipeline
+   701→
+   702→
+   703→class _CalibratedClassifier:
+   704→    """Pipeline-like chaining a fitted classifier and its fitted calibrators.
+   705→
+   706→    Parameters
+   707→    ----------
+   708→    estimator : estimator instance
+   709→        Fitted classifier.
+   710→
+   711→    calibrators : list of fitted estimator instances
+   712→        List of fitted calibrators (either 'IsotonicRegression' or
+   713→        '_SigmoidCalibration'). The number of calibrators equals the number of
+   714→        classes. However, if there are 2 classes, the list contains only one
+   715→        fitted calibrator.
+   716→
+   717→    classes : array-like of shape (n_classes,)
+   718→        All the prediction classes.
+   719→
+   720→    method : {'sigmoid', 'isotonic'}, default='sigmoid'
+   721→        The method to use for calibration. Can be 'sigmoid' which
+   722→        corresponds to Platt's method or 'isotonic' which is a
+   723→        non-parametric approach based on isotonic regression.
+   724→    """
+   725→
+   726→    def __init__(self, estimator, calibrators, *, classes, method="sigmoid"):
+   727→        self.estimator = estimator
+   728→        self.calibrators = calibrators
+   729→        self.classes = classes
+   730→        self.method = method
+   731→
+   732→    def predict_proba(self, X):
+   733→        """Calculate calibrated probabilities.
+   734→
+   735→        Calculates classification calibrated probabilities
+   736→        for each class, in a one-vs-all manner, for `X`.
+   737→
+   738→        Parameters
+   739→        ----------
+   740→        X : ndarray of shape (n_samples, n_features)
+   741→            The sample data.
+   742→
+   743→        Returns
+   744→        -------
+   745→        proba : array, shape (n_samples, n_classes)
+   746→            The predicted probabilities. Can be exact zeros.
+   747→        """
+   748→        n_classes = len(self.classes)
+   749→        pred_method, method_name = _get_prediction_method
+sha256: 4f12ca6e090ce82403a505a6f56d566a5d15cb85ee1f7387b82edf6687c2a8e2
+truncated: true
+
+[ADP ACTION current=6 original=17: api_action Read]
+path: sklearn/calibration.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "limit": 50,
+  "offset": 0
+}
+sha256: ee48b28450fe0d17a1609bac4f4824091b309cead8a942bdda1fa12761f437b8
+truncated: false
+
+[ADP OBSERVATION current=7 original=18 source=environment]
+name: Read:toolu_016dDVTVxsHQkKCGc6i6KrDc
+excerpt:
+     0→"""Calibration of predicted probabilities."""
+     1→
+     2→# Author: Alexandre Gramfort <alexandre.gramfort@telecom-paristech.fr>
+     3→#         Balazs Kegl <balazs.kegl@gmail.com>
+     4→#         Jan Hendrik Metzen <jhm@informatik.uni-bremen.de>
+     5→#         Mathieu Blondel <mathieu@mblondel.org>
+     6→#
+     7→# License: BSD 3 clause
+     8→
+     9→from numbers import Integral
+    10→import warnings
+    11→from inspect import signature
+    12→from functools import partial
+    13→
+    14→from math import log
+    15→import numpy as np
+    16→
+    17→from scipy.special import expit
+    18→from scipy.special import xlogy
+    19→from scipy.optimize import fmin_bfgs
+    20→
+    21→from .base import (
+    22→    BaseEstimator,
+    23→    ClassifierMixin,
+    24→    RegressorMixin,
+    25→    clone,
+    26→    MetaEstimatorMixin,
+    27→    is_classifier,
+    28→)
+    29→from .preprocessing import label_binarize, LabelEncoder
+    30→from .utils import (
+    31→    column_or_1d,
+    32→    indexable,
+    33→    check_matplotlib_support,
+    34→)
+    35→
+    36→from .utils.multiclass import check_classification_targets
+    37→from .utils.parallel import delayed, Parallel
+    38→from .utils._param_validation import StrOptions, HasMethods, Hidden
+    39→from .utils.validation import (
+    40→    _check_fit_params,
+    41→    _check_sample_weight,
+    42→    _num_samples,
+    43→    check_consistent_length,
+    44→    check_is_fitted,
+    45→)
+    46→from .utils import _safe_indexing
+    47→from .isotonic import IsotonicRegression
+    48→from .svm import LinearSVC
+    49→from .model_selection import check_cv, cross_val_predict
+
+sha256: e84ea34b57cb97386a00a848a5410a576ab6a26e3be132a2734026edc8f22cd1
+truncated: false
+
+[ADP ACTION current=8 original=25: code_action bash]
+payload:
+cd testbed && python -c "import numpy as np; print(np.__version__)"
+sha256: a4b946acb1da0e4f11400c9d917cc860d6ac062bd3cc9aaf18c03638a52df50f
+truncated: false
+
+[ADP ACTION current=9 original=29: api_action Grep]
+path: sklearn
+payload:
+{
+  "output_mode": "files_with_matches",
+  "path": "./swebench_9_15/testbed/sklearn",
+  "pattern": "_get_output_config"
+}
+sha256: 7d03a4ab6f0809ba88c57e5f2e2562751bfb12a3ede6c54310dad8489a705908
+truncated: false
+
+[ADP OBSERVATION current=10 original=30 source=environment]
+name: Grep:toolu_01R4zTyyQAt1HDAiLwQDPCcz
+excerpt:
+Found 5 files
+sklearn/utils/tests/test_set_output.py
+sklearn/utils/_set_output.py
+sklearn/tests/test_base.py
+sklearn/pipeline.py
+sklearn/compose/_column_transformer.py
+sha256: 6ed59e6e9b992eccb8165f59b8cb1083bd67a4a86b311ff857eb94c8ebf8ba63
+truncated: false
+
+[ADP ACTION current=11 original=31: api_action Grep]
+path: sklearn/utils
+payload:
+{
+  "-A": 3,
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sklearn/utils",
+  "pattern": "def.*to_numpy|asarray.*pandas|DataFrame.*numpy"
+}
+sha256: 4f31e72c79bed8245d26551267908964ee9756f8ffb0ab13794a56d6dcb8ec2f
+truncated: false
+
+[ADP OBSERVATION current=12 original=32 source=environment]
+name: Grep:toolu_01HExmEzzTYkva9ZjEJwHij1
+excerpt:
+sklearn/utils/_array_api.py:191:def _convert_to_numpy(array, xp):
+./swebench_9_15/testbed/sklearn/utils/_array_api.py-192-    """Convert X into a NumPy ndarray.
+./swebench_9_15/testbed/sklearn/utils/_array_api.py-193-
+./swebench_9_15/testbed/sklearn/utils/_array_api.py-194-    Only works on cupy.array_api and numpy.array_api and is used for testing.
+--
+sklearn/utils/tests/test_array_api.py:146:def test_convert_to_numpy_error():
+./swebench_9_15/testbed/sklearn/utils/tests/test_array_api.py-147-    """Test convert to numpy errors for unsupported namespaces."""
+./swebench_9_15/testbed/sklearn/utils/tests/test_array_api.py-148-    xp = pytest.importorskip("numpy.array_api")
+./swebench_9_15/testbed/sklearn/utils/tests/test_array_api.py-149-    xp_ = _AdjustableNameAPITestWrapper(xp, "wrapped.array_api")
+sha256: 5a9dd208a3fc217e5c480e23b892ffdea3e1a5004d6582ff49f5847d7c07a079
+truncated: false
+
+[ADP ACTION current=13 original=33: code_action bash]
+payload:
+grep -r "column_or_1d" --include="*.py" sklearn/ | head -20
+sha256: f99bb113ad8d8372ab0826b2533cbeb61f0073d6713c2ef296ba319db89ad926
+truncated: false
+
+[ADP OBSERVATION current=14 original=34 source=environment]
+name: Bash:toolu_01LA7rm14owNz9LAKRaGQZxj
+excerpt:
+sklearn//metrics/_classification.py:from ..utils import column_or_1d
+sklearn//metrics/_classification.py:        y_true = column_or_1d(y_true)
+sklearn//metrics/_classification.py:        y_pred = column_or_1d(y_pred)
+sklearn//metrics/_classification.py:        sample_weight = column_or_1d(sample_weight)
+sklearn//metrics/_classification.py:    y_true = column_or_1d(y_true)
+sklearn//metrics/_classification.py:        pred_decision = column_or_1d(pred_decision)
+sklearn//metrics/_classification.py:    y_true = column_or_1d(y_true)
+sklearn//metrics/_classification.py:    y_prob = column_or_1d(y_prob)
+sklearn//metrics/_regression.py:    column_or_1d,
+sklearn//metrics/_regression.py:        sample_weight = column_or_1d(sample_weight)
+sklearn//metrics/_regression.py:        sample_weight = column_or_1d(sample_weight)
+sklearn//metrics/_ranking.py:from ..utils import column_or_1d, check_array
+sklearn//metrics/_ranking.py:    x = column_or_1d(x)
+sklearn//metrics/_ranking.py:    y = column_or_1d(y)
+sklearn//metrics/_ranking.py:        labels = column_or_1d(labels)
+sklearn//metrics/_ranking.py:    y_true = column_or_1d(y_true)
+sklearn//metrics/_ranking.py:    y_score = column_or_1d(y_score)
+sklearn//metrics/_ranking.py:        sample_weight = column_or_1d(sample_weight)
+sklearn//metrics/_ranking.py:    y_true = column_or_1d(y_true)
+sklearn//metrics/_ranking.py:        y_score = column_or_1d(y_score)
+sha256: 5c960aa87844f017d21a74b1595deaabf64363d16d87bc6e004a458922eb5648
+truncated: false
+
+[ADP ACTION current=15 original=35: api_action Grep]
+path: sklearn/utils
+payload:
+{
+  "-A": 30,
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sklearn/utils",
+  "pattern": "^def column_or_1d"
+}
+sha256: 5cad07f4edcce4c2bfb5bd6f78b1b2a056dfc71f0e41da1e13832527d1d9b2a5
+truncated: false
+
+[ADP OBSERVATION current=16 original=36 source=environment]
+name: Grep:toolu_01YDjjMtPqm134cxNPwHQa1P
+excerpt:
+sklearn/utils/validation.py:1152:def column_or_1d(y, *, dtype=None, warn=False):
+./swebench_9_15/testbed/sklearn/utils/validation.py-1153-    """Ravel column or 1d numpy array, else raises an error.
+./swebench_9_15/testbed/sklearn/utils/validation.py-1154-
+./swebench_9_15/testbed/sklearn/utils/validation.py-1155-    Parameters
+./swebench_9_15/testbed/sklearn/utils/validation.py-1156-    ----------
+sklearn/utils/validation.py-1157-    y : array-like
+./swebench_9_15/testbed/sklearn/utils/validation.py-1158-       Input data.
+./swebench_9_15/testbed/sklearn/utils/validation.py-1159-
+sklearn/utils/validation.py-1160-    dtype : data-type, default=None
+./swebench_9_15/testbed/sklearn/utils/validation.py-1161-        Data type for `y`.
+./swebench_9_15/testbed/sklearn/utils/validation.py-1162-
+sklearn/utils/validation.py-1163-        .. versionadded:: 1.2
+./swebench_9_15/testbed/sklearn/utils/validation.py-1164-
+sklearn/utils/validation.py-1165-    warn : bool, default=False
+./swebench_9_15/testbed/sklearn/utils/validation.py-1166-       To control display of warnings.
+./swebench_9_15/testbed/sklearn/utils/validation.py-1167-
+./swebench_9_15/testbed/sklearn/utils/validation.py-1168-    Returns
+./swebench_9_15/testbed/sklearn/utils/validation.py-1169-    -------
+sklearn/utils/validation.py-1170-    y : ndarray
+./swebench_9_15/testbed/sklearn/utils/validation.py-1171-       Output data.
+./swebench_9_15/testbed/sklearn/utils/validation.py-1172-
+./swebench_9_15/testbed/sklearn/utils/validation.py-1173-    Raises
+./swebench_9_15/testbed/sklearn/utils/validation.py-1174-    ------
+./swebench_9_15/testbed/sklearn/utils/validation.py-1175-    ValueError
+./swebench_9_15/testbed/sklearn/utils/validation.py-1176-        If `y` is not a 1D array or a 2D array with a single row or column.
+./swebench_9_15/testbed/sklearn/utils/validation.py-1177-    """
+./swebench_9_15/testbed/sklearn/utils/validation.py-1178-    xp, _ = get_namespace(y)
+./swebench_9_15/testbed/sklearn/utils/validation.
+sha256: b1480192848ece23575eb45600a03b52ba8fbf5525e6d77dcf4bad019eabe389
+truncated: true
+
+[ADP ACTION current=17 original=39: api_action Edit]
+path: sklearn/calibration.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "new_text_sha256": "8ebd482bc068ef4d3ad4ffa312e5615399651164b6e636ae7fce027027f84df2",
+  "old_text_sha256": "6a71ac0645b9875d5cc1bd6e902fe8b28e0ced78135f7d90a1fe451c7b43924f"
+}
+sha256: 550cb0e9371aaa496943958657e784519e7d83c45a974731b0f5d26cbd263552
+truncated: false
+
+[ADP ACTION current=18 original=43: api_action Glob]
+path: swebench_9_15/testbed
+payload:
+{
+  "path": "./swebench_9_15/testbed",
+  "pattern": "**/test_calibration.py"
+}
+sha256: c690fa30db7e5ef648c610a8f91f50d66872ccbb5a0f01a57967ab0b055c0d24
+truncated: false
+
+[ADP OBSERVATION current=19 original=44 source=environment]
+name: Glob:toolu_01QEueYAANfpEXqpmMGBeSFk
+excerpt:
+./swebench_9_15/testbed/sklearn/tests/test_calibration.py
+sha256: dc334e79a85a0dc9a4c184113845dc8c85347c8d71e290b1785de7ddeb8f5fbb
+truncated: false
+
+[ADP ACTION current=20 original=45: api_action Grep]
+path: sklearn/tests/test_calibration.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sklearn/tests/test_calibration.py",
+  "pattern": "transform_output|pandas|set_config"
+}
+sha256: f0e6fcb1578d44f032d6df00bcfe17648fb7b35eeb3921faf52afd1aeea0ff98
+truncated: false
+
+[ADP OBSERVATION current=21 original=46 source=environment]
+name: Grep:toolu_01RBQhLWwCHFRjtdozx467ar
+excerpt:
+No matches found
+sha256: 4b4d7ac22cee34f92cd16fbe4193b0eb106e185100ea38f72b0190e1affaf933
+truncated: false
+
+[ADP ACTION current=22 original=47: api_action Write]
+path: swebench_9_15/test_fix.py
+payload:
+{
+  "content_sha256": "337d8e2e53eb040e0ca9c23d2c887deb7bba891b4b92aba9d1eb5eb5b58ff234",
+  "file_path": "./swebench_9_15/test_fix.py"
+}
+sha256: a43e49f913c3696027b76e05a80151f092605c36b382a9598a422a234d16405b
+truncated: false
+
+[ADP ACTION current=23 original=49: code_action bash]
+payload:
+cd ./swebench_9_15 && python test_fix.py
+sha256: 01470d16948041ea11d56d3b257f8abfa490c8616e5b76c12be028e2102ac8e7
+truncated: false
+
+[ADP OBSERVATION current=24 original=50 source=environment]
+name: Bash:toolu_01Ph4wudtEWN5Gnt3ReG5Mgg:error
+excerpt:
+Exit code 1
+  File "test_fix.py", line 19
+    print(f"Input shape: {df.shape}")
+                                   ^
+SyntaxError: invalid syntax
+sha256: a337a064ac353c0156b446ed6709fdfd8e9031b4c756c1584df42d51bbb4ac24
+truncated: false
+
+[ADP ACTION current=25 original=51: code_action bash]
+payload:
+python3 test_fix.py
+sha256: a5ddb244c936ce0f0604a9f3cc840d0035935dff19a58192c92bdbf78a4c6e70
+truncated: false
+
+[ADP OBSERVATION current=26 original=52 source=environment]
+name: Bash:toolu_01VVHiAiPxW85TwWYnCRKfuj:error
+excerpt:
+Exit code 2
+python3: can't open file 'test_fix.py': [Errno 2] No such file or directory
+sha256: c4e03b0572ebc968e42eee3aa288566c8891436b3bfb563f2e12ec1b3b7a258c
+truncated: false
+
+[ADP ACTION current=27 original=55: code_action bash]
+payload:
+python3 ./swebench_9_15/test_fix.py
+sha256: a5cabe92945fb1c9e3799e9d98f2ec742ff037580b88f6be109648a56888635d
+truncated: false
+
+[ADP OBSERVATION current=28 original=56 source=environment]
+name: Bash:toolu_014q5kVQtcNhpYDtTg2156Le:error
+excerpt:
+Exit code 1
+Traceback (most recent call last):
+  File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 48, in <module>
+    from ._check_build import check_build  # noqa
+ModuleNotFoundError: No module named 'sklearn.__check_build._check_build'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "./swebench_9_15/test_fix.py", line 31, in <module>
+    from sklearn.utils import column_or_1d
+  File "./swebench_9_15/testbed/sklearn/__init__.py", line 81, in <module>
+    from . import __check_build  # noqa: F401
+  File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 50, in <module>
+    raise_build_error(e)
+  File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 31, in raise_build_error
+    raise ImportError(
+ImportError: No module named 'sklearn.__check_build._check_build'
+___________________________________________________________________________
+Contents of ./swebench_9_15/testbed/sklearn/__check_build:
+__init__.py               __pycache__               _check_build.c
+_check_build.pyx
+___________________________________________________________________________
+It seems that scikit-learn has not been built correctly.
+
+If you have installed scikit-learn from source, please do not forget
+to build the package before using it: run `python setup.py install` or
+`make` in the source directory.
+
+If you have used an installer, please check that it is suited for your
+Python version, your operating system and your platform.
+
+Warning: Could not test with pandas: No module named 'sklearn.__check_build._check_build'
+___________________________________________________________________________
+Contents of ./swebench_9_15/testbed/sklearn/__check_build:
+__init__.py               __pycache__               _check_build.c
+_check_build.pyx
+___________________________________________________________________________
+It seems that scikit-learn has not been built correctly.
+
+If you have i
+sha256: 44eed20afc968cced8dd2df604fa605acc3022644f18b08f35852095de6486f8
+truncated: true
+
+[ADP ACTION current=29 original=57: api_action Read]
+path: sklearn/calibration.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "limit": 15,
+  "offset": 755
+}
+sha256: 63e040ad87a2755c45df374f7382ba59818eeaad7d2fb4fa6a44bed6876c909e
+truncated: false
+
+[ADP OBSERVATION current=30 original=58 source=environment]
+name: Read:toolu_0182mngTUHD9mZrAPCEsfPwm
+excerpt:
+   755→        proba = np.zeros((_num_samples(X), n_classes))
+   756→        for class_idx, this_pred, calibrator in zip(
+   757→            pos_class_indices, predictions.T, self.calibrators
+   758→        ):
+   759→            if n_classes == 2:
+   760→                # When binary, `predictions` consists only of predictions for
+   761→                # clf.classes_[1] but `pos_class_indices` = 0
+   762→                class_idx += 1
+   763→            proba[:, class_idx] = column_or_1d(calibrator.predict(this_pred))
+   764→
+   765→        # Normalize the probabilities
+   766→        if n_classes == 2:
+   767→            proba[:, 0] = 1.0 - proba[:, 1]
+   768→        else:
+   769→            denominator = np.sum(proba, axis=1)[:, np.newaxis]
+
+sha256: 13f3669cf3726e3030629e96e3c9b712903f332b0ba4fd2a1eba1ca4dad81959
+truncated: false
+
+[ADP ACTION current=31 original=59: api_action Grep]
+path: sklearn/calibration.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "pattern": "^from.*column_or_1d"
+}
+sha256: 1127341a5141da96c6263aab5bbb53dd515930f5b6e9a5bc52550ce4e39ebd17
+truncated: false
+
+[ADP OBSERVATION current=32 original=60 source=environment]
+name: Grep:toolu_012bwZuSTb3VCftvW63BX7Rc
+excerpt:
+No matches found
+sha256: 4b4d7ac22cee34f92cd16fbe4193b0eb106e185100ea38f72b0190e1affaf933
+truncated: false
+
+[ADP ACTION current=33 original=61: api_action Grep]
+path: sklearn/calibration.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "pattern": "column_or_1d"
+}
+sha256: a588219b8c14c7ba6e3d87ebd97139d398d68e75a0ac4e18f888f839d6ca8651
+truncated: false
+
+[ADP OBSERVATION current=34 original=62 source=environment]
+name: Grep:toolu_01AedvDSPSsjAgY1UzgLVtud
+excerpt:
+32:    column_or_1d,
+763:            proba[:, class_idx] = column_or_1d(calibrator.predict(this_pred))
+810:    predictions = column_or_1d(predictions)
+811:    y = column_or_1d(y)
+885:        X = column_or_1d(X)
+886:        y = column_or_1d(y)
+905:        T = column_or_1d(T)
+993:    y_true = column_or_1d(y_true)
+994:    y_prob = column_or_1d(y_prob)
+sha256: 132f3d280e6ac075a61f74095eb639b19229f959590a6b2f481f6b056d7779c0
+truncated: false
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: scikit-learn/scikit-learn
+Base commit: 4db04923a754b6a2defa1b172f55d492b85d165e
+Instance ID: scikit-learn__scikit-learn-25763
+
+CURRENT_ISSUE
+BUG IsotonicRegression errors with set_config(transform_output="pandas")
+### Describe the bug
+
+`IsotonicRegression.predict` is broken by `set_config(transform_output="pandas")`. Mabye similar to #25365.
+
+### Steps/Code to Reproduce
+
+```python
+import numpy as np
+from sklearn.isotonic import IsotonicRegression
+y = np.arange(4)
+x = np.ones(4)
+
+iso = IsotonicRegression().fit(x, y)
+iso.predict([1])  # array([1.5])
+
+iso = IsotonicRegression().set_output(transform="pandas").fit(x, y)
+iso.predict([1])
+```
+
+### Expected Results
+
+```
+array([1.5])
+```
+
+Or at least no error!
+
+### Actual Results
+
+```
+TypeError: 'builtin_function_or_method' object is not iterable
+```
+
+### Versions
+
+```shell
+1.2.1
+```
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

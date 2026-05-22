@@ -1,0 +1,512 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: memory
+
+The following is deterministic extractive memory from an officially related prior issue.
+
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 04050418-3559-4f6a-9790-b9cd6000fc58
+- repo: astropy/astropy
+- instance_id: astropy__astropy-14995
+- base_commit: b16c7d12ccbc7b2d20364b89fb44285bcbfede54
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+In v5.3, NDDataRef mask propagation fails when one of the operand does not have a mask
+### Description
+
+This applies to v5.3.
+
+It looks like when one of the operand does not have a mask, the mask propagation when doing arithmetic, in particular with `handle_mask=np.bitwise_or` fails.  This is not a problem in v5.2.
+
+I don't know enough about how all that works, but it seems from the error that the operand without a mask is set as a mask of None's and then the bitwise_or tries to operate on an integer and a None and fails.
+
+### Expected behavior
+
+When one of the operand does not have mask, the mask that exists should just be copied over to the output.  Or whatever was done in that situation in v5.2 where there's no problem.
+
+### How to Reproduce
+
+This is with v5.3.   With v5.2, there are no errors.
+
+```
+>>> import numpy as np
+>>> from astropy.nddata import NDDataRef
+
+>>> array = np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]])
+>>> mask = np.array([[0, 1, 64], [8, 0, 1], [2, 1, 0]])
+
+>>> nref_nomask = NDDataRef(array)
+>>> nref_mask = NDDataRef(array, mask=mask)
+
+# multiply no mask by constant (no mask * no mask)
+>>> nref_nomask.multiply(1., handle_mask=np.bitwise_or).mask   # returns nothing, no mask,  OK
+
+# multiply no mask by itself (no mask * no mask)
+>>> nref_nomask.multiply(nref_nomask, handle_mask=np.bitwise_or).mask # return nothing, no mask, OK
+
+# multiply mask by constant (mask * no mask)
+>>> nref_mask.multiply(1., handle_mask=np.bitwise_or).mask
+...
+TypeError: unsupported operand type(s) for |: 'int' and 'NoneType'
+
+# multiply mask by itself (mask * mask)
+>>> nref_mask.multiply(nref_mask, handle_mask=np.bitwise_or).mask
+array([[ 0,  1, 64],
+       [ 8,  0,  1],
+       [ 2,  1,  0]])
+
+# multiply mask by no mask (mask * no mask)
+>>> nref_mask.multiply(nref_nomask, handle_mask=np.bitwise_or).mask
+...
+TypeError: unsupported operand type(s) for |: 'int' and 'NoneType'
+```
+
+
+### Versions
+
+>>> import sys; print("Python", sys.version)
+Python 3.10.11 | packaged by conda-forge | (main, May 10 2023, 19:07:22) [Clang 14.0.6 ]
+>>> import astropy; print("astropy", astropy.__version__)
+astropy 5.3
+>>> import numpy; print("Numpy", numpy.__version__)
+Numpy 1.24.3
+>>> import erfa; print("pyerfa", erfa.__version__)
+pyerfa 2.0.0.3
+>>> import scipy; print("Scipy", scipy.__version__)
+Scipy 1.10.1
+>>> import matplotlib; print("Matplotlib", matplotlib.__version__)
+Matplotlib 3.7.1
+
+FILES INSPECTED
+---------------
+- astropy/nddata [Grep: 2]
+- astropy/nddata/__init__.py [Grep: 1]
+- astropy/nddata/nddata_withmixins.py [Read: 1]
+- astropy/nddata/mixins/ndarithmetic.py [Read: 3]
+- astropy/nddata/mixins/tests/test_ndarithmetic.py [Read: 4, Grep: 2]
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='**/nddata/**/*.py'
+- [4] Glob glob='testbed/**/nddata/**/*.py'
+- [6] Grep pattern='class NDDataRef' path='astropy/nddata'
+- [7] Grep pattern='NDDataRef' path='astropy/nddata/__init__.py'
+- [8] Grep pattern='class NDDataRef' path='astropy/nddata'
+- [24] Grep pattern='handle_mask.*bitwise_or' path='astropy/nddata/mixins/tests/test_ndarithmetic.py'
+- [26] Grep pattern='test.*mask' path='astropy/nddata/mixins/tests/test_ndarithmetic.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find ./swebench_9_15 -type f -name "*.py" | grep -i nddata | head -20
+- [diagnostic] ls -la testbed/ 2>&1 | head -20
+- [test] cd testbed && python test_bug.py
+- [test] python test_bug.py
+- [test] python3 test_bug.py
+- [other/reproduction] cd ./swebench_9_15 && PYTHONPATH=./swebench_9_15/testbed:$PYTHONPATH python3 test_fix.py 2>&1
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+(none)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Glob Result after action #4]
+  ./swebench_9_15/testbed/astropy/nddata/mixins/__init__.py
+  ./swebench_9_15/testbed/astropy/nddata/mixins/ndio.py
+  ./swebench_9_15/testbed/astropy/nddata/mixins/tests/__init__.py
+  ./swebench_9_15/testbed/astropy/nddata/mixins/tests/test_ndio.py
+  ./swebench_9_15/testbed/astropy/nddata/mixins/tests/test_ndslicing.py
+  ./swebench_9_15/testbed/astropy/nddata/tests/__init__.py
+  ./swebench_9_15/testbed/astropy/nddata/tests/test_blocks.py
+  ./swebench_9_15/testbed/astropy/nddata/tests/test_compat.py
+  ./swebench_9_15/testbed/astropy/nddata/tests/test_flag_collection.py
+  ./swebench_9_15/testbed/astropy/nddata/tests/test_nddata_base.py
+  ./swebench_9_15/testbed/astropy/nddata/__init__.py
+  ./swebench_9_15/testbed/astropy/nddata/_testing.py
+  ./swebench_9_15/testbed/astropy/nddata/bitmask.py
+  ./swebench_9_15/testbed/astropy/nddata/blocks.py
+  ./swebench_9_15/testbed/astropy/nddata/ccddata.py
+  ./swebench_9_15/testbed/astropy/nddata/compat.py
+  ./swebench_9_15/testbed/astropy/nddata/decorators.py
+  ./swebench_9_15/testbed/astropy/nddata/flag_collection.py
+  ./swebench_9_15/testbed/astropy/nddata/mixins/ndarithmetic.py
+  ./swebench_9_15/testbed/astropy/nddata/mixins/ndslicing.py
+  ./swebench_9_15/testbed/astropy/nddata/mixins/
+  [... truncated ...]
+- [Grep Result after action #8]
+  Found 1 file
+  astropy/nddata/nddata_withmixins.py
+- [Read Result after action #10]
+       1→# Licensed under a 3-clause BSD style license - see LICENSE.rst
+       2→
+       3→"""
+       4→This module implements a class based on NDData with all Mixins.
+       5→"""
+       6→
+       7→
+       8→from .mixins.ndarithmetic import NDArithmeticMixin
+       9→from .mixins.ndio import NDIOMixin
+      10→from .mixins.ndslicing import NDSlicingMixin
+      11→from .nddata import NDData
+      12→
+      13→__all__ = ["NDDataRef"]
+      14→
+      15→
+      16→class NDDataRef(NDArithmeticMixin, NDIOMixin, NDSlicingMixin, NDData):
+      17→    """Implements `NDData` with all Mixins.
+      18→
+      19→    This class implements a `NDData`-like container that supports reading and
+      20→    writing as implemented in the ``astropy.io.registry`` and also slicing
+      21→    (indexing) and simple arithmetic (add, subtract, divide and multiply).
+      22→
+      23→    Notes
+      24→    -----
+      25→    A key distinction from `NDDataArray` is that this class does not attempt
+      26→    to provide anything that was not defined in any of the parent classes.
+      27→
+      28→    See Also
+      29→    --------
+      30→    NDData
+      31→    NDArithmeticMixin
+      32→    NDSlicingMixin
+      33→    NDIOMixin
+      34→
+      35→    Examples
+      36→
+  [... truncated ...]
+- [Read Result after action #12]
+       1→# Licensed under a 3-clause BSD style license - see LICENSE.rst
+       2→# This module implements the Arithmetic mixin to the NDData class.
+       3→
+       4→import warnings
+       5→from copy import deepcopy
+       6→
+       7→import numpy as np
+       8→
+       9→from astropy.nddata.nduncertainty import NDUncertainty
+      10→from astropy.units import dimensionless_unscaled
+      11→from astropy.utils import format_doc, sharedmethod
+      12→from astropy.utils.exceptions import AstropyUserWarning
+      13→from astropy.utils.masked import Masked
+      14→
+      15→__all__ = ["NDArithmeticMixin"]
+      16→
+      17→# Global so it doesn't pollute the class dict unnecessarily:
+      18→
+      19→# Docstring templates for add, subtract, multiply, divide methods.
+      20→_arit_doc = """
+      21→    Performs {name} by evaluating ``self`` {op} ``operand``.
+      22→
+      23→    Parameters
+      24→    ----------
+      25→    operand, operand2 : `NDData`-like instance
+      26→        If ``operand2`` is ``None`` or not given it will perform the operation
+      27→        ``self`` {op} ``operand``.
+      28→        If ``operand2`` is given it will perform ``operand`` {op} ``operand2``.
+      29→        If the method was called on a c
+  [... truncated ...]
+- [Test Output after action #16]
+  Exit code 1
+    File "test_bug.py", line 14
+      print(f"  Result mask: {result.mask}")
+                                          ^
+  SyntaxError: invalid syntax
+- [Read Result after action #19]
+     485→    def _arithmetic_mask(self, operation, operand, handle_mask, axis=None, **kwds):
+     486→        """
+     487→        Calculate the resulting mask.
+     488→
+     489→        This is implemented as the piecewise ``or`` operation if both have a
+     490→        mask.
+     491→
+     492→        Parameters
+     493→        ----------
+     494→        operation : callable
+     495→            see :meth:`NDArithmeticMixin._arithmetic` parameter description.
+     496→            By default, the ``operation`` will be ignored.
+     497→
+     498→        operand : `NDData`-like instance
+     499→            The second operand wrapped in an instance of the same class as
+     500→            self.
+     501→
+     502→        handle_mask : callable
+     503→            see :meth:`NDArithmeticMixin.add`
+     504→
+     505→        kwds :
+     506→            Additional parameters given to ``handle_mask``.
+     507→
+     508→        Returns
+     509→        -------
+     510→        result_mask : any type
+     511→            If only one mask was present this mask is returned.
+     512→            If neither had a mask ``None`` is returned. Otherwise
+     513→            ``handle_mask`` must create (and copy) the returned mask.
+     514→
+  [... truncated ...]
+- [Read Result after action #22]
+       0→# Licensed under a 3-clause BSD style license - see LICENSE.rst
+       1→
+       2→import numpy as np
+       3→import pytest
+       4→from numpy.testing import assert_array_almost_equal, assert_array_equal
+       5→
+       6→from astropy import units as u
+       7→from astropy.nddata import NDDataRef
+       8→from astropy.nddata import _testing as nd_testing
+       9→from astropy.nddata.nduncertainty import (
+      10→    IncompatibleUncertaintiesException,
+      11→    InverseVariance,
+      12→    StdDevUncertainty,
+      13→    UnknownUncertainty,
+      14→    VarianceUncertainty,
+      15→)
+      16→from astropy.units import Quantity, UnitsError
+      17→from astropy.utils.exceptions import AstropyUserWarning
+      18→from astropy.wcs import WCS
+      19→
+      20→# Alias NDDataAllMixins in case this will be renamed ... :-)
+      21→NDDataArithmetic = NDDataRef
+      22→
+      23→
+      24→class StdDevUncertaintyUncorrelated(StdDevUncertainty):
+      25→    @property
+      26→    def supports_correlated(self):
+      27→        return False
+      28→
+      29→
+      30→# Test with Data covers:
+      31→# scalars, 1D, 2D and 3D
+      32→# broadcasting between them
+      33→@pytest.mark.filterwarnings("ignore:divide by zero encountered.*"
+  [... truncated ...]
+- [Grep Result after action #24]
+  No matches found
+- [Grep Result after action #26]
+  268:def test_arithmetics_data_masks(mask1, mask2):
+  303:def test_arithmetics_data_masks_invalid():
+  1072:# Test abbreviation and long name for taking the first found meta, mask, wcs
+  1200:def test_arithmetics_mask_func():
+- [Read Result after action #28]
+     268→def test_arithmetics_data_masks(mask1, mask2):
+     269→    nd1 = NDDataArithmetic(1, mask=mask1)
+     270→    nd2 = NDDataArithmetic(1, mask=mask2)
+     271→
+     272→    if mask1 is None and mask2 is None:
+     273→        ref_mask = None
+     274→    elif mask1 is None:
+     275→        ref_mask = mask2
+     276→    elif mask2 is None:
+     277→        ref_mask = mask1
+     278→    else:
+     279→        ref_mask = mask1 | mask2
+     280→
+     281→    # Addition
+     282→    nd3 = nd1.add(nd2)
+     283→    assert_array_equal(ref_mask, nd3.mask)
+     284→    # Subtraction
+     285→    nd4 = nd1.subtract(nd2)
+     286→    assert_array_equal(ref_mask, nd4.mask)
+     287→    # Multiplication
+     288→    nd5 = nd1.multiply(nd2)
+     289→    assert_array_equal(ref_mask, nd5.mask)
+     290→    # Division
+     291→    nd6 = nd1.divide(nd2)
+     292→    assert_array_equal(ref_mask, nd6.mask)
+     293→    for nd in [nd3, nd4, nd5, nd6]:
+     294→        # Check all other attributes are not set
+     295→        assert nd.unit is None
+     296→        assert nd.uncertainty is None
+     297→        assert len(nd.meta) == 0
+     298→        assert nd.wcs is None
+     299→
+     300→
+     301→# One additional case which can not be easily incorporated
+  [... truncated ...]
+- [Read Result after action #30]
+    1200→def test_arithmetics_mask_func():
+    1201→    def mask_sad_func(mask1, mask2, fun=0):
+    1202→        if fun > 0.5:
+    1203→            return mask2
+    1204→        else:
+    1205→            return mask1
+    1206→
+    1207→    meta1 = {"a": 1}
+    1208→    meta2 = {"a": 3, "b": 2}
+    1209→    mask1 = [True, False, True]
+    1210→    mask2 = [True, False, False]
+    1211→    uncertainty1 = StdDevUncertainty([1, 2, 3])
+    1212→    uncertainty2 = StdDevUncertainty([1, 2, 3])
+    1213→    data1 = [1, 1, 1]
+    1214→    data2 = [1, 1, 1]
+    1215→
+    1216→    nd1 = NDDataArithmetic(data1, meta=meta1, mask=mask1, uncertainty=uncertainty1)
+    1217→    nd2 = NDDataArithmetic(data2, meta=meta2, mask=mask2, uncertainty=uncertainty2)
+    1218→
+    1219→    nd3 = nd1.add(nd2, handle_mask=mask_sad_func)
+    1220→    assert_array_equal(nd3.mask, nd1.mask)
+    1221→
+    1222→    nd4 = nd1.add(nd2, handle_mask=mask_sad_func, mask_fun=1)
+    1223→    assert_array_equal(nd4.mask, nd2.mask)
+    1224→
+    1225→    with pytest.raises(KeyError):
+    1226→        nd1.add(nd2, handle_mask=mask_sad_func, fun=1)
+    1227→
+    1228→
+    1229→@pytest.mark.parametrize("meth", ["add", "subtract", "divide", "multiply"])
+    1230→def test_two_argument_usea
+  [... truncated ...]
+- [Read Result after action #32]
+     240→# masks 1D, 2D and mixed cases with broadcasting
+     241→@pytest.mark.parametrize(
+     242→    ("mask1", "mask2"),
+     243→    [
+     244→        (None, None),
+     245→        (None, False),
+     246→        (True, None),
+     247→        (False, False),
+     248→        (True, False),
+     249→        (False, True),
+     250→        (True, True),
+     251→        (np.array(False), np.array(True)),
+     252→        (np.array(False), np.array([0, 1, 0, 1, 1], dtype=np.bool_)),
+     253→        (np.array(True), np.array([[0, 1, 0, 1, 1], [1, 1, 0, 1, 1]], dtype=np.bool_)),
+     254→        (
+     255→            np.array([0, 1, 0, 1, 1], dtype=np.bool_),
+     256→            np.array([1, 1, 0, 0, 1], dtype=np.bool_),
+     257→        ),
+     258→        (
+     259→            np.array([0, 1, 0, 1, 1], dtype=np.bool_),
+     260→            np.array([[0, 1, 0, 1, 1], [1, 0, 0, 1, 1]], dtype=np.bool_),
+     261→        ),
+     262→        (
+     263→            np.array([[0, 1, 0, 1, 1], [1, 0, 0, 1, 1]], dtype=np.bool_),
+     264→            np.array([[0, 1, 0, 1, 1], [1, 1, 0, 1, 1]], dtype=np.bool_),
+     265→        ),
+     266→    ],
+     267→)
+     268→def test_arithmetics_data_masks(mask1, mask2):
+     269→    nd1 = NDDataAri
+  [... truncated ...]
+- [Read Result after action #36]
+     515→        # If only one mask is present we need not bother about any type checks
+     516→        if (
+     517→            self.mask is None and operand is not None and operand.mask is None
+     518→        ) or handle_mask is None:
+     519→            return None
+     520→        elif self.mask is None and operand is not None:
+     521→            # Make a copy so there is no reference in the result.
+     522→            return deepcopy(operand.mask)
+     523→        elif operand is None:
+     524→            return deepcopy(self.mask)
+     525→        elif operand.mask is None:
+     526→            # Make a copy so there is no reference in the result.
+     527→            return deepcopy(self.mask)
+     528→        else:
+     529→            # Now lets calculate the resulting mask (operation enforces copy)
+     530→            return handle_mask(self.mask, operand.mask, **kwds)
+     531→
+     532→    def _arithmetic_wcs(self, operation, operand, compare_wcs, **kwds):
+     533→        """
+     534→        Calculate the resulting wcs.
+
+
+SOURCE EDIT EVIDENCE
+--------------------
+- astropy/nddata/mixins/ndarithmetic.py
+  Tool: Edit action #21
+  old_text_sha256: badf2f93dde9d43fb4b758e91a1637bdbee5093b53ed3a537440fcd12b88ff23
+  new_text_sha256: 753bf79343f91d630582d3707bd2d762a9b072c2aa7f0339de4308f6d872a76b
+- test_bug.py
+  Tool: Write action #14
+  new_text_sha256: 0431ff5fd3359ca39a01081c64bce64453fd999c285bddbc8d0f022aa13af0bd
+- swebench_9_15/test_fix.py
+  Tool: Write action #34
+  new_text_sha256: 5071ce3533bb4ccf36d30be0e9ef29e5924b02389788de3a2ae73f2d5ee8ab14
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: astropy/astropy
+Base commit: c5e2521db013d9641999be9c79d1d807741bc39a
+Instance ID: astropy__astropy-15082
+
+CURRENT_ISSUE
+Bugfix for collapses with NDData without masks, or without units
+<!-- This comments are hidden when you submit the pull request,
+so you do not need to remove them! -->
+
+<!-- Please be sure to check out our contributing guidelines,
+https://github.com/astropy/astropy/blob/main/CONTRIBUTING.md .
+Please be sure to check out our code of conduct,
+https://github.com/astropy/astropy/blob/main/CODE_OF_CONDUCT.md . -->
+
+<!-- If you are new or need to be re-acquainted with Astropy
+contributing workflow, please see
+http://docs.astropy.org/en/latest/development/workflow/development_workflow.html .
+There is even a practical example at
+https://docs.astropy.org/en/latest/development/workflow/git_edit_workflow_examples.html#astropy-fix-example . -->
+
+<!-- Please just have a quick search on GitHub to see if a similar
+pull request has already been posted.
+We have old closed pull requests that might provide useful code or ideas
+that directly tie in with your pull request. -->
+
+<!-- We have several automatic features that run when a pull request is open.
+They can appear daunting but do not worry because maintainers will help
+you navigate them, if necessary. -->
+
+### Description
+
+#14175 introduced collapse operations on NDDataArray objects. In #14995, a bugfix was added for handling masks in ND arithmetic to restore bitmask propagation in NDDataArray objects (released in v5.3.1). The bugfix in #14995 removed one bit of intended functionality from #14175, which is that NDData objects *without masks* should be collapsible. The fix in #14995 removed this option by replacing a conditional where I should have added an `or` to the existing one.
+
+As a result of the incomplete fix in #14995, a user calling `nddata.sum()` for NDDataArray without a mask raises an error in v5.3.1, since the `operand` in collapse operations is `None`:
+```
+from astropy.nddata import NDDataArray
+import numpy as np
+
+shape = (2, 3, 4)
+data = np.arange(np.prod(shape)).reshape(shape)
+nd = NDDataArray(data=data, unit='Jy')
+nd.sum(axis=(0, 1))
+# raises: AttributeError: 'NoneType' object has no attribute 'mask'
+```
+
+I also found that collapsing `NDData` without a `unit` triggers an error in `NDArithmeticMixin._arithmetic_data`, due to a missing condition in the logic for calling the `operation`. Revising only the second-to-last line in the example above raises a different error:
+```
+nd = NDDataArray(data=data)
+nd.sum(axis=(0, 1))
+# raises: AttributeError: 'NoneType' object has no attribute 'unit'
+```
+
+This pull request implements the whole (🤞🏻) solution to each bug, and adds a test to check that (1) masks are preserved in collapses, and (2) units are not required to collapse.
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

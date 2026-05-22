@@ -1,0 +1,517 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: raw
+
+The following is a stripped raw transcript from an officially related prior issue.
+
+STRIPPED RAW CLAUDE CODE TRAJECTORY
+This transcript was rendered from original raw JSONL using the canonical ADP strip manifest.
+
+[RAW line 2 USER]
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-16910
+base_commit: 4142739af1cda53581af4169dbe16d6cd5e26948
+problem_statement:
+QuerySet.only() doesn't work with select_related() on a reverse OneToOneField relation.
+Description
+
+On Django 4.2 calling only() with select_related() on a query using the reverse lookup for a OneToOne relation does not generate the correct query.
+All the fields from the related model are still included in the generated SQL.
+Sample models:
+class Main(models.Model):
+    main_field_1 = models.CharField(blank=True, max_length=45)
+    main_field_2 = models.CharField(blank=True, max_length=45)
+    main_field_3 = models.CharField(blank=True, max_length=45)
+class Secondary(models.Model):
+    main = models.OneToOneField(Main, primary_key=True, related_name='secondary', on_delete=models.CASCADE)
+    secondary_field_1 = models.CharField(blank=True, max_length=45)
+    secondary_field_2 = models.CharField(blank=True, max_length=45)
+    secondary_field_3 = models.CharField(blank=True, max_length=45)
+Sample code:
+Main.objects.select_related('secondary').only('main_field_1', 'secondary__secondary_field_1')
+Generated query on Django 4.2.1:
+SELECT "bugtest_main"."id", "bugtest_main"."main_field_1", "bugtest_secondary"."main_id", "bugtest_secondary"."secondary_field_1", "bugtest_secondary"."secondary_field_2", "bugtest_secondary"."secondary_field_3" FROM "bugtest_main" LEFT OUTER JOIN "bugtest_secondary" ON ("bugtest_main"."id" = "bugtest_secondary"."main_id")
+Generated query on Django 4.1.9:
+SELECT "bugtest_main"."id", "bugtest_main"."main_field_1", "bugtest_secondary"."main_id", "bugtest_secondary"."secondary_field_1" FROM "bugtest_main" LEFT OUTER JOIN "bugtest_secondary" ON ("bugtest_main"."id" = "bugtest_secondary"."main_id")
+[RAW line 5 TOOL Bash]
+
+[RAW line 16 TOOL Bash]
+if [ -d "testbed" ]; then echo "testbed exists"; else echo "testbed does not exist"; fi
+[RAW line 34 TOOL Bash]
+ls testbed/setup.py 2>/dev/null && echo "setup.py exists" || ls testbed/setup.cfg 2>/dev/null && echo "setup.cfg exists" || ls testbed/pyproject.toml 2>/dev/null && echo "pyproject.toml exists"
+[RAW line 35 TOOL RESULT toolu_01QyZL6q1qauBaq9KdtWwctP]
+Exit code 1
+[RAW line 49 TOOL Bash]
+ls testbed/setup.py testbed/setup.cfg testbed/pyproject.toml 2>&1
+[RAW line 50 TOOL RESULT toolu_01C8exvkyqXZCRwr5qZ36wxs]
+testbed/pyproject.toml
+testbed/setup.cfg
+testbed/setup.py
+[RAW line 58 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed",
+  "pattern": "def only\\("
+}
+[RAW line 59 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed",
+  "pattern": "def select_related\\("
+}
+[RAW line 60 TOOL RESULT toolu_019nVk87fu4QdfMjLbfWTeLb]
+Found 1 file
+testbed/django/db/models/query.py
+[RAW line 61 TOOL RESULT toolu_01EKYptdfYdeLUZZsYj7AjmG]
+Found 1 file
+testbed/django/db/models/query.py
+[RAW line 63 TOOL Grep]
+{
+  "-A": 20,
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/query.py",
+  "pattern": "def only\\("
+}
+[RAW line 64 TOOL RESULT toolu_017eX5iLuY3GEBrufSbRinXf]
+1728:    def only(self, *fields):
+1729-        """
+1730-        Essentially, the opposite of defer(). Only the fields passed into this
+1731-        method and that are not already specified as deferred are loaded
+1732-        immediately when the queryset is evaluated.
+1733-        """
+1734-        self._not_support_combined_queries("only")
+1735-        if self._fields is not None:
+1736-            raise TypeError("Cannot call only() after .values() or .values_list()")
+1737-        if fields == (None,):
+1738-            # Can only pass None to defer(), not only(), as the rest option.
+1739-            # That won't stop people trying to do this, so let's be explicit.
+1740-            raise TypeError("Cannot pass None as an argument to only().")
+1741-        for field in fields:
+1742-            field = field.split(LOOKUP_SEP, 1)[0]
+1743-            if field in self.query._filtered_relations:
+1744-                raise ValueError("only() is not supported with FilteredRelation.")
+1745-        clone = self._chain()
+1746-        clone.query.add_immediate_loading(fields)
+1747-        return clone
+1748-
+[RAW line 66 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed",
+  "pattern": "def add_immediate_loading\\("
+}
+[RAW line 67 TOOL RESULT toolu_013UdqbN8sCm3ZgHkw9LzQMo]
+Found 1 file
+testbed/django/db/models/sql/query.py
+[RAW line 69 TOOL Grep]
+{
+  "-A": 30,
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/django/db/models/sql/query.py",
+  "pattern": "def add_immediate_loading\\("
+}
+[RAW line 70 TOOL RESULT toolu_015eaJbXwMMGp77ZhQ1ftMmC]
+2330:    def add_immediate_loading(self, field_names):
+2331-        """
+2332-        Add the given list of model field names to the set of fields to
+2333-        retrieve when the SQL is executed ("immediate loading" fields). The
+2334-        field names replace any existing immediate loading field names. If
+2335-        there are field names already specified for deferred loading, remove
+2336-        those names from the new field_names before storing the new names
+2337-        for immediate loading. (That is, immediate loading overrides any
+2338-        existing immediate values, but respects existing deferrals.)
+2339-        """
+2340-        existing, defer = self.deferred_loading
+2341-        field_names = set(field_names)
+2342-        if "pk" in field_names:
+2343-            field_names.remove("pk")
+2344-            field_names.add(self.get_meta().pk.name)
+2345-
+2346-        if defer:
+2347-            # Remove any existing deferred names from the current set before
+2348-            # setting the new names.
+2349-            self.deferred_loading = field_names.difference(existing), False
+2350-        else:
+2351-            # Replace any existing "immediate load" field names.
+2352-            self.deferred_loading = frozenset(field_names), False
+2353-
+2354-    def set_annotation_mask(self, names):
+2355-        """Set the mask of annotations that will be returned by the SELECT."""
+2356-        if names is None:
+2357-            self.annotation_select_mask = None
+2358-        else:
+2359-            self.annotation_select_mask = list(dict.fromkeys(names))
+2360-        self._annotation_select_cache = None
+[RAW line 72 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed/django/db/models/sql",
+  "pattern": "deferred_loading"
+}
+[RAW line 73 TOOL RESULT toolu_01Bm9apNFjuXpPLnbdkXGven]
+Found 1 file
+testbed/django/db/models/sql/query.py
+[RAW line 75 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed/django/db/models/sql",
+  "pattern": "deferred_to_columns"
+}
+[RAW line 105 TOOL Bash]
+git show 2cf76f2d5d --stat
+[RAW line 106 TOOL RESULT toolu_01U9GEiF89dxTaJDx89s8MZG]
+commit 2cf76f2d5d1aa16acfadaf53db3d30128a34b088
+Author: Simon Charette <charette.s@gmail.com>
+Date:   Wed May 31 18:04:17 2023 -0400
+
+    Fixed #34612 -- Fixed QuerySet.only() crash on reverse relationships.
+
+    Regression in b3db6c8dcb5145f7d45eff517bcd96460475c879.
+
+    Thanks Ian Cubitt for the report.
+
+    This also corrected test_inheritance_deferred2() test which was
+    previously properly defined and marked as an expected failure but was
+    then wrongly adjusted to mask the lack of support for per-alias
+    deferral that was fixed by #21204.
+
+ django/db/models/sql/query.py          |  8 +++++++-
+ docs/releases/4.2.2.txt                |  3 +++
+ tests/defer_regress/tests.py           | 10 ++++++++++
+ tests/select_related_onetoone/tests.py |  3 +++
+ 4 files changed, 23 insertions(+), 1 deletion(-)
+[RAW line 108 TOOL Bash]
+git show 2cf76f2d5d
+[RAW line 109 TOOL RESULT toolu_01T7tHcMdBqxR7BzPLYjC1J2]
+commit 2cf76f2d5d1aa16acfadaf53db3d30128a34b088
+Author: Simon Charette <charette.s@gmail.com>
+Date:   Wed May 31 18:04:17 2023 -0400
+
+    Fixed #34612 -- Fixed QuerySet.only() crash on reverse relationships.
+
+    Regression in b3db6c8dcb5145f7d45eff517bcd96460475c879.
+
+    Thanks Ian Cubitt for the report.
+
+    This also corrected test_inheritance_deferred2() test which was
+    previously properly defined and marked as an expected failure but was
+    then wrongly adjusted to mask the lack of support for per-alias
+    deferral that was fixed by #21204.
+
+[RAW line 120 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/sql/query.py",
+  "limit": 30,
+  "offset": 775
+}
+[RAW line 121 TOOL RESULT toolu_015A5xrxUXNGazoy6unwh2De]
+   775→    def _get_only_select_mask(self, opts, mask, select_mask=None):
+   776→        if select_mask is None:
+   777→            select_mask = {}
+   778→        select_mask[opts.pk] = {}
+   779→        # Only include fields mentioned in the mask.
+   780→        for field_name, field_mask in mask.items():
+   781→            field = opts.get_field(field_name)
+   782→            field_select_mask = select_mask.setdefault(field, {})
+   783→            if field_mask:
+   784→                if not field.is_relation:
+   785→                    raise FieldError(next(iter(field_mask)))
+   786→                related_model = field.remote_field.model._meta.concrete_model
+   787→                self._get_only_select_mask(
+   788→                    related_model._meta, field_mask, field_select_mask
+   789→                )
+   790→        return select_mask
+   791→
+   792→    def get_select_mask(self):
+   793→        """
+   794→        Convert the self.deferred_loading data structure to an alternate data
+   795→        structure, describing the field that *will* be loaded. This is used to
+   796→        compute the columns to select from the database and also by the
+   797→        QuerySet class to work out which fields are being initialized on each
+   798→        model. Models that have all their fields included aren't mentioned in
+   799→        the result, only those that have field restrictions in place.
+   800→        """
+   801→        field_names, defer = self.deferred_loading
+   802→        if not field_names:
+   803→            return {}
+   804→        mask = {}
+
+[RAW line 123 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/sql/query.py",
+  "limit": 50,
+  "offset": 792
+}
+[RAW line 124 TOOL RESULT toolu_01B5heZb3NiUoFocMxMSCeok]
+   792→    def get_select_mask(self):
+   793→        """
+   794→        Convert the self.deferred_loading data structure to an alternate data
+   795→        structure, describing the field that *will* be loaded. This is used to
+   796→        compute the columns to select from the database and also by the
+   797→        QuerySet class to work out which fields are being initialized on each
+   798→        model. Models that have all their fields included aren't mentioned in
+   799→        the result, only those that have field restrictions in place.
+   800→        """
+   801→        field_names, defer = self.deferred_loading
+   802→        if not field_names:
+   803→            return {}
+   804→        mask = {}
+   805→        for field_name in field_names:
+   806→            part_mask = mask
+   807→            for part in field_name.split(LOOKUP_SEP):
+   808→                part_mask = part_mask.setdefault(part, {})
+   809→        opts = self.get_meta()
+   810→        if defer:
+   811→            return self._get_defer_select_mask(opts, mask)
+   812→        return self._get_only_select_mask(opts, mask)
+   813→
+   814→    def table_alias(self, table_name, create=False, filtered_relation=None):
+   815→        """
+   816→        Return a table alias for the given table_name and whether this is a
+   817→        new alias or not.
+   818→
+   819→        If 'create' is true, a new alias is always created. Otherwise, the
+   820→        most recently created alias for the table (if one exists) is reused.
+   821→        """
+   822→        alias_list = self.table_map.get(table_name)
+   823→        if not create and alias_list:
+   824→            alias = alias_list[0]
+   825→            self.alias_refcount[alias] += 1
+   826→            return alias, False
+   827→
+   828→        # Create a new alias for this table.
+   829→        if alias_list:
+   830→            alias = "%s%d" % (self.alias_prefix, len(self.alias_map) + 1)
+   831→            alias_list.append(alias)
+   832→
+[... truncated ...]
+[RAW line 133 TOOL Bash]
+cd ./swebench_9_15 && python test_issue.py
+[RAW line 134 TOOL RESULT toolu_01SUzmEVV52bC8w1YbA75Djg]
+Exit code 1
+  File "test_issue.py", line 98
+SyntaxError: Non-ASCII character '\xe2' in file test_issue.py on line 98, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+[RAW line 139 TOOL Bash]
+cd ./swebench_9_15 && python test_issue.py
+[RAW line 140 TOOL RESULT toolu_01FWyMAXR1f3pu8wL1ZMcXrF]
+Exit code 1
+  File "test_issue.py", line 99
+    print(f"  ✓ {field}")
+                         ^
+SyntaxError: invalid syntax
+[RAW line 145 TOOL Bash]
+cd ./swebench_9_15 && python test_issue.py 2>&1
+[RAW line 146 TOOL RESULT toolu_017Kwfphx8Ru44Q6irfVDf8T]
+Exit code 1
+  File "test_issue.py", line 99
+    print(f"  [OK] {field}")
+                          ^
+SyntaxError: invalid syntax
+[RAW line 148 TOOL Bash]
+python --version
+[RAW line 149 TOOL RESULT toolu_01RidEv1xnF5V69uJErkCffN]
+Python 2.7.3
+[RAW line 154 TOOL Bash]
+python3 --version
+[RAW line 155 TOOL RESULT toolu_01FRpGmE3YDzJzqKSoTqBnaq]
+Python 3.8.8
+[RAW line 157 TOOL Bash]
+cd ./swebench_9_15 && python3 test_issue.py 2>&1
+[RAW line 158 TOOL RESULT toolu_01Ck1TqxjaE7EbvLhByUu7ay]
+Exit code 1
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Traceback (most recent call last):
+  File "test_issue.py", line 28, in <module>
+    django.setup()
+  File "./swebench_9_15/testbed/django/__init__.py", line 14, in setup
+    from django.apps import apps
+  File "./swebench_9_15/testbed/django/apps/__init__.py", line 2, in <module>
+    from .registry import apps
+  File "./swebench_9_15/testbed/django/apps/registry.py", line 13, in <module>
+    class Apps:
+  File "./swebench_9_15/testbed/django/apps/registry.py", line 168, in Apps
+    @functools.cache
+AttributeError: module 'functools' has no attribute 'cache'
+[RAW line 163 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/sql/query.py",
+  "limit": 20,
+  "offset": 775
+}
+[RAW line 164 TOOL RESULT toolu_014jjcHY8WvgEa4brP1KbULZ]
+   775→    def _get_only_select_mask(self, opts, mask, select_mask=None):
+   776→        if select_mask is None:
+   777→            select_mask = {}
+   778→        select_mask[opts.pk] = {}
+   779→        # Only include fields mentioned in the mask.
+   780→        for field_name, field_mask in mask.items():
+   781→            field = opts.get_field(field_name)
+   782→            field_select_mask = select_mask.setdefault(field, {})
+   783→            if field_mask:
+   784→                if not field.is_relation:
+   785→                    raise FieldError(next(iter(field_mask)))
+   786→                related_model = field.remote_field.model._meta.concrete_model
+   787→                self._get_only_select_mask(
+   788→                    related_model._meta, field_mask, field_select_mask
+   789→                )
+   790→        return select_mask
+   791→
+   792→    def get_select_mask(self):
+   793→        """
+   794→        Convert the self.deferred_loading data structure to an alternate data
+
+[RAW line 166 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/django/db/models/sql/query.py",
+  "new_text_sha256": "9e57df99627ee956212eff90f83aa27c099741f1143b9de95c9839de59f4b23a",
+  "old_text_sha256": "3ab7c89fa94897cd6d6fea63bddf191ef0f9984b25823c7f34f4ab1ced21a3f4"
+}
+[RAW line 173 TOOL Bash]
+ls testbed/tests/defer_regress/ 2>/dev/null | head -10
+[RAW line 176 TOOL Bash]
+ls testbed/tests/defer_regress/
+[RAW line 179 TOOL Bash]
+find testbed -type d -name "defer_regress" 2>/dev/null | head -5
+[RAW line 182 TOOL Bash]
+cd testbed && git diff
+[RAW line 188 TOOL Bash]
+git diff django/db/models/sql/query.py
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: django/django
+Base commit: 0ec60661e61b153e6bcec64649b1b7f524eb3e18
+Instance ID: django__django-34570
+
+CURRENT_ISSUE
+QuerySet.defer()  raises an AttributeError when the field is ManyToManyField or GenericForeignKey
+
+Description
+In Version 4.2.1
+Hello, when I try to defer a field that is a
+ManyToManyField
+or a
+GenericForeignKey
+it raises an AttributteError.
+Having these three models:
+from django.db import models
+from django.contrib.contenttypes.fields import GenericForeignKey, ContentType
+
+class ModelA(models.Model):
+    name = models.CharField(max_length=100)
+
+
+class ModelB(models.Model):
+    name = models.CharField(max_length=100)
+    model_a = models.ManyToManyField('ModelA')
+
+
+class ModelC(models.Model):
+    name = models.CharField(max_length=100)
+    content_type = models.ForeignKey(ContentType, null=True, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField(null=True)
+    generic_model = GenericForeignKey('content_type', 'object_id')
+Traceback from a ManyToManyField:
+>>> ModelB.objects.defer('model_a')
+Traceback (most recent call last):
+  File "<console>", line 1, in <module>
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 374, in __repr__
+    data = list(self[: REPR_OUTPUT_SIZE + 1])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 398, in __iter__
+    self._fetch_all()
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 1881, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 91, in __iter__
+    results = compiler.execute_sql(
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 1547, in execute_sql
+    sql, params = self.as_sql()
+                  ^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 734, in as_sql
+    extra_select, order_by, group_by = self.pre_sql_setup(
+                                       ^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 84, in pre_sql_setup
+    self.setup_query(with_col_aliases=with_col_aliases)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 73, in setup_query
+    self.select, self.klass_info, self.annotation_col_map = self.get_select(
+                                                            ^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 256, in get_select
+    select_mask = self.query.get_select_mask()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 772, in get_select_mask
+    return self._get_defer_select_mask(opts, mask)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 728, in _get_defer_select_mask
+    field = opts.get_field(field_name).field
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ManyToManyField' object has no attribute 'field'
+Traceback from defering a GenericForeignKey:
+>>> ModelC.objects.defer('generic_model')
+Traceback (most recent call last):
+  File "<console>", line 1, in <module>
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 374, in __repr__
+    data = list(self[: REPR_OUTPUT_SIZE + 1])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 398, in __iter__
+    self._fetch_all()
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 1881, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 91, in __iter__
+    results = compiler.execute_sql(
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 1547, in execute_sql
+    sql, params = self.as_sql()
+                  ^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 734, in as_sql
+    extra_select, order_by, group_by = self.pre_sql_setup(
+                                       ^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 84, in pre_sql_setup
+    self.setup_query(with_col_aliases=with_col_aliases)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 73, in setup_query
+    self.select, self.klass_info, self.annotation_col_map = self.get_select(
+                                                            ^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 256, in get_select
+    select_mask = self.query.get_select_mask()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 772, in get_select_mask
+    return self._get_defer_select_mask(opts, mask)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 728, in _get_defer_select_mask
+    field = opts.get_field(field_name).field
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'GenericForeignKey' object has no attribute 'field'
+PD:
+In version 4.1.9 it is working without any error, but in versions 4.2.0 and 4.2.1 raises the
+AttributeError
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

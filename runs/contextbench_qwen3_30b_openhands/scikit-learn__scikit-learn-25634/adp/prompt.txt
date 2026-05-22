@@ -1,0 +1,958 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: adp
+
+The following is a stripped ADP-rendered trajectory from an officially related prior issue.
+
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 302cbd3f-51cb-4d16-bd51-e633e07fdc7d
+- repo: scikit-learn/scikit-learn
+- instance_id: scikit-learn__scikit-learn-25638
+- base_commit: 6adb209acd63825affc884abcd85381f148fb1b0
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: scikit-learn/scikit-learn
+instance_id: scikit-learn__scikit-learn-25638
+base_commit: 6adb209acd63825affc884abcd85381f148fb1b0
+problem_statement:
+Support nullable pandas dtypes in `unique_labels`
+### Describe the workflow you want to enable
+
+I would like to be able to pass the nullable pandas dtypes ("Int64", "Float64", "boolean") into sklearn's `unique_labels` function. Because the dtypes become `object` dtype when converted to numpy arrays we get `ValueError: Mix type of y not allowed, got types {'binary', 'unknown'}`:
+
+Repro with sklearn 1.2.1
+```py
+    import pandas as pd
+    import pytest
+    from sklearn.utils.multiclass import unique_labels
+
+    for dtype in ["Int64", "Float64", "boolean"]:
+        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
+        y_predicted = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
+
+        with pytest.raises(ValueError, match="Mix type of y not allowed, got types"):
+            unique_labels(y_true, y_predicted)
+```
+
+### Describe your proposed solution
+
+We should get the same behavior as when `int64`, `float64`, and `bool` dtypes are used, which is no error:
+
+```python
+    import pandas as pd
+    from sklearn.utils.multiclass import unique_labels
+
+    for dtype in ["int64", "float64", "bool"]:
+        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
+        y_predicted = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
+
+        unique_labels(y_true, y_predicted)
+```
+
+### Describe alternatives you've considered, if relevant
+
+Our current workaround is to convert the data to numpy arrays with the corresponding dtype that works prior to passing it into `unique_labels`.
+
+### Additional context
+
+_No response_
+sha256: 9420a9b779a82ef6680e324cfd053bc1e3296118f036c19da28895da4520fb75
+truncated: false
+
+[ADP ACTION current=1 original=3: api_action Glob]
+payload:
+{
+  "pattern": "**/multiclass.py"
+}
+sha256: dc2d07c52ae3d69396ab727b7396a2b3fcde6c1112cce2f6b82a72e6f6f16d77
+truncated: false
+
+[ADP ACTION current=2 original=5: api_action Grep]
+payload:
+{
+  "output_mode": "files_with_matches",
+  "pattern": "def unique_labels"
+}
+sha256: 84ee0c23428c6bff7973478e87b0c88b6a69f51204e0ab7120f42ffa3e98f501
+truncated: false
+
+[ADP ACTION current=3 original=11: code_action bash]
+payload:
+ls -la testbed 2>&1 || echo "No testbed found"
+sha256: 36c1b281db049a976f21770204ebffaf9655e18e7e6063e310311883f46e4787
+truncated: false
+
+[ADP ACTION current=4 original=17: api_action Grep]
+path: testbed
+payload:
+{
+  "output_mode": "files_with_matches",
+  "path": "testbed",
+  "pattern": "def unique_labels"
+}
+sha256: c6a5dc861f6d812d66a5e30c9d6d91ca9e6904ba17108186db9de2cb615a6740
+truncated: false
+
+[ADP OBSERVATION current=5 original=18 source=environment]
+name: Grep:toolu_01H4R1unc75f4dVskcU7A6kd
+excerpt:
+Found 1 file
+testbed/sklearn/utils/multiclass.py
+sha256: b161e6370dc7abb054cb0a8d8f99dca9f777700bc1eeab1d91f2cfa052f8f9c1
+truncated: false
+
+[ADP ACTION current=6 original=19: api_action Read]
+path: sklearn/utils/multiclass.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/utils/multiclass.py"
+}
+sha256: e0c30a417e538b3b46d165dc23b90991850e2e0019af20ce878acb41a4798ebf
+truncated: false
+
+[ADP OBSERVATION current=7 original=20 source=environment]
+name: Read:toolu_01TAUEryc8Nbvqa6DcwYPHqD
+excerpt:
+     1→# Author: Arnaud Joly, Joel Nothman, Hamzeh Alsalhi
+     2→#
+     3→# License: BSD 3 clause
+     4→"""
+     5→Multi-class / multi-label utility function
+     6→==========================================
+     7→
+     8→"""
+     9→from collections.abc import Sequence
+    10→from itertools import chain
+    11→import warnings
+    12→
+    13→from scipy.sparse import issparse
+    14→from scipy.sparse import dok_matrix
+    15→from scipy.sparse import lil_matrix
+    16→
+    17→import numpy as np
+    18→
+    19→from .validation import check_array, _assert_all_finite
+    20→from ..utils._array_api import get_namespace
+    21→
+    22→
+    23→def _unique_multiclass(y):
+    24→    xp, is_array_api = get_namespace(y)
+    25→    if hasattr(y, "__array__") or is_array_api:
+    26→        return xp.unique_values(xp.asarray(y))
+    27→    else:
+    28→        return set(y)
+    29→
+    30→
+    31→def _unique_indicator(y):
+    32→    return np.arange(
+    33→        check_array(y, input_name="y", accept_sparse=["csr", "csc", "coo"]).shape[1]
+    34→    )
+    35→
+    36→
+    37→_FN_UNIQUE_LABELS = {
+    38→    "binary": _unique_multiclass,
+    39→    "multiclass": _unique_multiclass,
+    40→    "multilabel-indicator": _unique_indicator,
+    41→}
+    42→
+    43→
+    44→def unique_labels(*ys):
+    45→    """Extract an ordered array of unique labels.
+    46→
+    47→    We don't allow:
+    48→        - mix of multilabel and multiclass (single label) targets
+    49→        - mix of label indicator matrix and anything else,
+    50→          because there are no explicit labels)
+    51→        - mix of label indicator matrices of different sizes
+    52→        - mix of string and integer labels
+    53→
+    54→    At the moment, we also don't allow "multiclass-multioutput" input type.
+    55→
+    56→    Parameters
+    57→    ----------
+    58→    *ys : array-likes
+    59→        Label values.
+    60→
+    61→    Returns
+    62→    -------
+    63→    out : ndarray of shape (n_unique_labels
+sha256: 74a3c15737de47302070cf5c962faabaa45ef1e6e7a14decad0f5e6359f2c3d3
+truncated: true
+
+[ADP ACTION current=8 original=23: api_action Grep]
+path: sklearn/utils/multiclass.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/sklearn/utils/multiclass.py",
+  "pattern": "pandas|pd\\."
+}
+sha256: bbebdac48226ebea29dfbcd810e82bfe3252bce4ec9e9d32c8bcebfe483b88e1
+truncated: false
+
+[ADP OBSERVATION current=9 original=24 source=environment]
+name: Grep:toolu_01NuBvShATPwbFDXK4JEGaTr
+excerpt:
+294:    sparse_pandas = y.__class__.__name__ in ["SparseSeries", "SparseArray"]
+295:    if sparse_pandas:
+sha256: f17cdc68e065c18f4f03bcaa8603686827a878f2181f141e0a41cf4b2f2eb47f
+truncated: false
+
+[ADP ACTION current=10 original=27: code_action bash]
+payload:
+cd testbed && python ../test_issue.py
+sha256: 9f7b2f4cd1af2306085db5ad898c57a463cf746f24918057c3634e82061e1b6c
+truncated: false
+
+[ADP OBSERVATION current=11 original=28 source=environment]
+name: Bash:toolu_01MnFuhaA1XLyoMDCPChSrn7:error
+excerpt:
+Exit code 2
+python: can't open file '../test_issue.py': [Errno 2] No such file or directory
+sha256: 59d5301ac82ca5d993f88c8a9487ada124a22899df8ecba109871cc70dbaf0ff
+truncated: false
+
+[ADP ACTION current=12 original=29: code_action bash]
+payload:
+cd testbed && python test_issue.py
+sha256: b7950e7b06701bce1e52e48d6774dc83f2497cf8d9141c47a5dd624959ad5aff
+truncated: false
+
+[ADP OBSERVATION current=13 original=30 source=environment]
+name: Bash:toolu_01SkKRhEG32qs195f5EQn8Ug:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 12
+    print(f"  Testing dtype: {dtype}")
+                                    ^
+SyntaxError: invalid syntax
+sha256: 1dfd00578878f4d7b51b51da2146a81bff2372fe02573df6f7d9e53ee9107935
+truncated: false
+
+[ADP ACTION current=14 original=31: code_action bash]
+payload:
+python test_issue.py
+sha256: 492e15cc2de621ea212b97631c264bdb1cfc9333f3cbd9fdf4f325096cdbe3b5
+truncated: false
+
+[ADP OBSERVATION current=15 original=32 source=environment]
+name: Bash:toolu_01X8YL1kVEf78QYMrKG33fqC:error
+excerpt:
+Exit code 2
+python: can't open file 'test_issue.py': [Errno 2] No such file or directory
+sha256: deeecd5c9620a349b46191753bdbda19c8c6d301b31ce87bfe95cefcc62f7b8a
+truncated: false
+
+[ADP ACTION current=16 original=33: code_action bash]
+payload:
+ls -la testbed/test_issue.py
+sha256: 858873ffc2e368027ef5726da163cbe8471a2a92c196147b13d8ddf130cd5ba2
+truncated: false
+
+[ADP OBSERVATION current=17 original=34 source=environment]
+name: Bash:toolu_019tTVm3mATwqYYVBcYCDCEa
+excerpt:
+-rw-------@ 1 user  staff  1386 26 Nov 21:31 testbed/test_issue.py
+sha256: 51c2ecd0383e49584426f04262c94d4aba6a2488ed2a8ede648a9b6d373131f5
+truncated: false
+
+[ADP ACTION current=18 original=35: code_action bash]
+payload:
+python3 testbed/test_issue.py
+sha256: ba961a7680ba5e52840c06722cb60b429d19356de5ea3cf45c1d9616b6eab96b
+truncated: false
+
+[ADP OBSERVATION current=19 original=36 source=environment]
+name: Bash:toolu_01Q5WArkxNL7nzCCBA35ko5w:error
+excerpt:
+Exit code 1
+Traceback (most recent call last):
+  File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 48, in <module>
+    from ._check_build import check_build  # noqa
+ModuleNotFoundError: No module named 'sklearn.__check_build._check_build'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "testbed/test_issue.py", line 4, in <module>
+    from sklearn.utils.multiclass import unique_labels
+  File "./swebench_9_15/testbed/sklearn/__init__.py", line 81, in <module>
+    from . import __check_build  # noqa: F401
+  File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 50, in <module>
+    raise_build_error(e)
+  File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 31, in raise_build_error
+    raise ImportError(
+ImportError: No module named 'sklearn.__check_build._check_build'
+___________________________________________________________________________
+Contents of ./swebench_9_15/testbed/sklearn/__check_build:
+__init__.py               __pycache__               _check_build.pyx
+___________________________________________________________________________
+It seems that scikit-learn has not been built correctly.
+
+If you have installed scikit-learn from source, please do not forget
+to build the package before using it: run `python setup.py install` or
+`make` in the source directory.
+
+If you have used an installer, please check that it is suited for your
+Python version, your operating system and your platform.
+sha256: 0735962cffaffb7d402b255ce55f81097729d1c93ccdd44ec965cab2e6e3b909
+truncated: false
+
+[ADP ACTION current=20 original=41: api_action Grep]
+path: sklearn/utils/multiclass.py
+payload:
+{
+  "-C": 2,
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/sklearn/utils/multiclass.py",
+  "pattern": "hasattr.*dtype|__array__|_array"
+}
+sha256: eed0b02bc5ac2798ff6fb280840259cbfafb41000189da526621ffc7a9f73a31
+truncated: false
+
+[ADP OBSERVATION current=21 original=42 source=environment]
+name: Grep:toolu_01ERFRN2nc2n6wzFSGuQ843x
+excerpt:
+17-import numpy as np
+18-
+19:from .validation import check_array, _assert_all_finite
+20:from ..utils._array_api import get_namespace
+21-
+22-
+23-def _unique_multiclass(y):
+24:    xp, is_array_api = get_namespace(y)
+25:    if hasattr(y, "__array__") or is_array_api:
+26-        return xp.unique_values(xp.asarray(y))
+27-    else:
+--
+31-def _unique_indicator(y):
+32-    return np.arange(
+33:        check_array(y, input_name="y", accept_sparse=["csr", "csc", "coo"]).shape[1]
+34-    )
+35-
+--
+74-    array([ 1,  2,  5, 10, 11])
+75-    """
+76:    xp, is_array_api = get_namespace(*ys)
+77-    if not ys:
+78-        raise ValueError("No argument has been passed.")
+--
+93-        and len(
+94-            set(
+95:                check_array(y, accept_sparse=["csr", "csc", "coo"]).shape[1] for y in ys
+96-            )
+97-        )
+--
+107-        raise ValueError("Unknown label type: %s" % repr(ys))
+108-
+109:    if is_array_api:
+110-        # array_api does not allow for mixed dtypes
+111-        unique_ys = xp.concat([_unique_labels(y) for y in ys])
+--
+152-    True
+153-    """
+154:    xp, is_array_api = get_namespace(y)
+155:    if hasattr(y, "__array__") or isinstance(y, Sequence) or is_array_api:
+156-        # DeprecationWarning will be replaced by ValueError, see NEP 34
+157-        # https://numpy.org/neps/nep-0034-infer-dtype-is-object.html
+--
+280-    'multilabel-indicator'
+281-    """
+282:    xp, is_array_api = get_namespace(y)
+283-    valid = (
+284:        (isinstance(y, Sequence) or issparse(y) or hasattr(y, "__array__"))
+285-        and not isinstance(y, str)
+286:        or is_array_api
+287-    )
+288-
+--
+316-    try:
+317-        if (
+318:            not hasattr(y[0], "__array__")
+319-            and isinstance(y[0], Sequence)
+320-            and not isinstance(y[0], str)
+sha256: cf921096627bda55a47af01db5e679807ee69d5df4832c41b165b3b4bec0b764
+truncated: false
+
+[ADP ACTION current=22 original=43: api_action Read]
+path: sklearn/utils/multiclass.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/utils/multiclass.py",
+  "limit": 50,
+  "offset": 280
+}
+sha256: 8b35039671a471d4ce96fb5ff51719e320aa4b083bf2c480dd581f808ce8943e
+truncated: false
+
+[ADP OBSERVATION current=23 original=44 source=environment]
+name: Read:toolu_0126up4h62oCwgPwJ2bmR8ih
+excerpt:
+   280→    'multilabel-indicator'
+   281→    """
+   282→    xp, is_array_api = get_namespace(y)
+   283→    valid = (
+   284→        (isinstance(y, Sequence) or issparse(y) or hasattr(y, "__array__"))
+   285→        and not isinstance(y, str)
+   286→        or is_array_api
+   287→    )
+   288→
+   289→    if not valid:
+   290→        raise ValueError(
+   291→            "Expected array-like (array or non-string sequence), got %r" % y
+   292→        )
+   293→
+   294→    sparse_pandas = y.__class__.__name__ in ["SparseSeries", "SparseArray"]
+   295→    if sparse_pandas:
+   296→        raise ValueError("y cannot be class 'SparseSeries' or 'SparseArray'")
+   297→
+   298→    if is_multilabel(y):
+   299→        return "multilabel-indicator"
+   300→
+   301→    # DeprecationWarning will be replaced by ValueError, see NEP 34
+   302→    # https://numpy.org/neps/nep-0034-infer-dtype-is-object.html
+   303→    # We therefore catch both deprecation (NumPy < 1.24) warning and
+   304→    # value error (NumPy >= 1.24).
+   305→    with warnings.catch_warnings():
+   306→        warnings.simplefilter("error", np.VisibleDeprecationWarning)
+   307→        if not issparse(y):
+   308→            try:
+   309→                y = xp.asarray(y)
+   310→            except (np.VisibleDeprecationWarning, ValueError):
+   311→                # dtype=object should be provided explicitly for ragged arrays,
+   312→                # see NEP 34
+   313→                y = xp.asarray(y, dtype=object)
+   314→
+   315→    # The old sequence of sequences format
+   316→    try:
+   317→        if (
+   318→            not hasattr(y[0], "__array__")
+   319→            and isinstance(y[0], Sequence)
+   320→            and not isinstance(y[0], str)
+   321→        ):
+   322→            raise ValueError(
+   323→                "You appear to be using a legacy multi-label data"
+   324→                " representation. Sequence of sequences are no"
+   325→                " longer supported; use a binary array or sparse"
+
+sha256: 3ecaa11ea93234df0e2268624d5b93c0a249258fc6f8def4bcc42bf7fc17bee9
+truncated: true
+
+[ADP ACTION current=24 original=45: api_action Edit]
+path: sklearn/utils/multiclass.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/utils/multiclass.py",
+  "new_text_sha256": "bb683e77fae8b2c1a461bbc01880acd1496ce77ba7082697f177b23b9db33962",
+  "old_text_sha256": "9b8e77257974696afafa895cb1722c817bb80b00c8c8e8a04117434449ff4150"
+}
+sha256: 5ead64c33ea56efec1bb23233810d456ec52b214075c0f3f0347be4df7ca90e9
+truncated: false
+
+[ADP ACTION current=25 original=47: api_action Write]
+path: swebench_9_15/test_fix.py
+payload:
+{
+  "content_sha256": "cdd68fe37bb8239f10c63b26446e3b635712c74c1404f54cb9e949777479f140",
+  "file_path": "./swebench_9_15/test_fix.py"
+}
+sha256: 97c24c60160196a04df5f959062e85115fa6b06a3873f50bfa8c03e0d2201b40
+truncated: false
+
+[ADP ACTION current=26 original=49: code_action bash]
+payload:
+python3 test_fix.py
+sha256: 339ffaa25e2a0b6527e937319f285f2a727c3e28e3301c02867c1f53fca13f80
+truncated: false
+
+[ADP OBSERVATION current=27 original=50 source=environment]
+name: Bash:toolu_01J2sgcVMS1mSLUznBLYTKR6:error
+excerpt:
+Exit code 1
+Traceback (most recent call last):
+  File "test_fix.py", line 16, in <module>
+    from sklearn.utils.multiclass import type_of_target, unique_labels
+  File "./swebench_9_15/testbed/sklearn/__init__.py", line 82, in <module>
+    from .base import clone
+  File "./swebench_9_15/testbed/sklearn/base.py", line 17, in <module>
+    from .utils import _IS_32BIT
+  File "./swebench_9_15/testbed/sklearn/utils/__init__.py", line 19, in <module>
+    from .murmurhash import murmurhash3_32
+ModuleNotFoundError: No module named 'sklearn.utils.murmurhash'
+sha256: 0f6af9c47952d00d4848d19637ca40623e2252f5386fa628892db164723cca96
+truncated: false
+
+[ADP ACTION current=28 original=51: api_action Write]
+path: swebench_9_15/test_fix_minimal.py
+payload:
+{
+  "content_sha256": "48d05fff3859e31583260d13a3c77ec80e6a6f92899bf2c0a5f4318ac73a75e8",
+  "file_path": "./swebench_9_15/test_fix_minimal.py"
+}
+sha256: d3b69b322948a483867454cb5bbf4cbe158e80a6ef33f77eb1fc482db4413f71
+truncated: false
+
+[ADP ACTION current=29 original=53: code_action bash]
+payload:
+python3 test_fix_minimal.py
+sha256: 156155b3f5268ca5fab74eb81d2532a844d32c77b9cefd89dcb79ee872e72e5c
+truncated: false
+
+[ADP OBSERVATION current=30 original=54 source=environment]
+name: Bash:toolu_0182rMo8PtfpyGsmTe8zRsZB
+excerpt:
+Testing nullable pandas dtypes...
+============================================================
+
+Test 1: type_of_target with nullable pandas dtypes
+------------------------------------------------------------
+  dtype=Int64   , numpy_dtype=object
+  ✓ type_of_target=binary
+
+  dtype=Float64 , numpy_dtype=object
+  ✓ type_of_target=binary
+
+  dtype=boolean , numpy_dtype=object
+  ✓ type_of_target=binary
+
+Test 2: unique_labels with nullable pandas dtypes
+------------------------------------------------------------
+  y_true dtype=Int64, y_predicted dtype=int64
+  ✓ unique_labels=[0 1]
+
+  y_true dtype=Float64, y_predicted dtype=int64
+  ✓ unique_labels=[0. 1.]
+
+  y_true dtype=boolean, y_predicted dtype=int64
+  ✓ unique_labels=[False  True]
+
+Test 3: unique_labels with regular pandas dtypes (regression test)
+------------------------------------------------------------
+  ✓ dtype=int64    -> unique_labels=[0 1]
+  ✓ dtype=float64  -> unique_labels=[0. 1.]
+  ✓ dtype=bool     -> unique_labels=[False  True]
+
+============================================================
+Testing complete!
+sha256: bbeae1c5302eb83cfb4951a53ec5a96b5ff9cb312ec44d2834edcef81ab0009c
+truncated: false
+
+[ADP ACTION current=31 original=57: api_action Glob]
+path: testbed
+payload:
+{
+  "path": "testbed",
+  "pattern": "**/test_multiclass.py"
+}
+sha256: b0c3e8b37e1368054b3d5843ff2e8c57c538fd35e56ac2aa2b1fb8bd26f5e1f5
+truncated: false
+
+[ADP OBSERVATION current=32 original=58 source=environment]
+name: Glob:toolu_016qQNUwQW5Kt5XxiLod7SB1
+excerpt:
+./swebench_9_15/testbed/sklearn/tests/test_multiclass.py
+./swebench_9_15/testbed/sklearn/utils/tests/test_multiclass.py
+sha256: bd6fb650db1ae4c8d0c768ba9f1132e676df32ba375cf64f46bcb9262270d959
+truncated: false
+
+[ADP ACTION current=33 original=59: api_action Read]
+path: sklearn/utils/tests/test_multiclass.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/utils/tests/test_multiclass.py",
+  "limit": 100,
+  "offset": 0
+}
+sha256: d971d5ab95a17aaec2bdeb605f844d6ebe7d96e6ab82adf1ff994617938a1296
+truncated: false
+
+[ADP OBSERVATION current=34 original=60 source=environment]
+name: Read:toolu_01BJwmSbveHeU79HanVLcSJe
+excerpt:
+     0→import numpy as np
+     1→import scipy.sparse as sp
+     2→from itertools import product
+     3→import pytest
+     4→
+     5→from scipy.sparse import issparse
+     6→from scipy.sparse import csc_matrix
+     7→from scipy.sparse import csr_matrix
+     8→from scipy.sparse import coo_matrix
+     9→from scipy.sparse import dok_matrix
+    10→from scipy.sparse import lil_matrix
+    11→
+    12→from sklearn.utils._testing import assert_array_equal
+    13→from sklearn.utils._testing import assert_array_almost_equal
+    14→from sklearn.utils._testing import assert_allclose
+    15→from sklearn.utils.estimator_checks import _NotAnArray
+    16→
+    17→from sklearn.utils.multiclass import unique_labels
+    18→from sklearn.utils.multiclass import is_multilabel
+    19→from sklearn.utils.multiclass import type_of_target
+    20→from sklearn.utils.multiclass import class_distribution
+    21→from sklearn.utils.multiclass import check_classification_targets
+    22→from sklearn.utils.multiclass import _ovr_decision_function
+    23→
+    24→from sklearn.utils.metaestimators import _safe_split
+    25→from sklearn.model_selection import ShuffleSplit
+    26→from sklearn.svm import SVC
+    27→from sklearn import datasets
+    28→
+    29→sparse_multilable_explicit_zero = csc_matrix(np.array([[0, 1], [1, 0]]))
+    30→sparse_multilable_explicit_zero[:, 0] = 0
+    31→
+    32→
+    33→def _generate_sparse(
+    34→    matrix,
+    35→    matrix_types=(csr_matrix, csc_matrix, coo_matrix, dok_matrix, lil_matrix),
+    36→    dtypes=(bool, int, np.int8, np.uint8, float, np.float32),
+    37→):
+    38→    return [
+    39→        matrix_type(matrix, dtype=dtype)
+    40→        for matrix_type in matrix_types
+    41→        for dtype in dtypes
+    42→    ]
+    43→
+    44→
+    45→EXAMPLES = {
+    46→    "multilabel-indicator": [
+    47→        # valid when the data is formatted as sparse or dense, identified
+    48→        # by CSR format when the testing takes place
+    49→        csr_matrix(np.random.Ra
+sha256: 8315955229297591736776e714cc21179fdad1894d032206e795410610474ef5
+truncated: true
+
+[ADP ACTION current=35 original=61: api_action Grep]
+path: sklearn/utils/tests/test_multiclass.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/sklearn/utils/tests/test_multiclass.py",
+  "pattern": "pandas|pd\\.|Series|DataFrame"
+}
+sha256: 2541d077e8e2f05fb26478f8bd5205eb66f1d67829138c51ec78ceba5a4f6d30
+truncated: false
+
+[ADP OBSERVATION current=36 original=62 source=environment]
+name: Grep:toolu_01AvkRcQM9VLs17mQHV7u9Dh
+excerpt:
+340:def test_type_of_target_pandas_sparse():
+341:    pd = pytest.importorskip("pandas")
+343:    y = pd.arrays.SparseArray([1, np.nan, np.nan, 1, np.nan])
+344:    msg = "y cannot be class 'SparseSeries' or 'SparseArray'"
+sha256: bef90806e6573dec79fd8d272a8adb5fa4b7c1014bc3c4d6ffee334ee51962e7
+truncated: false
+
+[ADP ACTION current=37 original=63: api_action Write]
+path: test_nullable_dtypes.py
+payload:
+{
+  "content_sha256": "1ee8b54af1a5b1e725445ddfdc0b6b316a6e316d05e3e747fc181cb05f890983",
+  "file_path": "./swebench_9_15/testbed/test_nullable_dtypes.py"
+}
+sha256: ce6a0440e8ed9bc78c26c8eddecff681d2c0346200f08751f297252a15c02e31
+truncated: false
+
+[ADP ACTION current=38 original=65: api_action Write]
+path: swebench_9_15/run_test.py
+payload:
+{
+  "content_sha256": "cb92a83a08cf78d3202f65c464cc7b75a2152dfcb34383f041f9768c06454d4b",
+  "file_path": "./swebench_9_15/run_test.py"
+}
+sha256: 86f06a485ff2ad3f420fee70990ee99b73aaf802f38bbd747ed999a1fb92739f
+truncated: false
+
+[ADP ACTION current=39 original=67: code_action bash]
+payload:
+python3 run_test.py
+sha256: 92f94403704ef59ddfe5dc102f0757dacfdd3369dcf5ec6db696d87398a5c3c9
+truncated: false
+
+[ADP OBSERVATION current=40 original=68 source=environment]
+name: Bash:toolu_015PDBXUmYynkAGiBZdr4E7a:error
+excerpt:
+Exit code 1
+Traceback (most recent call last):
+  File "run_test.py", line 47, in <module>
+    from sklearn.utils import multiclass
+  File "./swebench_9_15/testbed/sklearn/__init__.py", line 82, in <module>
+    from .base import clone
+  File "./swebench_9_15/testbed/sklearn/base.py", line 17, in <module>
+    from .utils import _IS_32BIT
+  File "./swebench_9_15/testbed/sklearn/utils/__init__.py", line 19, in <module>
+    from .murmurhash import murmurhash3_32
+ImportError: cannot import name 'murmurhash3_32' from '<unknown module name>' (unknown location)
+sha256: 18a91008fbe0dcfc0d508a62ff3b644e6a1929d20a3109508d523e68b3e34f7d
+truncated: false
+
+[ADP ACTION current=41 original=69: api_action Write]
+path: swebench_9_15/test_direct.py
+payload:
+{
+  "content_sha256": "54b43181cffecd7a9a0afcc3351593de79f23805310b14bcd400e8abfed41618",
+  "file_path": "./swebench_9_15/test_direct.py"
+}
+sha256: fb5325986f5bdbb457f0cb1b7d77b5e444d6f693d105b90183f3b6561ddfa420
+truncated: false
+
+[ADP ACTION current=42 original=71: code_action bash]
+payload:
+python3 test_direct.py
+sha256: 730fdeeefcad971a7712dff970a51774c02a5794121b2d540f16c18e76715f5a
+truncated: false
+
+[ADP OBSERVATION current=43 original=72 source=environment]
+name: Bash:toolu_01P8WcF663kXt9roBhfNgfSB:error
+excerpt:
+Exit code 1
+Traceback (most recent call last):
+  File "test_direct.py", line 82, in <module>
+    result = type_of_target(y)
+  File "<string>", line 399, in type_of_target
+  File "/opt/anaconda3/lib/python3.8/site-packages/numpy/__init__.py", line 320, in __getattr__
+    raise AttributeError("module {!r} has no attribute "
+AttributeError: module 'numpy' has no attribute 'unique_values'
+
+======================================================================
+Testing nullable pandas dtypes support in scikit-learn
+======================================================================
+
+Test 1: type_of_target with nullable pandas dtypes
+----------------------------------------------------------------------
+  Input: pd.Series with dtype=Int64
+  Converted to numpy: dtype=object
+  ✗ ERROR: module 'numpy' has no attribute 'unique_values'
+sha256: f6513b20642f0b7c03b8c152c1394a89173ea747401d7dbbb0297a1d06379dae
+truncated: false
+
+[ADP ACTION current=44 original=73: api_action Grep]
+path: sklearn/utils/multiclass.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "testbed/sklearn/utils/multiclass.py",
+  "pattern": "unique_values"
+}
+sha256: 4787e89edde982c2ed5285a02df2f30e30ba1b5a0a7d572f70badb92145e30ff
+truncated: false
+
+[ADP OBSERVATION current=45 original=74 source=environment]
+name: Grep:toolu_016sYVe6gWfcADRXdUufZJoC
+excerpt:
+26:        return xp.unique_values(xp.asarray(y))
+112:        return xp.unique_values(unique_ys)
+173:        labels = xp.unique_values(y.data)
+180:        labels = xp.unique_values(y)
+402:    if xp.unique_values(y).shape[0] > 2 or (y.ndim == 2 and len(first_row) > 1):
+sha256: 01067ada20f87aa30f2c6bf34cf0cceb76447c14667b4ce105d08a6f84d10af1
+truncated: false
+
+[ADP ACTION current=46 original=75: api_action Read]
+path: sklearn/utils/_array_api.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/utils/_array_api.py",
+  "limit": 100,
+  "offset": 0
+}
+sha256: f1089d04a5c61401a1a8f41d7f93d78b71b6ae582ee39e5a0526d933ce562f94
+truncated: false
+
+[ADP OBSERVATION current=47 original=76 source=environment]
+name: Read:toolu_016Ud7aQn2e8QUuCsh61NwtF
+excerpt:
+     0→"""Tools to support array_api."""
+     1→import numpy
+     2→from .._config import get_config
+     3→import scipy.special as special
+     4→
+     5→
+     6→class _ArrayAPIWrapper:
+     7→    """sklearn specific Array API compatibility wrapper
+     8→
+     9→    This wrapper makes it possible for scikit-learn maintainers to
+    10→    deal with discrepancies between different implementations of the
+    11→    Python array API standard and its evolution over time.
+    12→
+    13→    The Python array API standard specification:
+    14→    https://data-apis.org/array-api/latest/
+    15→
+    16→    Documentation of the NumPy implementation:
+    17→    https://numpy.org/neps/nep-0047-array-api-standard.html
+    18→    """
+    19→
+    20→    def __init__(self, array_namespace):
+    21→        self._namespace = array_namespace
+    22→
+    23→    def __getattr__(self, name):
+    24→        return getattr(self._namespace, name)
+    25→
+    26→    def take(self, X, indices, *, axis):
+    27→        # When array_api supports `take` we can use this directly
+    28→        # https://github.com/data-apis/array-api/issues/177
+    29→        if self._namespace.__name__ == "numpy.array_api":
+    30→            X_np = numpy.take(X, indices, axis=axis)
+    31→            return self._namespace.asarray(X_np)
+    32→
+    33→        # We only support axis in (0, 1) and ndim in (1, 2) because that is all we need
+    34→        # in scikit-learn
+    35→        if axis not in {0, 1}:
+    36→            raise ValueError(f"Only axis in (0, 1) is supported. Got {axis}")
+    37→
+    38→        if X.ndim not in {1, 2}:
+    39→            raise ValueError(f"Only X.ndim in (1, 2) is supported. Got {X.ndim}")
+    40→
+    41→        if axis == 0:
+    42→            if X.ndim == 1:
+    43→                selected = [X[i] for i in indices]
+    44→            else:  # X.ndim == 2
+    45→                selected = [X[i, :] for i in indices]
+    46→        else:  # axis == 1
+    47→            sele
+sha256: cd12fc6f5aac6b5ac4556cf78c8c458db3f2c3aca3a7d6f1d6f5b3dce2077a0c
+truncated: true
+
+[ADP ACTION current=48 original=77: api_action Write]
+path: swebench_9_15/test_direct_v2.py
+payload:
+{
+  "content_sha256": "fc328b45275810666139f856226fefa7e04fe30d94fc03dfe18727b92ecc7220",
+  "file_path": "./swebench_9_15/test_direct_v2.py"
+}
+sha256: 9b1f1ac031c439194df3740bf427ac76ca639857bbec0b2fab7fdb80ede5b001
+truncated: false
+
+[ADP ACTION current=49 original=79: code_action bash]
+payload:
+python3 test_direct_v2.py
+sha256: 1ffda4d46c9996d02925c7dc30e1dd790d908e7901c83ee86cb7beaa6d27eeee
+truncated: false
+
+[ADP OBSERVATION current=50 original=80 source=environment]
+name: Bash:toolu_01KYrJJAB7efpjJVacyY3fEF
+excerpt:
+======================================================================
+Testing nullable pandas dtypes support in scikit-learn
+======================================================================
+
+Test 1: type_of_target with nullable pandas dtypes
+----------------------------------------------------------------------
+  Input: pd.Series with dtype=Int64
+  Converted to numpy: dtype=object
+  ✓ Result: type_of_target='binary'
+
+  Input: pd.Series with dtype=Float64
+  Converted to numpy: dtype=object
+  ✓ Result: type_of_target='binary'
+
+  Input: pd.Series with dtype=boolean
+  Converted to numpy: dtype=object
+  ✓ Result: type_of_target='binary'
+
+Test 2: unique_labels with nullable pandas dtypes
+----------------------------------------------------------------------
+  Input: y_true dtype=Int64, y_predicted dtype=int64
+  ✓ Result: unique_labels=[0 1]
+
+  Input: y_true dtype=Float64, y_predicted dtype=int64
+  ✓ Result: unique_labels=[0. 1.]
+
+  Input: y_true dtype=boolean, y_predicted dtype=int64
+  ✓ Result: unique_labels=[False  True]
+
+Test 3: unique_labels with regular pandas dtypes (regression test)
+----------------------------------------------------------------------
+  ✓ dtype=int64    -> unique_labels=[0 1]
+  ✓ dtype=float64  -> unique_labels=[0. 1.]
+  ✓ dtype=bool     -> unique_labels=[False  True]
+
+Test 4: multiclass with nullable dtypes
+----------------------------------------------------------------------
+  ✓ multiclass Int64 -> type_of_target='multiclass'
+
+======================================================================
+✓✓✓ ALL TESTS PASSED! ✓✓✓
+======================================================================
+
+The fix successfully handles nullable pandas dtypes (Int64, Float64,
+boolean) by converting them to appropriate numpy dtypes before
+processing, preventing the 'Mix type of y not allowed' error.
+sha256: 977c283387d96da9279cece61b1953817164412d381ed4dff5d78871f703a98a
+truncated: false
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: scikit-learn/scikit-learn
+Base commit: 6adb209acd63825affc884abcd85381f148fb1b0
+Instance ID: scikit-learn__scikit-learn-25634
+
+CURRENT_ISSUE
+Support nullable pandas dtypes in `unique_labels`
+### Describe the workflow you want to enable
+
+I would like to be able to pass the nullable pandas dtypes ("Int64", "Float64", "boolean") into sklearn's `unique_labels` function. Because the dtypes become `object` dtype when converted to numpy arrays we get `ValueError: Mix type of y not allowed, got types {'binary', 'unknown'}`:
+
+Repro with sklearn 1.2.1
+```py
+    import pandas as pd
+    import pytest
+    from sklearn.utils.multiclass import unique_labels
+
+    for dtype in ["Int64", "Float64", "boolean"]:
+        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
+        y_predicted = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
+
+        with pytest.raises(ValueError, match="Mix type of y not allowed, got types"):
+            unique_labels(y_true, y_predicted)
+```
+
+### Describe your proposed solution
+
+We should get the same behavior as when `int64`, `float64`, and `bool` dtypes are used, which is no error:
+
+```python
+    import pandas as pd
+    from sklearn.utils.multiclass import unique_labels
+
+    for dtype in ["int64", "float64", "bool"]:
+        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
+        y_predicted = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
+
+        unique_labels(y_true, y_predicted)
+```
+
+### Describe alternatives you've considered, if relevant
+
+Our current workaround is to convert the data to numpy arrays with the corresponding dtype that works prior to passing it into `unique_labels`.
+
+### Additional context
+
+_No response_
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

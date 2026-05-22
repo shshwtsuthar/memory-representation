@@ -1,0 +1,55 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: no_memory
+
+No prior context is provided for this run.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: django/django
+Base commit: 19e67c6cd13d6442abb2a6eba1b7fba80dcf5457
+Instance ID: django__django-21501
+
+CURRENT_ISSUE
+BaseFormSet's empty_form isn't as extendable as _construct_form()
+
+Description
+It is possible to wedge extra kwargs into each form in a Formset by doing something like:
+class MyFormSet(BaseFormSet):
+    def _construct_form(self, i, **kwargs):
+        kwargs['extrafield'] = 1
+        return super(MyFormSet, self)._construct_form(i, **kwargs)
+which is useful for forms wanting to require additional arguments - for inlines wanting to act on values in an existing parent instance, for example.
+However, the kwarg can't be required, because of the empty_form property, which doesn't have any way of marshall extra kwargs to the form (though it can add fields), as such, the empty_form definition must be copy-pasted entirely, which isn't ideal if the definition upstream (ie: in Django) shifts over time.
+A private api method:
+def _get_empty_form_kwargs(self):
+    return {}
+which could be dictionary expanded into the empty_form would allow for passing required arguments in [I believe] a backwards compatible way, while allowing userland code to replace less of the core FormSet functionality.
+The final empty_form might be something like:
+@property
+    def empty_form(self):
+        form = self.form(
+            auto_id=self.auto_id,
+            prefix=self.add_prefix('__prefix__'),
+            empty_permitted=True,
+            **self._get_empty_form_kwargs(),
+        )
+        self.add_fields(form, None)
+        return form
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

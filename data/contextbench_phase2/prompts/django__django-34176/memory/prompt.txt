@@ -1,0 +1,576 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: memory
+
+The following is deterministic extractive memory from an officially related prior issue.
+
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 7c3b3d04-7625-4834-9d4a-b29a615004d8
+- repo: django/django
+- instance_id: django__django-12589
+- base_commit: 895f28f9cbed817c00ab68770433170d83132d90
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Django 3.0: "GROUP BY" clauses error with tricky field annotation
+Description
+
+Let's pretend that we have next model structure with next model's relations:
+class A(models.Model):
+    bs = models.ManyToManyField('B',
+                                related_name="a",
+                                through="AB")
+class B(models.Model):
+    pass
+class AB(models.Model):
+    a = models.ForeignKey(A, on_delete=models.CASCADE, related_name="ab_a")
+    b = models.ForeignKey(B, on_delete=models.CASCADE, related_name="ab_b")
+    status = models.IntegerField()
+class C(models.Model):
+    a = models.ForeignKey(
+        A,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="c",
+        verbose_name=_("a")
+    )
+    status = models.IntegerField()
+Let's try to evaluate next query
+ab_query = AB.objects.filter(a=OuterRef("pk"), b=1)
+filter_conditions = Q(pk=1) | Q(ab_a__b=1)
+query = A.objects.\
+    filter(filter_conditions).\
+    annotate(
+        status=Subquery(ab_query.values("status")),
+        c_count=Count("c"),
+)
+answer = query.values("status").annotate(total_count=Count("status"))
+print(answer.query)
+print(answer)
+On Django 3.0.4 we have an error
+django.db.utils.ProgrammingError: column reference "status" is ambiguous
+and query is next:
+SELECT (SELECT U0."status" FROM "test_app_ab" U0 WHERE (U0."a_id" = "test_app_a"."id" AND U0."b_id" = 1)) AS "status", COUNT((SELECT U0."status" FROM "test_app_ab" U0 WHERE (U0."a_id" = "test_app_a"."id" AND U0."b_id" = 1))) AS "total_count" FROM "test_app_a" LEFT OUTER JOIN "test_app_ab" ON ("test_app_a"."id" = "test_app_ab"."a_id") LEFT OUTER JOIN "test_app_c" ON ("test_app_a"."id" = "test_app_c"."a_id") WHERE ("test_app_a"."id" = 1 OR "test_app_ab"."b_id" = 1) GROUP BY "status"
+However, Django 2.2.11 processed this query properly with the next query:
+SELECT (SELECT U0."status" FROM "test_app_ab" U0 WHERE (U0."a_id" = ("test_app_a"."id") AND U0."b_id" = 1)) AS "status", COUNT((SELECT U0."status" FROM "test_app_ab" U0 WHERE (U0."a_id" = ("test_app_a"."id") AND U0."b_id" = 1))) AS "total_count" FROM "test_app_a" LEFT OUTER JOIN "test_app_ab" ON ("test_app_a"."id" = "test_app_ab"."a_id") LEFT OUTER JOIN "test_app_c" ON ("test_app_a"."id" = "test_app_c"."a_id") WHERE ("test_app_a"."id" = 1 OR "test_app_ab"."b_id" = 1) GROUP BY (SELECT U0."status" FROM "test_app_ab" U0 WHERE (U0."a_id" = ("test_app_a"."id") AND U0."b_id" = 1))
+so, the difference in "GROUP BY" clauses
+(as DB provider uses "django.db.backends.postgresql", postgresql 11)
+
+FILES INSPECTED
+---------------
+- tests/annotations/models.py [Read: 1]
+- tests/annotations/tests.py [Read: 1]
+- django/db [Grep: 1]
+- django/db/models/sql [Grep: 1]
+- django/db/models/sql/compiler.py [Read: 2]
+- django/db/models [Grep: 1]
+- django/db/models/expressions.py [Read: 1, Grep: 1]
+- tests [Grep: 1]
+- tests/aggregation/models.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [24] Grep pattern='GROUP BY' path='django/db'
+- [26] Grep pattern='def get_group_by' path='django/db/models/sql'
+- [30] Grep pattern='class Ref' path='django/db/models'
+- [56] Grep pattern='class Subquery' path='django/db/models/expressions.py'
+- [67] Grep pattern='test_group_by_subquery' path='tests'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [other/reproduction]
+- [diagnostic] ls testbed/setup.* testbed/setup.cfg testbed/pyproject.toml 2>/dev/null
+- [diagnostic] ls ./swebench_9_15/testbed/setup.* 2>/dev/null || echo "No setup files found with that pattern"
+- [diagnostic] python -c "import django; print(f'Django version: {django.VERSION}')"
+- [diagnostic] python -c "import django; print('Django version:', django.VERSION)"
+- [other/reproduction] python3 -c "import django; print('Django version:', django.VERSION)"
+- [test] python3 test_issue.py
+- [test] python3 test_issue.py 2>&1 | grep -v "matplotlib" | grep -v "AttributeError" | grep -v "Remainder"
+- [test] python3 test_issue.py 2>&1 | grep -v "matplotlib" | grep -v "AttributeError" | grep -v "Remainder" | grep -v "Error processing"
+- [diagnostic] cd ./swebench_9_15/testbed && find . -path "*/tests/*" -name "*.py" -type f | grep -i "aggregate\|annotation" | head -10
+- [diagnostic] git show 486786c4c4 --stat
+- [diagnostic] git show 486786c4c4
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- E   django.core.exceptions.ImproperlyConfigured: Requested setting INSTALLED_APPS, but settings are not configured. You must either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing settings.
+- ERROR tests/aggregation/test_issue_12589.py - django.core.exceptions.Improper...
+- ERROR: test_group_by_subquery_annotation_with_values (aggregation.test_issue_12589.Issue12589TestCase)
+- FAILED (errors=1)
+- Traceback (most recent call last):
+- ImportError: No module named django
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #2]
+  Exit code 1
+  (eval):1: no matches found: testbed/setup.*
+- [Diagnostic Output after action #4]
+  ./swebench_9_15/testbed/setup.cfg
+  ./swebench_9_15/testbed/setup.py
+- [Diagnostic Output after action #6]
+  Exit code 1
+    File "<string>", line 1
+      import django; print(f'Django version: {django.VERSION}')
+                                                             ^
+  SyntaxError: invalid syntax
+- [Diagnostic Output after action #8]
+  Exit code 1
+  Traceback (most recent call last):
+    File "<string>", line 1, in <module>
+  ImportError: No module named django
+- [Test Output after action #12]
+  Exit code 1
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  Traceback (most recent call last):
+    File "test_issue.py", line 81, in <module>
+      query = A.objects.\
+    File "./swebench_9_15/testbed/django/db/models/manager.py", line 82, in manager_method
+      return getattr(self.get_queryset(), name)(*args, **kwargs)
+    File "./swebench_9_15/testbed/django/db/models/query.py", line 928, in filter
+      return self._filter_or_exclude(False, *args, **kwargs)
+    File "./swebench_9_15/testbed/django/db/models/query.py", line 948, in _filter_or_exclude
+      clone._filter_or_exclude_inplace(negate, *args, **kwargs)
+    File "./swebench_9_15/testbed/django/db/models/query.py", line 955, in _filter_or_exclude_inplace
+      self._query.add_q(Q(*args, **kwargs))
+    File "./swebench_9_15/testbed/django/db/models/sql/query.py", line 1356,
+  [... truncated ...]
+- [Test Output after action #14]
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+
+  Testing the query that causes the GROUP BY error...
+  ================================================================================
+  Traceback (most recent call last):
+    File "test_issue.py", line 81, in <module>
+      query = A.objects.\
+    File "./swebench_9_15/testbed/django/db/models/manager.py", line 82, in manager_method
+      return getattr(self.get_queryset(), name)(*args, **kwargs)
+    File "./swebench_9_15/testbed/django/db/models/query.py", line 928, in filter
+      return self._filter_or_exclude(False, *args, **kwargs)
+    File "./swebench_9_15/testbed/django/db/models/query.py", line 948, in _filter_or_exclude
+      clone._filter_or_exclude_inplace(negate, *args, **kwargs)
+    File "./swebench_9_15/testbed/django/db/models/query.py", line 955, in _filter_or_exclude_inplace
+      self._query.add_q(Q(*args, **kwargs))
+    File "./swebench_9_15/testbed/django/db/models/sql/query.py", line 1356, in add_q
+      clause, _ = self._add_q(q_object, self.used_ali
+  [... truncated ...]
+- [Test Output after action #16]
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+
+  Testing the query that causes the GROUP BY error...
+  ================================================================================
+  Traceback (most recent call last):
+    File "test_issue.py", line 76, in <module>
+      query = A.objects.\
+    File "./swebench_9_15/testbed/django/db/models/manager.py", line 82, in manager_method
+      return getattr(self.get_queryset(), name)(*args, **kwargs)
+    File "./swebench_9_15/testbed/django/db/models/query.py", line 928, in filter
+      return self._filter_or_exclude(False, *args, **kwargs)
+    File "./swebench_9_15/testbed/django/db/models/query.py", line 948, in _filter_or_exclude
+      clone._filter_or_exclude_inplace(negate, *args, **kwargs)
+    File "./swebench_9_15/testbed/django/db/models/query.py", line 955, in _filter_or_exclude_inplace
+      self._query.add_q(Q(*args, **kwargs))
+    File "./swebench_9_15/testbed/django/db/models/sql/query.py", line 1356, in add_q
+      clause, _ = self._add_q(q_object, self.used_ali
+  [... truncated ...]
+- [Diagnostic Output after action #18]
+  ./tests/annotations/models.py
+  ./tests/annotations/__init__.py
+  ./tests/annotations/tests.py
+  ./tests/postgres_tests/test_aggregates.py
+- [Read Result after action #20]
+       1→from django.db import models
+       2→
+       3→
+       4→class Author(models.Model):
+       5→    name = models.CharField(max_length=100)
+       6→    age = models.IntegerField()
+       7→    friends = models.ManyToManyField('self', blank=True)
+       8→
+       9→    def __str__(self):
+      10→        return self.name
+      11→
+      12→
+      13→class Publisher(models.Model):
+      14→    name = models.CharField(max_length=255)
+      15→    num_awards = models.IntegerField()
+      16→
+      17→    def __str__(self):
+      18→        return self.name
+      19→
+      20→
+      21→class Book(models.Model):
+      22→    isbn = models.CharField(max_length=9)
+      23→    name = models.CharField(max_length=255)
+      24→    pages = models.IntegerField()
+      25→    rating = models.FloatField()
+      26→    price = models.DecimalField(decimal_places=2, max_digits=6)
+      27→    authors = models.ManyToManyField(Author)
+      28→    contact = models.ForeignKey(Author, models.CASCADE, related_name='book_contact_set')
+      29→    publisher = models.ForeignKey(Publisher, models.CASCADE)
+      30→    pubdate = models.DateField()
+      31→
+      32→    def __str__(self):
+      33→        return self.name
+      34→
+      35→
+      36→class Store(models
+  [... truncated ...]
+- [Read Result after action #22]
+       1→import datetime
+       2→from decimal import Decimal
+       3→
+       4→from django.core.exceptions import FieldDoesNotExist, FieldError
+       5→from django.db.models import (
+       6→    BooleanField, CharField, Count, DateTimeField, ExpressionWrapper, F, Func,
+       7→    IntegerField, NullBooleanField, OuterRef, Q, Subquery, Sum, Value,
+       8→)
+       9→from django.db.models.expressions import RawSQL
+      10→from django.db.models.functions import Length, Lower
+      11→from django.test import TestCase, skipUnlessDBFeature
+      12→
+      13→from .models import (
+      14→    Author, Book, Company, DepartmentStore, Employee, Publisher, Store, Ticket,
+      15→)
+      16→
+      17→
+      18→def cxOracle_py3_bug(func):
+      19→    """
+      20→    There's a bug in Django/cx_Oracle with respect to string handling under
+      21→    Python 3 (essentially, they treat Python 3 strings as Python 2 strings
+      22→    rather than unicode). This makes some tests here fail under Python 3, so
+      23→    we mark them as expected failures until someone fixes them in #23843.
+      24→    """
+      25→    from unittest import expectedFailure
+      26→    from django.db import connection
+      27→    return expectedFailure(func)
+  [... truncated ...]
+- [Grep Result after action #24]
+  Found 8 files
+  django/db/models/sql/query.py
+  django/db/models/sql/compiler.py
+  django/db/models/functions/text.py
+  django/db/models/expressions.py
+  django/db/backends/postgresql/introspection.py
+  django/db/backends/oracle/operations.py
+  django/db/backends/oracle/introspection.py
+  django/db/backends/base/features.py
+- [Grep Result after action #26]
+  django/db/models/sql/where.py:117:    def get_group_by_cols(self, alias=None):
+  ./swebench_9_15/testbed/django/db/models/sql/where.py-118-        cols = []
+  django/db/models/sql/where.py-119-        for child in self.children:
+  ./swebench_9_15/testbed/django/db/models/sql/where.py-120-            cols.extend(child.get_group_by_cols())
+  ./swebench_9_15/testbed/django/db/models/sql/where.py-121-        return cols
+  ./swebench_9_15/testbed/django/db/models/sql/where.py-122-
+  django/db/models/sql/where.py-123-    def get_source_expressions(self):
+  django/db/models/sql/where.py-124-        return self.children[:]
+  ./swebench_9_15/testbed/django/db/models/sql/where.py-125-
+  django/db/models/sql/where.py-126-    def set_source_expressions(self, children):
+  ./swebench_9_15/testbed/django/db/models/sql/where.py-127-        assert len(children) == len(self.children)
+  ./swebench_9_15/testbed/django/db/models/sql/where.py-128-        self.children = children
+  ./swebench_9_15/testbed/django/db/models/sql/where.py-129-
+  django/db/models/sql/where.py-130-    def relabel_aliases(self, change_map):
+  ./swebench_9_15/testbed/django/db/models/sql/where.py-131-        """
+  ./swebench_9_15/testbed/django/db/models/sql
+  [... truncated ...]
+- [Read Result after action #28]
+      58→    def get_group_by(self, select, order_by):
+      59→        """
+      60→        Return a list of 2-tuples of form (sql, params).
+      61→
+      62→        The logic of what exactly the GROUP BY clause contains is hard
+      63→        to describe in other words than "if it passes the test suite,
+      64→        then it is correct".
+      65→        """
+      66→        # Some examples:
+      67→        #     SomeModel.objects.annotate(Count('somecol'))
+      68→        #     GROUP BY: all fields of the model
+      69→        #
+      70→        #    SomeModel.objects.values('name').annotate(Count('somecol'))
+      71→        #    GROUP BY: name
+      72→        #
+      73→        #    SomeModel.objects.annotate(Count('somecol')).values('name')
+      74→        #    GROUP BY: all cols of the model
+      75→        #
+      76→        #    SomeModel.objects.values('name', 'pk').annotate(Count('somecol')).values('pk')
+      77→        #    GROUP BY: name, pk
+      78→        #
+      79→        #    SomeModel.objects.values('name').annotate(Count('somecol')).values('pk')
+      80→        #    GROUP BY: name, pk
+      81→        #
+      82→        # In fact, the self.query.group_by is the minimal set to GROUP BY. It
+      83
+  [... truncated ...]
+- [Grep Result after action #30]
+  django/db/models/expressions.py:793:class Ref(Expression):
+  ./swebench_9_15/testbed/django/db/models/expressions.py-794-    """
+  ./swebench_9_15/testbed/django/db/models/expressions.py-795-    Reference to column alias of the query. For example, Ref('sum_cost') in
+  ./swebench_9_15/testbed/django/db/models/expressions.py-796-    qs.annotate(sum_cost=Sum('cost')) query.
+  ./swebench_9_15/testbed/django/db/models/expressions.py-797-    """
+  django/db/models/expressions.py-798-    def __init__(self, refs, source):
+  ./swebench_9_15/testbed/django/db/models/expressions.py-799-        super().__init__()
+  ./swebench_9_15/testbed/django/db/models/expressions.py-800-        self.refs, self.source = refs, source
+  ./swebench_9_15/testbed/django/db/models/expressions.py-801-
+  django/db/models/expressions.py-802-    def __repr__(self):
+  ./swebench_9_15/testbed/django/db/models/expressions.py-803-        return "{}({}, {})".format(self.__class__.__name__, self.refs, self.source)
+  ./swebench_9_15/testbed/django/db/models/expressions.py-804-
+  django/db/models/expressions.py-805-    def get_source_expressions(self):
+  ./swebench_9_15/testbed/django/db/models/expressions.py-806-        return [self.source]
+  ./sweben
+  [... truncated ...]
+- [Diagnostic Output after action #32]
+  commit 486786c4c480f5b1ae3ac1c95858b03699b9eb9c
+  Author: Rohit <rjha@ph.iitr.ac.in>
+  Date:   Tue Feb 25 01:02:15 2020 +0530
+
+      Fixed #31251 -- Disabled grouping by OuterRef() annotation.
+
+   django/db/models/expressions.py | 3 +++
+   tests/expressions/tests.py      | 8 ++++++++
+   2 files changed, 11 insertions(+)
+- [Diagnostic Output after action #34]
+  commit 486786c4c480f5b1ae3ac1c95858b03699b9eb9c
+  Author: Rohit <rjha@ph.iitr.ac.in>
+  Date:   Tue Feb 25 01:02:15 2020 +0530
+
+      Fixed #31251 -- Disabled grouping by OuterRef() annotation.
+
+- [Diagnostic Output after action #36]
+  commit 9dc367dc10594ad024c83d398a8e3c3f8f221446
+  Author: Simon Charette <charette.s@gmail.com>
+  Date:   Tue Mar 19 01:05:47 2019 -0400
+
+      Refs #30158 -- Added alias argument to Expression.get_group_by_cols().
+
+  new file mode 100644
+- [Diagnostic Output after action #38]
+  commit 6b178a3e930f72069f3cda2e6a09d1b320fc09ec
+  Author: Mariusz Felisiak <felisiak.mariusz@gmail.com>
+  Date:   Mon Feb 3 07:48:11 2020 +0100
+
+      Fixed #31217 -- Made QuerySet.values()/values_list() group by not selected annotations with aggregations used in order_by().
+
+      Regression in 59b4e99dd00b9c36d56055b889f96885995e4240.
+
+      Thanks Jon Dufresne for the report and Simon Charette for the review.
+
+   django/db/models/sql/compiler.py |  4 ++--
+   tests/aggregation/tests.py       | 27 +++++++++++++++++++++++++++
+   2 files changed, 29 insertions(+), 2 deletions(-)
+- [Diagnostic Output after action #40]
+  commit 6b178a3e930f72069f3cda2e6a09d1b320fc09ec
+  Author: Mariusz Felisiak <felisiak.mariusz@gmail.com>
+  Date:   Mon Feb 3 07:48:11 2020 +0100
+
+      Fixed #31217 -- Made QuerySet.values()/values_list() group by not selected annotations with aggregations used in order_by().
+
+      Regression in 59b4e99dd00b9c36d56055b889f96885995e4240.
+
+      Thanks Jon Dufresne for the report and Simon Charette for the review.
+
+- [Diagnostic Output after action #42]
+  commit 59b4e99dd00b9c36d56055b889f96885995e4240
+  Author: Mariusz Felisiak <felisiak.mariusz@gmail.com>
+  Date:   Wed Jan 15 09:32:42 2020 +0100
+
+      Refs #31136 -- Made QuerySet.values()/values_list() group only by selected annotation.
+
+      Regression in 0f843fdd5b9b2f2307148465cd60f4e1b2befbb4.
+
+   django/db/models/sql/query.py | 15 ++++++++-------
+   tests/aggregation/tests.py    | 25 +++++++++++++++++++++++++
+   2 files changed, 33 insertions(+), 7 deletions(-)
+
+SOURCE EDIT EVIDENCE
+--------------------
+- django/db/models/expressions.py
+  Tool: Edit action #60
+  old_text_sha256: d3167d525c88b0e56dba12f774ee971fd01bdf1e488a4f9afb3246132d874997
+  new_text_sha256: fa2885a1a00dc0f189aebb37ba6472451849e0e35d01243072ae8a1cf773484b
+- django/db/models/expressions.py
+  Tool: Edit action #61
+  old_text_sha256: af3bb7d3325a665c739293ff43c8f1ed6eb6fd67106c33f49678cbf2b65aa5ab
+  new_text_sha256: d17c59c92dbbf2198d72e436bfacaa2bc5d6f751183f396b34f557d9054e97d1
+- swebench_9_15/test_fix.py
+  Tool: Write action #62
+  new_text_sha256: 3ffc7929dc6e035d07aee04025e86009e9d9b8f352406910226a4fb573f1884d
+- tests/aggregation/test_issue_12589.py
+  Tool: Write action #69
+  new_text_sha256: 96280d7b1a48c21e19124981f1a4098867a72f0a204eb83156af48c287140167
+- tests/aggregation/test_issue_12589.py
+  Tool: Edit action #76
+  old_text_sha256: 93e4be1d9a9c586e20fa7c56873db68c8eb84b440bd2988c4386cd25d1b4024b
+  new_text_sha256: 3202c4ad6679fbf6df3889ee1701e0a3f5ef40794a3ee1df07d2a3a814f7771a
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: django/django
+Base commit: 016bead6a23989adec5c7ee6948db7ce2fc5e89b
+Instance ID: django__django-34176
+
+CURRENT_ISSUE
+Annotation's original field-name can clash with result field name over aggregation
+
+Description
+This is a bit of a continuation of
+#34123
+With current Django main, if one aggregates over a model, while adding annotations of related fields; and an annotation comes from a field with the same name as a result field, it breaks.
+This is easier to explain by example; consider this test, added to the
+aggregation_regress
+tests, so it uses their models;
+Book
+carries a FK to
+Publisher
+, a M2M to
+Author
+named
+authors
+, and a FK to
+Author
+(supposedly picking one of the related authors) named
+contact
+.
+def
+test_aggregate_and_annotate_duplicate_columns
+(
+self
+):
+results
+=
+Book
+.
+objects
+.
+values
+(
+'isbn'
+)
+.
+annotate
+(
+name
+=
+F
+(
+'publisher__name'
+),
+contact_name
+=
+F
+(
+'contact__name'
+),
+num_authors
+=
+Count
+(
+'authors'
+),
+)
+self
+.
+assertTrue
+(
+results
+)
+The field
+isbn
+is not defined as unique, it was chosen in order to make sure there's an aggregation on the main table and not some sort of subquery -- and also, to get the
+Book
+model's own
+name
+field out of the way.
+This blows up on Sqlite:
+======================================================================
+ERROR: test_aggregate_and_annotate_duplicate_columns (aggregation_regress.tests.AggregationTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/django/django/django/db/backends/utils.py", line 89, in _execute
+    return self.cursor.execute(sql, params)
+  File "/home/django/django/django/db/backends/sqlite3/base.py", line 378, in execute
+    return super().execute(query, params)
+sqlite3.OperationalError: ambiguous column name: name
+and on Postgres
+======================================================================
+ERROR: test_aggregate_and_annotate_duplicate_columns (aggregation_regress.tests.AggregationTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/django/django/django/db/backends/utils.py", line 89, in _execute
+    return self.cursor.execute(sql, params)
+psycopg2.errors.AmbiguousColumn: column reference "name" is ambiguous
+LINE 1: ..._id") GROUP BY "aggregation_regress_book"."isbn", "name", "c...
+                                                             ^
+Note that if we change the
+name
+above to something else -- e.g.
+pub_name
+=
+F
+(
+'publisher__name'
+),
+then things seem to be working fine. Conversely, if we pick another related field for the name annotation:
+name
+=
+F
+(
+'publisher__num_awards'
+),
+then things stay broken.
+This used to work, and now it doesn't. I've bisected this regression to
+b7b28c7c189615543218e81319473888bc46d831
+.
+Thanks
+​
+Matific
+for letting me work on this.
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

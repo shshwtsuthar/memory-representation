@@ -1,0 +1,82 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: no_memory
+
+No prior context is provided for this run.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: mwaskom/seaborn
+Base commit: 87e097275ce468db8f18c80ef8970310cfef1fe8
+Instance ID: mwaskom__seaborn-3203
+
+CURRENT_ISSUE
+Improve user feedback for errors during plot compilation
+Because most `so.Plot` methods simply define a spec and defer operations until the time when the plot is compiled, errors caused by bad user inputs (or seaborn edge cases) that cannot be trivially detected may not arise until later and will not be clearly connected to the problem.
+
+In general I'd like to try and be as helpful as possible with what we actually raise to avoid this becoming a pain point for the new interface. This PR represents the first step, defining a `PlotSpecError` exception class that gets raised in an exception chain to provide some additional context that may help diagnose issues. Right now the use is limited to scale setup and scaling operations and the main benefit is that the exception message can call out the plot variable that was being processed when an exception was raised.
+
+e.g., the traceback for the operation in #3106 (which is being obviated anyway by #3190, but is a useful demonstration):
+
+```python-traceback
+TypeError                                 Traceback (most recent call last)
+File ~/code/seaborn/seaborn/_core/plot.py:1254, in Plotter._setup_scales(self, p, common, layers, variables)
+   1253 try:
+-> 1254     self._scales[var] = scale._setup(var_df[var], prop)
+   1255 except Exception as err:
+
+File ~/code/seaborn/seaborn/_core/scales.py:351, in ContinuousBase._setup(self, data, prop, axis)
+    350 a = forward(vmin)
+--> 351 b = forward(vmax) - forward(vmin)
+    353 def normalize(x):
+
+TypeError: numpy boolean subtract, the `-` operator, is not supported, use the bitwise_xor, the `^` operator, or the logical_xor function instead.
+
+The above exception was the direct cause of the following exception:
+
+PlotSpecError                             Traceback (most recent call last)
+Cell In [2], line 1
+----> 1 so.Plot(["a", "b"], [1, 2], color=[True, False]).add(so.Bar()).plot()
+
+File ~/code/seaborn/seaborn/_core/plot.py:821, in Plot.plot(self, pyplot)
+    817 """
+    818 Compile the plot spec and return the Plotter object.
+    819 """
+    820 with theme_context(self._theme_with_defaults()):
+--> 821     return self._plot(pyplot)
+
+File ~/code/seaborn/seaborn/_core/plot.py:842, in Plot._plot(self, pyplot)
+    839 plotter._compute_stats(self, layers)
+    841 # Process scale spec for semantic variables and coordinates computed by stat
+--> 842 plotter._setup_scales(self, common, layers)
+    844 # TODO Remove these after updating other methods
+    845 # ---- Maybe have debug= param that attaches these when True?
+    846 plotter._data = common
+
+File ~/code/seaborn/seaborn/_core/plot.py:1256, in Plotter._setup_scales(self, p, common, layers, variables)
+   1254         self._scales[var] = scale._setup(var_df[var], prop)
+   1255     except Exception as err:
+-> 1256         raise PlotSpecError._during("Scale setup", var) from err
+   1258 if axis is None or (var != coord and coord in p._variables):
+   1259     # Everything below here applies only to coordinate variables
+   1260     continue
+
+PlotSpecError: Scale setup failed for the `color` variable. See the traceback above for more information.
+```
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

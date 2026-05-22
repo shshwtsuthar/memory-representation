@@ -1,0 +1,970 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: adp
+
+The following is a stripped ADP-rendered trajectory from an officially related prior issue.
+
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 240da270-4c2a-40e7-a5c0-4d744a3ae261
+- repo: sympy/sympy
+- instance_id: sympy__sympy-16792
+- base_commit: 09786a173e7a0a488f46dd6000177c23e5d24eed
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: sympy/sympy
+instance_id: sympy__sympy-16792
+base_commit: 09786a173e7a0a488f46dd6000177c23e5d24eed
+problem_statement:
+autowrap with cython backend fails when array arguments do not appear in wrapped expr
+When using the cython backend for autowrap, it appears that the code is not correctly generated when the function in question has array arguments that do not appear in the final expression. A minimal counterexample is:
+
+```python
+from sympy.utilities.autowrap import autowrap
+from sympy import MatrixSymbol
+import numpy as np
+
+x = MatrixSymbol('x', 2, 1)
+expr = 1.0
+f = autowrap(expr, args=(x,), backend='cython')
+
+f(np.array([[1.0, 2.0]]))
+```
+
+This should of course return `1.0` but instead fails with:
+```python
+TypeError: only size-1 arrays can be converted to Python scalars
+```
+
+A little inspection reveals that this is because the corresponding C function is generated with an incorrect signature:
+
+```C
+double autofunc(double x) {
+
+   double autofunc_result;
+   autofunc_result = 1.0;
+   return autofunc_result;
+
+}
+```
+
+(`x` should be `double *`, not `double` in this case)
+
+I've found that this error won't occur so long as `expr` depends at least in part on each argument. For example this slight modification of the above counterexample works perfectly:
+
+```python
+from sympy.utilities.autowrap import autowrap
+from sympy import MatrixSymbol
+import numpy as np
+
+x = MatrixSymbol('x', 2, 1)
+# now output depends on x
+expr = x[0,0]
+f = autowrap(expr, args=(x,), backend='cython')
+
+# returns 1.0 as expected, without failure
+f(np.array([[1.0, 2.0]]))
+```
+
+This may seem like a silly issue ("why even have `x` as an argument if it doesn't appear in the expression you're trying to evaluate?"). But of course in interfacing with external libraries (e.g. for numerical integration), one often needs functions to have a pre-defined signature regardless of whether a given argument contributes to the output.
+
+I think I've identified the problem in `codegen` and will
+sha256: e9ad3add19cc16d479b224f189d9e5f01c9c14e095c4c7e252a847b1f844f396
+truncated: true
+
+[ADP ACTION current=1 original=3: code_action bash]
+payload:
+
+sha256: a60314b7185dce09f2cc9ed5245846aefffed45d7fe87c758aaa42b9dc1b221d
+truncated: false
+
+[ADP ACTION current=2 original=7: code_action bash]
+payload:
+ls -la ./swebench_9_15/testbed 2>/dev/null | head -20
+sha256: e0d5655c9125908e9c9053cd61672326d5cad50c259d4c5d2d8afab68dcfd6d4
+truncated: false
+
+[ADP ACTION current=3 original=15: code_action bash]
+payload:
+find . -name "autowrap.py" -type f 2>/dev/null | head -5
+sha256: 72c3613069a11f8b14bb96b05171a7ba49c8eff6fda4f2cf8c36f773c547fb56
+truncated: false
+
+[ADP ACTION current=4 original=29: code_action bash]
+payload:
+python test_issue.py
+sha256: 9296cc4929adb55c3141879250f811f32702d3b9a90e45c877f1d2d26ca2be16
+truncated: false
+
+[ADP OBSERVATION current=5 original=30 source=environment]
+name: Bash:toolu_01UavjY7K4AxsqwUWpkBawJg:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 16
+    print(f"Expression: {expr}")
+                              ^
+SyntaxError: invalid syntax
+sha256: 29d6f3436611b1a6e75a5673c1b72078c1d9bc15a4d42907a404ed8449a10bb7
+truncated: false
+
+[ADP ACTION current=6 original=31: code_action bash]
+payload:
+python --version && python3 --version
+sha256: 3497f572d14fde9ad33c5aa66f78c4d0eb60d6553f4c0fba6d6f08248e8983fd
+truncated: false
+
+[ADP OBSERVATION current=7 original=32 source=environment]
+name: Bash:toolu_019M8HakJQcg1cgnZxnnnez6
+excerpt:
+Python 3.8.8
+Python 2.7.3
+sha256: 95c2f7ac5f1567a0f84b8b9f8a31c74848f636c6cc310591a7c0d5829ef159e0
+truncated: false
+
+[ADP ACTION current=8 original=33: code_action bash]
+payload:
+python3 test_issue.py
+sha256: 99ebd3b1f718f3cfd98650b7a78d863c7932cf089961df74bd0120ce5e37c83f
+truncated: false
+
+[ADP OBSERVATION current=9 original=34 source=environment]
+name: Bash:toolu_014bhEVwLy7C8oRYrotVGqTe
+excerpt:
+Testing autowrap with cython backend...
+
+=== Test 1: Array argument that doesn't appear in expression ===
+Expression: 1.0
+Arguments: x (MatrixSymbol of shape 2x1)
+Autowrap succeeded, calling function...
+✗ Test 1 FAILED: TypeError: only size-1 arrays can be converted to Python scalars
+
+=== Test 2: Array argument that appears in expression ===
+Expression: x[0, 0]
+Arguments: x (MatrixSymbol of shape 2x1)
+Autowrap succeeded, calling function...
+Result: 1.0
+✓ Test 2 PASSED
+
+=== Done ===
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+./swebench_9_15/testbed/sympy/solvers/diophantine.py:3185: SyntaxWarning: "is" with a literal. Did you mean "=="?
+  if feasible is 1:  # it's prime and k == 2
+./swebench_9_15/testbed/sympy/plotting/plot.py:644: SyntaxWarning: "is" with a literal. Did you mean "=="?
+  if self.xscale is 'log':
+./swebench_9_15/testbed/sympy/plotting/plot.py:664: SyntaxWarning: "is" with a literal. Did you mean "=="?
+  if self.xscale is 'log':
+./swebench_9_15/testbed/sympy/plotting/plot.py:677: SyntaxWarning: "is" with a literal. Did you mean "=="?
+  if self.xscale is 'log':
+./swebench_9_15/testbed/sympy/plotting/plot.py:684: SyntaxWarning: "is" with a literal. Did you mean "=="?
+  if self.xscale is 'log':
+./swebench_9_15/testbed/sympy/utilities/codegen.py:277: SyntaxWarning: "is" with a literal. Did you mean "=="?
+  if dt is "int" and not element.is_integer:
+./swebench_9_15/testbed/sympy/utilities/codegen.py:279: SyntaxWarning: "is" with a literal. Did you mean "=="?
+  if dt is "float" and not element.is_real:
+sha256: 9a8146dcd88363503aeacfa3912354412eeafebf338bf1c5cdb730cb9c3ba811
+truncated: false
+
+[ADP ACTION current=10 original=37: api_action Glob]
+path: swebench_9_15/testbed
+payload:
+{
+  "path": "./swebench_9_15/testbed",
+  "pattern": "**/autowrap.py"
+}
+sha256: 8e70644a5d0742ee4531a371068abe2fa0bec1e9a92f291b960a2d48311103f3
+truncated: false
+
+[ADP OBSERVATION current=11 original=38 source=environment]
+name: Glob:toolu_01R63umj5RzuAJsfAG78CqU1
+excerpt:
+./swebench_9_15/testbed/sympy/utilities/autowrap.py
+sha256: aab6d52115be2b444c0cef9707c4057c40228b829f66a2b148387361326accac
+truncated: false
+
+[ADP ACTION current=12 original=39: api_action Glob]
+path: swebench_9_15/testbed
+payload:
+{
+  "path": "./swebench_9_15/testbed",
+  "pattern": "**/codegen.py"
+}
+sha256: 08d7a08f53edf4b9c8455c3fce7dcbacb69ef6859a3268e4377f332174421e31
+truncated: false
+
+[ADP OBSERVATION current=13 original=40 source=environment]
+name: Glob:toolu_01S1DvKdCkxJ5EzafLtBUr3X
+excerpt:
+./swebench_9_15/testbed/sympy/utilities/codegen.py
+sha256: d291f67c8f093c6ded27166010a236e6c988f0ebd3ec4c4f57c62876ef82724f
+truncated: false
+
+[ADP ACTION current=14 original=41: api_action Read]
+path: sympy/utilities/autowrap.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/autowrap.py"
+}
+sha256: 2b7fc4d3a8f9ebda5b70534adc9ead3eda98e52eed7d57e30f36ae27bcb051df
+truncated: false
+
+[ADP OBSERVATION current=15 original=42 source=environment]
+name: Read:toolu_014uCRJ64kJKMxkhQ6iKypB3
+excerpt:
+     1→"""Module for compiling codegen output, and wrap the binary for use in
+     2→python.
+     3→
+     4→.. note:: To use the autowrap module it must first be imported
+     5→
+     6→   >>> from sympy.utilities.autowrap import autowrap
+     7→
+     8→This module provides a common interface for different external backends, such
+     9→as f2py, fwrap, Cython, SWIG(?) etc. (Currently only f2py and Cython are
+    10→implemented) The goal is to provide access to compiled binaries of acceptable
+    11→performance with a one-button user interface, i.e.
+    12→
+    13→    >>> from sympy.abc import x,y
+    14→    >>> expr = ((x - y)**(25)).expand()
+    15→    >>> binary_callable = autowrap(expr)
+    16→    >>> binary_callable(1, 2)
+    17→    -1.0
+    18→
+    19→The callable returned from autowrap() is a binary python function, not a
+    20→SymPy object.  If it is desired to use the compiled function in symbolic
+    21→expressions, it is better to use binary_function() which returns a SymPy
+    22→Function object.  The binary callable is attached as the _imp_ attribute and
+    23→invoked when a numerical evaluation is requested with evalf(), or with
+    24→lambdify().
+    25→
+    26→    >>> from sympy.utilities.autowrap import binary_function
+    27→    >>> f = binary_function('f', expr)
+    28→    >>> 2*f(x, y) + y
+    29→    y + 2*f(x, y)
+    30→    >>> (2*f(x, y) + y).evalf(2, subs={x: 1, y:2})
+    31→    0.e-110
+    32→
+    33→The idea is that a SymPy user will primarily be interested in working with
+    34→mathematical expressions, and should not have to learn details about wrapping
+    35→tools in order to evaluate expressions numerically, even if they are
+    36→computationally expensive.
+    37→
+    38→When is this useful?
+    39→
+    40→    1) For computations on large arrays, Python iterations may be too slow,
+    41→       and depending on the mathematical expression, it may be difficult to
+    42→       exploit the advanced index operations provided by NumPy.
+
+sha256: 756d0acabad25338c3f0ce6f9a959ae2c18cf64d78538979391d8ce7bb08931f
+truncated: true
+
+[ADP ACTION current=16 original=43: api_action Read]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "limit": 500
+}
+sha256: d08fcc81d61cd61436ef898880912c706ab258f07d516c51a1a4065577fc2d2d
+truncated: false
+
+[ADP OBSERVATION current=17 original=44 source=environment]
+name: Read:toolu_01E8o1nyEDPAbwUDRPcmCgLg
+excerpt:
+     1→"""
+     2→module for generating C, C++, Fortran77, Fortran90, Julia, Rust
+     3→and Octave/Matlab routines that evaluate sympy expressions.
+     4→This module is work in progress.
+     5→Only the milestones with a '+' character in the list below have been completed.
+     6→
+     7→--- How is sympy.utilities.codegen different from sympy.printing.ccode? ---
+     8→
+     9→We considered the idea to extend the printing routines for sympy functions in
+    10→such a way that it prints complete compilable code, but this leads to a few
+    11→unsurmountable issues that can only be tackled with dedicated code generator:
+    12→
+    13→- For C, one needs both a code and a header file, while the printing routines
+    14→  generate just one string. This code generator can be extended to support
+    15→  .pyf files for f2py.
+    16→
+    17→- SymPy functions are not concerned with programming-technical issues, such
+    18→  as input, output and input-output arguments. Other examples are contiguous
+    19→  or non-contiguous arrays, including headers of other libraries such as gsl
+    20→  or others.
+    21→
+    22→- It is highly interesting to evaluate several sympy functions in one C
+    23→  routine, eventually sharing common intermediate results with the help
+    24→  of the cse routine. This is more than just printing.
+    25→
+    26→- From the programming perspective, expressions with constants should be
+    27→  evaluated in the code generator as much as possible. This is different
+    28→  for printing.
+    29→
+    30→--- Basic assumptions ---
+    31→
+    32→* A generic Routine data structure describes the routine that must be
+    33→  translated into C/Fortran/... code. This data structure covers all
+    34→  features present in one or more of the supported languages.
+    35→
+    36→* Descendants from the CodeGen class transform multiple Routine instances
+    37→  into compilable code. Each derived class translates into a specific
+    38→  language.
+    39→
+    4
+sha256: fa017d377215b106a935c228c660c565baf1acc6372f2f6f794906506dcf999e
+truncated: true
+
+[ADP ACTION current=18 original=45: api_action Grep]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "pattern": "def make_routine"
+}
+sha256: 52df5c81fc056f9ef3f99e3356556bdcf297890c8e5ea4b0de41f0d50baed274
+truncated: false
+
+[ADP OBSERVATION current=19 original=46 source=environment]
+name: Grep:toolu_0125jmhbJ6929CHd3PzBK2fV
+excerpt:
+2146:def make_routine(name, expr, argument_sequence=None,
+sha256: 2f97406bb5d94bf781570e2fd8ba2371c21cacc85d5e12b4659216f23ff6ff2e
+truncated: false
+
+[ADP ACTION current=20 original=47: api_action Read]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "limit": 150,
+  "offset": 2146
+}
+sha256: e0d68f6a0a5092168c71b36ed24348764a1fdefc28112c06a39ae1d9106106d8
+truncated: false
+
+[ADP OBSERVATION current=21 original=48 source=environment]
+name: Read:toolu_01TyDsgLpePfQVTRQcXHmYfH
+excerpt:
+  2146→def make_routine(name, expr, argument_sequence=None,
+  2147→                 global_vars=None, language="F95"):
+  2148→    """A factory that makes an appropriate Routine from an expression.
+  2149→
+  2150→    Parameters
+  2151→    ==========
+  2152→
+  2153→    name : string
+  2154→        The name of this routine in the generated code.
+  2155→
+  2156→    expr : expression or list/tuple of expressions
+  2157→        A SymPy expression that the Routine instance will represent.  If
+  2158→        given a list or tuple of expressions, the routine will be
+  2159→        considered to have multiple return values and/or output arguments.
+  2160→
+  2161→    argument_sequence : list or tuple, optional
+  2162→        List arguments for the routine in a preferred order.  If omitted,
+  2163→        the results are language dependent, for example, alphabetical order
+  2164→        or in the same order as the given expressions.
+  2165→
+  2166→    global_vars : iterable, optional
+  2167→        Sequence of global variables used by the routine.  Variables
+  2168→        listed here will not show up as function arguments.
+  2169→
+  2170→    language : string, optional
+  2171→        Specify a target language.  The Routine itself should be
+  2172→        language-agnostic but the precise way one is created, error
+  2173→        checking, etc depend on the language.  [default: "F95"].
+  2174→
+  2175→    A decision about whether to use output arguments or return values is made
+  2176→    depending on both the language and the particular mathematical expressions.
+  2177→    For an expression of type Equality, the left hand side is typically made
+  2178→    into an OutputArgument (or perhaps an InOutArgument if appropriate).
+  2179→    Otherwise, typically, the calculated expression is made a return values of
+  2180→    the routine.
+  2181→
+  2182→    Examples
+  2183→    ========
+  2184→
+  2185→    >>> from sympy.utilities.codegen import make_routine
+  2186→    >>> from sympy.abc
+sha256: 6f56f8cd7a9508f29edba39d5cc555dceff58fb335bdc29b1afec5f5ff0c02ea
+truncated: true
+
+[ADP ACTION current=22 original=49: api_action Grep]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "pattern": "class C99CodeGen"
+}
+sha256: 78b726c6a6134de98aeb947e9a9d18a66445b8bdfad2356ee894d9ab58074dba
+truncated: false
+
+[ADP OBSERVATION current=23 original=50 source=environment]
+name: Grep:toolu_01GGYscmSQCKNzqwophYeuzs
+excerpt:
+1087:class C99CodeGen(CCodeGen):
+sha256: 7daaea3e2317400ae2cfc947b48d299ef4500951ff95ed198bbbd3f60285f3c8
+truncated: false
+
+[ADP ACTION current=24 original=51: api_action Read]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "limit": 100,
+  "offset": 1087
+}
+sha256: 9cd55c85c4e9567d4ea9304006c766664d0cc9be3b160f76bfc9be18fbb00504
+truncated: false
+
+[ADP OBSERVATION current=25 original=52 source=environment]
+name: Read:toolu_012kpb5GhbGys749PtHLGcev
+excerpt:
+  1087→class C99CodeGen(CCodeGen):
+  1088→    standard = 'C99'
+  1089→
+  1090→class FCodeGen(CodeGen):
+  1091→    """Generator for Fortran 95 code
+  1092→
+  1093→    The .write() method inherited from CodeGen will output a code file and
+  1094→    an interface file, <prefix>.f90 and <prefix>.h respectively.
+  1095→
+  1096→    """
+  1097→
+  1098→    code_extension = "f90"
+  1099→    interface_extension = "h"
+  1100→
+  1101→    def __init__(self, project='project', printer=None):
+  1102→        super(FCodeGen, self).__init__(project)
+  1103→        self.printer = printer or FCodePrinter()
+  1104→
+  1105→    def _get_header(self):
+  1106→        """Writes a common header for the generated files."""
+  1107→        code_lines = []
+  1108→        code_lines.append("!" + "*"*78 + '\n')
+  1109→        tmp = header_comment % {"version": sympy_version,
+  1110→            "project": self.project}
+  1111→        for line in tmp.splitlines():
+  1112→            code_lines.append("!*%s*\n" % line.center(76))
+  1113→        code_lines.append("!" + "*"*78 + '\n')
+  1114→        return code_lines
+  1115→
+  1116→    def _preprocessor_statements(self, prefix):
+  1117→        return []
+  1118→
+  1119→    def _get_routine_opening(self, routine):
+  1120→        """Returns the opening statements of the fortran routine."""
+  1121→        code_list = []
+  1122→        if len(routine.results) > 1:
+  1123→            raise CodeGenError(
+  1124→                "Fortran only supports a single or no return value.")
+  1125→        elif len(routine.results) == 1:
+  1126→            result = routine.results[0]
+  1127→            code_list.append(result.get_datatype('fortran'))
+  1128→            code_list.append("function")
+  1129→        else:
+  1130→            code_list.append("subroutine")
+  1131→
+  1132→        args = ", ".join("%s" % self._get_symbol(arg.name)
+  1133→                        for arg in routine.arguments)
+  1134→
+  1135→        call_sig = "{0}({1})\n".format(routine.name, args)
+sha256: be957e0ccdb758e5bfd304625661c9874b7064237b709368b43b656d406baea5
+truncated: true
+
+[ADP ACTION current=26 original=53: api_action Grep]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "pattern": "class CCodeGen"
+}
+sha256: 2a984a60b5881506bd0e3f5b54a701cf65a649a2646aab79f8fa009b8e5ce3a4
+truncated: false
+
+[ADP OBSERVATION current=27 original=54 source=environment]
+name: Grep:toolu_01TbotPL1zvyv8YmCX2uXb9A
+excerpt:
+862:class CCodeGen(CodeGen):
+sha256: c70956a60d9c11e3e0ef207aed9bb8dd5d8ad86c1ecf482eb74e25b7c1ed63e3
+truncated: false
+
+[ADP ACTION current=28 original=55: api_action Grep]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "pattern": "def routine\\("
+}
+sha256: 6a6ea244cd4761f4e4b687b517befc0f330c8152a686c45397453d4faf5a385d
+truncated: false
+
+[ADP OBSERVATION current=29 original=56 source=environment]
+name: Grep:toolu_01Y8X3SwH7XNQjri94h6UPeJ
+excerpt:
+577:    def routine(self, name, expr, argument_sequence=None, global_vars=None):
+1319:    def routine(self, name, expr, argument_sequence, global_vars):
+1528:    def routine(self, name, expr, argument_sequence, global_vars):
+1764:    def routine(self, name, expr, argument_sequence, global_vars):
+sha256: 4807cc187f875ad345cf4927b4e84d7cd2573b0f46f7bc158eca1786203bfa7e
+truncated: false
+
+[ADP ACTION current=30 original=57: api_action Read]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "limit": 200,
+  "offset": 577
+}
+sha256: 7ba1345a3353f100582237376389d396c33f074368af7f3cda8f7ea59cc6861d
+truncated: false
+
+[ADP OBSERVATION current=31 original=58 source=environment]
+name: Read:toolu_01W24fXXJNbvzuwPDDpjJxFd
+excerpt:
+   577→    def routine(self, name, expr, argument_sequence=None, global_vars=None):
+   578→        """Creates an Routine object that is appropriate for this language.
+   579→
+   580→        This implementation is appropriate for at least C/Fortran.  Subclasses
+   581→        can override this if necessary.
+   582→
+   583→        Here, we assume at most one return value (the l-value) which must be
+   584→        scalar.  Additional outputs are OutputArguments (e.g., pointers on
+   585→        right-hand-side or pass-by-reference).  Matrices are always returned
+   586→        via OutputArguments.  If ``argument_sequence`` is None, arguments will
+   587→        be ordered alphabetically, but with all InputArguments first, and then
+   588→        OutputArgument and InOutArguments.
+   589→
+   590→        """
+   591→
+   592→        if self.cse:
+   593→            from sympy.simplify.cse_main import cse
+   594→
+   595→            if is_sequence(expr) and not isinstance(expr, (MatrixBase, MatrixExpr)):
+   596→                if not expr:
+   597→                    raise ValueError("No expression given")
+   598→                for e in expr:
+   599→                    if not e.is_Equality:
+   600→                        raise CodeGenError("Lists of expressions must all be Equalities. {} is not.".format(e))
+   601→
+   602→                # create a list of right hand sides and simplify them
+   603→                rhs = [e.rhs for e in expr]
+   604→                common, simplified = cse(rhs)
+   605→
+   606→                # pack the simplified expressions back up with their left hand sides
+   607→                expr = [Equality(e.lhs, rhs) for e, rhs in zip(expr, simplified)]
+   608→            else:
+   609→                rhs = [expr]
+   610→
+   611→                if isinstance(expr, Equality):
+   612→                    common, simplified = cse(expr.rhs) #, ignore=in_out_args)
+   613→                    expr = Equality(expr.lhs, simplified[0])
+   614→                else
+sha256: 12a0f858bf8e20870a1df278aeb4f55a90be4d6054e9fdee329227c6a672aae3
+truncated: true
+
+[ADP ACTION current=32 original=59: api_action Read]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "limit": 30,
+  "offset": 719
+}
+sha256: 2965adc276278af52584e60fcbe26bcdf72a28466d84ed6e6951284da0475e0e
+truncated: false
+
+[ADP OBSERVATION current=33 original=60 source=environment]
+name: Read:toolu_012CMvfNgFMhsNhffo4pYkDZ
+excerpt:
+   719→        if argument_sequence is not None:
+   720→            # if the user has supplied IndexedBase instances, we'll accept that
+   721→            new_sequence = []
+   722→            for arg in argument_sequence:
+   723→                if isinstance(arg, IndexedBase):
+   724→                    new_sequence.append(arg.label)
+   725→                else:
+   726→                    new_sequence.append(arg)
+   727→            argument_sequence = new_sequence
+   728→
+   729→            missing = [x for x in arg_list if x.name not in argument_sequence]
+   730→            if missing:
+   731→                msg = "Argument list didn't specify: {0} "
+   732→                msg = msg.format(", ".join([str(m.name) for m in missing]))
+   733→                raise CodeGenArgumentListError(msg, missing)
+   734→
+   735→            # create redundant arguments to produce the requested sequence
+   736→            name_arg_dict = {x.name: x for x in arg_list}
+   737→            new_args = []
+   738→            for symbol in argument_sequence:
+   739→                try:
+   740→                    new_args.append(name_arg_dict[symbol])
+   741→                except KeyError:
+   742→                    new_args.append(InputArgument(symbol))
+   743→            arg_list = new_args
+   744→
+   745→        return Routine(name, arg_list, return_val, local_vars, global_vars)
+   746→
+   747→    def write(self, routines, prefix, to_files=False, header=True, empty=True):
+   748→        """Writes all the source code files for the given routines.
+
+sha256: dd971bf4dfaed8167af98089ba93b1b63e2778084acecfdb44a6577c3b5a42be
+truncated: false
+
+[ADP ACTION current=34 original=63: api_action Edit]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "new_text_sha256": "bb0128ab874d59bec57072f009ed8d720e121d969a9af05b3180e079cbd55a4e",
+  "old_text_sha256": "0293eac99efc67eb5e2911d0ec41252db85b33c2bce94b4629a0de0390fd6e6d"
+}
+sha256: 767c61f6caca5b2c2446811ca0a7c67c9ea2807ea64f6f45496e1f711473282c
+truncated: false
+
+[ADP ACTION current=35 original=65: api_action Edit]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "new_text_sha256": "45c6b49988198a70969939b20cab7c59451c6f0a86a0b92b25e695c6de007d1e",
+  "old_text_sha256": "97f1b08488f2d8100dd5a7d620e3acb5afe8d08a6c33dea887df12f349ddc7ec"
+}
+sha256: 2668ee7ef3f0e9a7073711eb0769ac31a300262ac3ee5d121fdd0a95f8fe8f16
+truncated: false
+
+[ADP ACTION current=36 original=67: api_action Read]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "limit": 100,
+  "offset": 1319
+}
+sha256: 2f13da5ad8160e4f3984b74d07c12e4dbb8015f2cd2a1f2fa09abbf068b7b0b0
+truncated: false
+
+[ADP OBSERVATION current=37 original=68 source=environment]
+name: Read:toolu_01LXv5JVNfyu8UiVdPPR8D8t
+excerpt:
+  1319→
+  1320→    """
+  1321→
+  1322→    code_extension = "jl"
+  1323→
+  1324→    def __init__(self, project='project', printer=None):
+  1325→        super(JuliaCodeGen, self).__init__(project)
+  1326→        self.printer = printer or JuliaCodePrinter()
+  1327→
+  1328→    def routine(self, name, expr, argument_sequence, global_vars):
+  1329→        """Specialized Routine creation for Julia."""
+  1330→
+  1331→        if is_sequence(expr) and not isinstance(expr, (MatrixBase, MatrixExpr)):
+  1332→            if not expr:
+  1333→                raise ValueError("No expression given")
+  1334→            expressions = Tuple(*expr)
+  1335→        else:
+  1336→            expressions = Tuple(expr)
+  1337→
+  1338→        # local variables
+  1339→        local_vars = {i.label for i in expressions.atoms(Idx)}
+  1340→
+  1341→        # global variables
+  1342→        global_vars = set() if global_vars is None else set(global_vars)
+  1343→
+  1344→        # symbols that should be arguments
+  1345→        old_symbols = expressions.free_symbols - local_vars - global_vars
+  1346→        symbols = set([])
+  1347→        for s in old_symbols:
+  1348→            if isinstance(s, Idx):
+  1349→                symbols.update(s.args[1].free_symbols)
+  1350→            elif not isinstance(s, Indexed):
+  1351→                symbols.add(s)
+  1352→
+  1353→        # Julia supports multiple return values
+  1354→        return_vals = []
+  1355→        output_args = []
+  1356→        for (i, expr) in enumerate(expressions):
+  1357→            if isinstance(expr, Equality):
+  1358→                out_arg = expr.lhs
+  1359→                expr = expr.rhs
+  1360→                symbol = out_arg
+  1361→                if isinstance(out_arg, Indexed):
+  1362→                    dims = tuple([ (S.One, dim) for dim in out_arg.shape])
+  1363→                    symbol = out_arg.base.label
+  1364→                    output_args.append(InOutArgument(symbol, out_arg, expr, dimensions=dims))
+  1365→
+sha256: b2ff03057704f76d43fb7e4ddef5a7436d437dc1b9f94646774ea908ae7b6c65
+truncated: true
+
+[ADP ACTION current=38 original=69: api_action Edit]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "new_text_sha256": "45326d73b50450cc49fc48496e88ad743aa7e183e8c33427fde42e94c4883bdd",
+  "old_text_sha256": "10c2800181076fe537c5dc464a8b8979893c76d1d3222a91fc513d8e16ba6874"
+}
+sha256: 1b7225f158f2a7c1d1f70f8fba4610de4e7d23365b10d396b92f05fc5c6c7db6
+truncated: false
+
+[ADP ACTION current=39 original=71: api_action Edit]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "new_text_sha256": "255f5dce3b5734f194d45ff206b32e4c07f4efef00364c4e26c014479e03bf36",
+  "old_text_sha256": "5e01f3e03e76dade93ba6075dae644ed692d7c7e048b65a17e7c6c3c652c01ad"
+}
+sha256: f291a278b371853627e538faf66e00871764414702bea89f7abbc272580c2d8a
+truncated: false
+
+[ADP ACTION current=40 original=73: api_action Edit]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "new_text_sha256": "255f5dce3b5734f194d45ff206b32e4c07f4efef00364c4e26c014479e03bf36",
+  "old_text_sha256": "5e01f3e03e76dade93ba6075dae644ed692d7c7e048b65a17e7c6c3c652c01ad",
+  "replace_all": true
+}
+sha256: 6b8a22ae28c3752b091350f42b5ba3c9700bb7b7905321f144e3ff461caf42fc
+truncated: false
+
+[ADP ACTION current=41 original=75: api_action Read]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "limit": 100,
+  "offset": 1764
+}
+sha256: cf5117170b30b1620d60ac3b1083ca3dcde1f526848be59acfe8805a3a0f415c
+truncated: false
+
+[ADP OBSERVATION current=42 original=76 source=environment]
+name: Read:toolu_019KJJsLBS4t1r9M6fVr9PtZ
+excerpt:
+  1764→
+  1765→        code_lines = self._indent_code(''.join(code_lines))
+  1766→
+  1767→        if code_lines:
+  1768→            f.write(code_lines)
+  1769→
+  1770→    dump_m.extension = code_extension
+  1771→    dump_m.__doc__ = CodeGen.dump_code.__doc__
+  1772→
+  1773→    # This list of dump functions is used by CodeGen.write to know which dump
+  1774→    # functions it has to call.
+  1775→    dump_fns = [dump_m]
+  1776→
+  1777→class RustCodeGen(CodeGen):
+  1778→    """Generator for Rust code.
+  1779→
+  1780→    The .write() method inherited from CodeGen will output a code file
+  1781→    <prefix>.rs
+  1782→
+  1783→    """
+  1784→
+  1785→    code_extension = "rs"
+  1786→
+  1787→    def __init__(self, project="project", printer=None):
+  1788→        super(RustCodeGen, self).__init__(project=project)
+  1789→        self.printer = printer or RustCodePrinter()
+  1790→
+  1791→    def routine(self, name, expr, argument_sequence, global_vars):
+  1792→        """Specialized Routine creation for Rust."""
+  1793→
+  1794→        if is_sequence(expr) and not isinstance(expr, (MatrixBase, MatrixExpr)):
+  1795→            if not expr:
+  1796→                raise ValueError("No expression given")
+  1797→            expressions = Tuple(*expr)
+  1798→        else:
+  1799→            expressions = Tuple(expr)
+  1800→
+  1801→        # local variables
+  1802→        local_vars = set([i.label for i in expressions.atoms(Idx)])
+  1803→
+  1804→        # global variables
+  1805→        global_vars = set() if global_vars is None else set(global_vars)
+  1806→
+  1807→        # symbols that should be arguments
+  1808→        symbols = expressions.free_symbols - local_vars - global_vars - expressions.atoms(Indexed)
+  1809→
+  1810→        # Rust supports multiple return values
+  1811→        return_vals = []
+  1812→        output_args = []
+  1813→        for (i, expr) in enumerate(expressions):
+  1814→            if isinstance(expr, Equality):
+  1815→                out_arg = expr.lhs
+  181
+sha256: fca8a21c7764e9bbf397cdabb02f973df5e5b6525c1b49f026494e11ab2d1dcc
+truncated: true
+
+[ADP ACTION current=43 original=77: api_action Read]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "limit": 20,
+  "offset": 1863
+}
+sha256: 24f6623217a412f88d9fdcda1bd61ec324f48e897ab14496528f0dbd02d88ba9
+truncated: false
+
+[ADP OBSERVATION current=44 original=78 source=environment]
+name: Read:toolu_01X7Cp5JNpuyHQiseve85isD
+excerpt:
+  1863→
+  1864→            # create redundant arguments to produce the requested sequence
+  1865→            name_arg_dict = {x.name: x for x in arg_list}
+  1866→            new_args = []
+  1867→            for symbol in argument_sequence:
+  1868→                try:
+  1869→                    new_args.append(name_arg_dict[symbol])
+  1870→                except KeyError:
+  1871→                    new_args.append(InputArgument(symbol))
+  1872→            arg_list = new_args
+  1873→
+  1874→        return Routine(name, arg_list, return_vals, local_vars, global_vars)
+  1875→
+  1876→
+  1877→    def _get_header(self):
+  1878→        """Writes a common header for the generated files."""
+  1879→        code_lines = []
+  1880→        code_lines.append("/*\n")
+  1881→        tmp = header_comment % {"version": sympy_version,
+  1882→                                "project": self.project}
+
+sha256: 3f9dcb174780f70582244ce5f3d6f740307570463a5e7c0253af35240edc253d
+truncated: false
+
+[ADP ACTION current=45 original=79: api_action Edit]
+path: sympy/utilities/codegen.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/utilities/codegen.py",
+  "new_text_sha256": "ba3a4fc7c55c8e19e5f66bdc6624efd3e9643b2e268e8162ffc771862677d66f",
+  "old_text_sha256": "945c4ccc44804ab8c2ddfc814b610a23ecab4b08f7718a540d07e670a72c6e5f"
+}
+sha256: c2ccafbdebdf8030da6bafc7a9a5db2b5ef2ac44c5b6079b901ef720e5a7d3ef
+truncated: false
+
+[ADP ACTION current=46 original=83: code_action bash]
+payload:
+python3 test_issue.py
+sha256: 214fd7556cb30cfaa0be9b9a6e45b51460e1323fb30225a439f0c59cd06cee1a
+truncated: false
+
+[ADP OBSERVATION current=47 original=84 source=environment]
+name: Bash:toolu_01WEB6RMvpxjKz9bWXye7AzA
+excerpt:
+Testing autowrap with cython backend...
+
+=== Test 1: Array argument that doesn't appear in expression ===
+Expression: 1.0
+Arguments: x (MatrixSymbol of shape 2x1)
+Autowrap succeeded, calling function...
+Result: 1.0
+✓ Test 1 PASSED
+
+=== Test 2: Array argument that appears in expression ===
+Expression: x[0, 0]
+Arguments: x (MatrixSymbol of shape 2x1)
+Autowrap succeeded, calling function...
+Result: 1.0
+✓ Test 2 PASSED
+
+=== Done ===
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+./swebench_9_15/testbed/sympy/utilities/codegen.py:277: SyntaxWarning: "is" with a literal. Did you mean "=="?
+  if dt is "int" and not element.is_integer:
+./swebench_9_15/testbed/sympy/utilities/codegen.py:279: SyntaxWarning: "is" with a literal. Did you mean "=="?
+  if dt is "float" and not element.is_real:
+sha256: 4413e019b46d4f4820b5f5d32413e42000934dd5bc229466db0364f0ed995e95
+truncated: false
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: sympy/sympy
+Base commit: 09786a173e7a0a488f46dd6000177c23e5d24eed
+Instance ID: sympy__sympy-16689
+
+CURRENT_ISSUE
+codegen generate wrong signature
+When an argument sequence is specified in codegen, any matrix argument that is not present in the expression to be converted will get a default type `double` instead of `double*`.
+For instance :
+
+```python
+import sympy as sy
+from sympy.utilities.codegen import codegen
+
+X = sy.MatrixSymbol('X',3,1)
+Y = sy.MatrixSymbol('Y',3,1)
+z = sy.symbols('z',integer = True)
+
+[(cf, cs), (hf, hs)] = codegen(('testBug', X[0]+X[1]),
+           language='c',argument_sequence = (X,Y,z))
+print(hs)
+```
+
+generates  a function signature : `double testBug(double *X, double Y, int z);`
+
+where `double testBug(double *X, double *Y, int z);`  is expected
+
+But
+
+```python
+[(cf, cs), (hf, hs)] = codegen(('testBug', X[0]+X[1]+Y[0]),
+           language='c',argument_sequence = (X,Y,z))
+print(hs)
+```
+gives the good signature.
+
+I use sympy 1.3
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.
