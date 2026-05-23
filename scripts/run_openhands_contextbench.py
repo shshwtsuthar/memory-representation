@@ -20,9 +20,10 @@ Design:
     duplicate instance IDs across experimental conditions.
 
 Assumptions confirmed by probes:
-  - OpenHands CLI edits the host current working directory.
+  - In host runtime, OpenHands CLI edits the host current working directory.
   - SWEContextBench images contain the target checkout at /testbed.
   - /testbed is a clean git checkout at target_base_commit.
+  - Image runtime is used only when sandbox_image exposes the OpenHands CLI.
 
 Example smoke dry-run:
   python scripts/contextbench/run_openhands_contextbench.py \
@@ -54,6 +55,7 @@ import argparse
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -65,7 +67,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-SCRIPT_VERSION = "contextbench_openhands_orchestrator_v1.0.0"
+SCRIPT_VERSION = "contextbench_openhands_orchestrator_v1.1.0"
 DEFAULT_CONDITIONS = ["no_memory", "raw", "adp", "memory"]
 DEFAULT_SMOKE_TARGET = "astropy__astropy-15082"
 DEFAULT_EXECUTION_ROOT = Path("data/contextbench_phase2/execution")
@@ -73,6 +75,9 @@ DEFAULT_MODEL_NAME = "openhands-qwen3-coder-30b-ollama-contextbench-memory-repr"
 DEFAULT_LLM_MODEL = "openai/qwen3-coder:30b"
 DEFAULT_LLM_BASE_URL = "http://127.0.0.1:11435/v1"
 DEFAULT_LLM_API_KEY = "dummy"
+DEFAULT_OPENHANDS_RUNTIME = "auto"
+DEFAULT_CONTAINER_RUN_DIR = "/contextbench_run"
+DEFAULT_IMAGE_OPENHANDS_BIN = "openhands"
 REQUIRED_ROW_FIELDS = [
     "condition",
     "prompt_path",
@@ -83,6 +88,12 @@ REQUIRED_ROW_FIELDS = [
     "target_instance_id",
     "target_repo",
 ]
+RUN_SCOPED_DIRS = {
+    "home": ".openhands_home",
+    "tmp": ".tmp",
+    "cache": ".cache",
+    "state": ".state",
+}
 FORBIDDEN_PROMPT_PATTERNS = [
     "FAIL_TO_PASS",
     "PASS_TO_PASS",
@@ -456,6 +467,18 @@ def git_output(workspace_dir: Path, args: list[str], *, check: bool = True) -> C
     return run_capture(["git", *args], cwd=workspace_dir, check=check)
 
 
+def resolve_loose(path: Path) -> Path:
+    return path.resolve(strict=False)
+
+
+def is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        resolve_loose(path).relative_to(resolve_loose(parent))
+        return True
+    except ValueError:
+        return False
+
+
 def verify_workspace(row: dict[str, Any], workspace_dir: Path) -> dict[str, Any]:
     head = git_output(workspace_dir, ["rev-parse", "HEAD"], check=True).stdout.strip()
     expected = row["target_base_commit"]
@@ -473,7 +496,34 @@ def verify_workspace(row: dict[str, Any], workspace_dir: Path) -> dict[str, Any]
     return {"git_head": head, "initial_git_status_short": status}
 
 
-def build_openhands_env(args: argparse.Namespace) -> dict[str, str]:
+def ensure_run_scoped_dirs(run_dir: Path) -> dict[str, Path]:
+    paths = {name: run_dir / dirname for name, dirname in RUN_SCOPED_DIRS.items()}
+    for path in paths.values():
+        path.mkdir(parents=True, exist_ok=True)
+    return paths
+
+
+def build_host_openhands_env(args: argparse.Namespace, *, run_dir: Path, workspace_dir: Path) -> dict[str, str]:
+    scoped_dirs = ensure_run_scoped_dirs(run_dir)
+    env = dict(os.environ)
+    env.update(
+        {
+            "LLM_MODEL": args.llm_model,
+            "LLM_BASE_URL": args.llm_base_url,
+            "LLM_API_KEY": args.llm_api_key,
+            "OPENHANDS_SUPPRESS_BANNER": "1",
+            "HOME": str(scoped_dirs["home"]),
+            "TMPDIR": str(scoped_dirs["tmp"]),
+            "XDG_CACHE_HOME": str(scoped_dirs["cache"]),
+            "XDG_STATE_HOME": str(scoped_dirs["state"]),
+            "CONTEXTBENCH_WORKSPACE_ROOT": str(workspace_dir.resolve()),
+            "PYTHONNOUSERSITE": "1",
+        }
+    )
+    return env
+
+
+def build_docker_cli_env(args: argparse.Namespace) -> dict[str, str]:
     env = dict(os.environ)
     env.update(
         {
@@ -487,11 +537,274 @@ def build_openhands_env(args: argparse.Namespace) -> dict[str, str]:
 
 
 def env_overrides_for_metadata(env: dict[str, str]) -> dict[str, str]:
-    return {
+    keys = [
+        "LLM_MODEL",
+        "LLM_BASE_URL",
+        "LLM_API_KEY",
+        "OPENHANDS_SUPPRESS_BANNER",
+        "HOME",
+        "TMPDIR",
+        "XDG_CACHE_HOME",
+        "XDG_STATE_HOME",
+        "CONTEXTBENCH_WORKSPACE_ROOT",
+        "PYTHONNOUSERSITE",
+    ]
+    out = {
         "LLM_MODEL": env.get("LLM_MODEL", ""),
         "LLM_BASE_URL": env.get("LLM_BASE_URL", ""),
         "LLM_API_KEY": "<redacted>" if env.get("LLM_API_KEY") else "",
     }
+    for key in keys:
+        if key in out:
+            continue
+        if key in env:
+            out[key] = env[key]
+    return out
+
+
+def workspace_guard_allowed_files(run_dir: Path) -> set[Path]:
+    names = {
+        "prompt.txt",
+        "stdout.jsonl",
+        "stderr.log",
+        "run_meta.json",
+        "command.json",
+        "patch.diff",
+        "prediction.json",
+        "prediction_audit.json",
+    }
+    return {resolve_loose(run_dir / name) for name in names}
+
+
+def scan_off_workspace_writes(
+    *,
+    run_dir: Path,
+    workspace_dir: Path,
+    since_ns: int,
+    limit: int = 200,
+) -> list[str]:
+    """Detect files modified after since_ns outside the current workspace.
+
+    This is detection, not prevention. The scan is intentionally scoped to the
+    target's execution directory so it catches run-local drift like ../test.py
+    without walking arbitrary host paths.
+    """
+    scan_root = run_dir.parent
+    allowed_files = workspace_guard_allowed_files(run_dir)
+    scoped_dirs = ensure_run_scoped_dirs(run_dir)
+    skipped_dirs = [resolve_loose(workspace_dir), *(resolve_loose(p) for p in scoped_dirs.values())]
+
+    violations: list[str] = []
+    if not scan_root.exists():
+        return violations
+
+    for root, dirs, files in os.walk(scan_root):
+        root_path = Path(root)
+        kept_dirs: list[str] = []
+        for dirname in dirs:
+            candidate = root_path / dirname
+            if any(is_relative_to(candidate, skipped) for skipped in skipped_dirs):
+                continue
+            kept_dirs.append(dirname)
+        dirs[:] = kept_dirs
+
+        for filename in files:
+            candidate = resolve_loose(root_path / filename)
+            if candidate in allowed_files:
+                continue
+            if any(is_relative_to(candidate, skipped) for skipped in skipped_dirs):
+                continue
+            try:
+                stat = candidate.stat()
+            except FileNotFoundError:
+                continue
+            if stat.st_mtime_ns >= since_ns:
+                try:
+                    display = str(candidate.relative_to(run_dir.parent))
+                except ValueError:
+                    display = str(candidate)
+                violations.append(display)
+                if len(violations) >= limit:
+                    return violations
+    return violations
+
+
+def base_openhands_args(args: argparse.Namespace, prompt_path: str) -> list[str]:
+    openhands_args = [
+        "--headless",
+        "--json",
+        "--file",
+        prompt_path,
+        "--override-with-envs",
+    ]
+    if args.always_approve:
+        openhands_args.append("--always-approve")
+    return openhands_args
+
+
+def image_supports_openhands(
+    *,
+    sandbox_image: str,
+    image_openhands_bin: str,
+    cache: dict[tuple[str, str], bool],
+) -> bool:
+    key = (sandbox_image, image_openhands_bin)
+    if key in cache:
+        return cache[key]
+
+    probe = run_capture(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--entrypoint",
+            "sh",
+            sandbox_image,
+            "-lc",
+            f"command -v {shlex.quote(image_openhands_bin)} >/dev/null 2>&1",
+        ],
+        check=False,
+    )
+    cache[key] = probe.exit_code == 0
+    return cache[key]
+
+
+def choose_openhands_runtime(
+    *,
+    row: dict[str, Any],
+    args: argparse.Namespace,
+    image_openhands_cache: dict[tuple[str, str], bool],
+) -> tuple[str, str]:
+    requested = args.openhands_runtime
+    if requested == "host":
+        return "host", "forced_host"
+
+    image_ready = image_supports_openhands(
+        sandbox_image=row["sandbox_image"],
+        image_openhands_bin=args.image_openhands_bin,
+        cache=image_openhands_cache,
+    )
+    if requested == "image":
+        if not image_ready:
+            raise OrchestratorError(
+                f"Image runtime requested, but {row['sandbox_image']} does not expose "
+                f"{args.image_openhands_bin!r}. Install OpenHands in the image or use --openhands-runtime host."
+            )
+        return "image", "forced_image"
+
+    if requested != "auto":
+        raise OrchestratorError(f"Unknown OpenHands runtime: {requested}")
+
+    if image_ready:
+        return "image", "auto_image_available"
+    if not args.host_openhands_available:
+        raise OrchestratorError(
+            f"Auto runtime could not use image {row['sandbox_image']} because "
+            f"{args.image_openhands_bin!r} is not available, and host OpenHands is also unavailable."
+        )
+    return "host", "auto_image_missing_openhands"
+
+
+def build_host_openhands_command(
+    *,
+    args: argparse.Namespace,
+    run_dir: Path,
+    workspace_dir: Path,
+    prompt_dst: Path,
+) -> tuple[list[str], Path, dict[str, str], dict[str, Any]]:
+    argv = [
+        args.openhands_bin,
+        *base_openhands_args(args, str(prompt_dst.resolve())),
+    ]
+    env = build_host_openhands_env(args, run_dir=run_dir, workspace_dir=workspace_dir)
+    metadata = {
+        "runtime": "host",
+        "argv": argv,
+        "cwd": str(workspace_dir),
+        "env_overrides": env_overrides_for_metadata(env),
+    }
+    return argv, workspace_dir, env, metadata
+
+
+def build_image_openhands_command(
+    *,
+    row: dict[str, Any],
+    args: argparse.Namespace,
+    run_dir: Path,
+    workspace_dir: Path,
+) -> tuple[list[str], Path, dict[str, str], dict[str, Any]]:
+    ensure_run_scoped_dirs(run_dir)
+    container_run_dir = args.container_run_dir.rstrip("/")
+    container_workspace = args.image_repo_path.rstrip("/")
+    container_prompt = f"{container_run_dir}/prompt.txt"
+    container_home = f"{container_run_dir}/{RUN_SCOPED_DIRS['home']}"
+    container_tmp = f"{container_run_dir}/{RUN_SCOPED_DIRS['tmp']}"
+    container_cache = f"{container_run_dir}/{RUN_SCOPED_DIRS['cache']}"
+    container_state = f"{container_run_dir}/{RUN_SCOPED_DIRS['state']}"
+
+    argv = ["docker", "run", "--rm"]
+    if args.image_run_network:
+        argv.extend(["--network", args.image_run_network])
+    if args.image_run_as_current_user and hasattr(os, "getuid") and hasattr(os, "getgid"):
+        argv.extend(["--user", f"{os.getuid()}:{os.getgid()}"])
+
+    argv.extend(
+        [
+            "--workdir",
+            container_workspace,
+            "--mount",
+            f"type=bind,src={workspace_dir.resolve()},dst={container_workspace}",
+            "--mount",
+            f"type=bind,src={run_dir.resolve()},dst={container_run_dir}",
+            "--env",
+            "LLM_MODEL",
+            "--env",
+            "LLM_BASE_URL",
+            "--env",
+            "LLM_API_KEY",
+            "--env",
+            "OPENHANDS_SUPPRESS_BANNER=1",
+            "--env",
+            f"HOME={container_home}",
+            "--env",
+            f"TMPDIR={container_tmp}",
+            "--env",
+            f"XDG_CACHE_HOME={container_cache}",
+            "--env",
+            f"XDG_STATE_HOME={container_state}",
+            "--env",
+            f"CONTEXTBENCH_WORKSPACE_ROOT={container_workspace}",
+            "--env",
+            "PYTHONNOUSERSITE=1",
+            row["sandbox_image"],
+            args.image_openhands_bin,
+            *base_openhands_args(args, container_prompt),
+        ]
+    )
+
+    env = build_docker_cli_env(args)
+    metadata = {
+        "runtime": "image",
+        "argv": argv,
+        "cwd": str(run_dir),
+        "container_image": row["sandbox_image"],
+        "container_workspace": container_workspace,
+        "container_run_dir": container_run_dir,
+        "image_run_network": args.image_run_network,
+        "image_run_as_current_user": bool(args.image_run_as_current_user),
+        "env_overrides": env_overrides_for_metadata(
+            {
+                **env,
+                "HOME": container_home,
+                "TMPDIR": container_tmp,
+                "XDG_CACHE_HOME": container_cache,
+                "XDG_STATE_HOME": container_state,
+                "CONTEXTBENCH_WORKSPACE_ROOT": container_workspace,
+                "PYTHONNOUSERSITE": "1",
+            }
+        ),
+    }
+    return argv, run_dir, env, metadata
 
 
 def collect_patch(workspace_dir: Path, patch_path: Path) -> str:
@@ -582,7 +895,13 @@ def prepare_run_dir(run_dir: Path, *, force: bool, resume: bool) -> str:
     return "run"
 
 
-def execute_one(row: dict[str, Any], args: argparse.Namespace, repo_root: Path, pulled_images: set[str]) -> dict[str, Any]:
+def execute_one(
+    row: dict[str, Any],
+    args: argparse.Namespace,
+    repo_root: Path,
+    pulled_images: set[str],
+    image_openhands_cache: dict[tuple[str, str], bool],
+) -> dict[str, Any]:
     run_dir = run_dir_for(args.execution_root, row)
     prep = prepare_run_dir(run_dir, force=args.force, resume=args.resume)
     if prep == "skip_success":
@@ -614,6 +933,7 @@ def execute_one(row: dict[str, Any], args: argparse.Namespace, repo_root: Path, 
         "target_base_commit": row["target_base_commit"],
         "sandbox_image": row["sandbox_image"],
         "image_repo_path": args.image_repo_path,
+        "openhands_runtime_requested": args.openhands_runtime,
         "manifest_lineno": row.get("_manifest_lineno"),
         "manifest_prompt_path": row["prompt_path"],
         "manifest_prompt_sha256": row.get("prompt_sha256", ""),
@@ -639,34 +959,44 @@ def execute_one(row: dict[str, Any], args: argparse.Namespace, repo_root: Path, 
         workspace_info = verify_workspace(row, workspace_dir)
         meta.update(workspace_info)
 
-        openhands_argv = [
-            args.openhands_bin,
-            "--headless",
-            "--json",
-            "--file",
-            str(prompt_dst.resolve()),
-            "--override-with-envs",
-        ]
-        if args.always_approve:
-            openhands_argv.append("--always-approve")
-        oh_env = build_openhands_env(args)
-        write_json(
-            command_path,
-            {
-                "argv": openhands_argv,
-                "cwd": str(workspace_dir),
-                "env_overrides": env_overrides_for_metadata(oh_env),
-            },
+        runtime, runtime_reason = choose_openhands_runtime(
+            row=row,
+            args=args,
+            image_openhands_cache=image_openhands_cache,
         )
+        if runtime == "image":
+            openhands_argv, openhands_cwd, oh_env, command_meta = build_image_openhands_command(
+                row=row,
+                args=args,
+                run_dir=run_dir,
+                workspace_dir=workspace_dir,
+            )
+        else:
+            openhands_argv, openhands_cwd, oh_env, command_meta = build_host_openhands_command(
+                args=args,
+                run_dir=run_dir,
+                workspace_dir=workspace_dir,
+                prompt_dst=prompt_dst,
+            )
+        command_meta["runtime_reason"] = runtime_reason
+        write_json(command_path, command_meta)
+        meta["openhands_runtime"] = runtime
+        meta["openhands_runtime_reason"] = runtime_reason
 
-        print(f"[run] {row['run_id']} cwd={workspace_dir}", flush=True)
+        guard_started_ns = time.time_ns()
+        print(f"[run] {row['run_id']} runtime={runtime} cwd={openhands_cwd}", flush=True)
         result = run_streaming(
             openhands_argv,
-            cwd=workspace_dir,
+            cwd=openhands_cwd,
             env=oh_env,
             stdout_path=stdout_path,
             stderr_path=stderr_path,
             timeout_seconds=args.timeout_seconds,
+        )
+        off_workspace_writes = scan_off_workspace_writes(
+            run_dir=run_dir,
+            workspace_dir=workspace_dir,
+            since_ns=guard_started_ns,
         )
         meta["openhands_result"] = {
             "argv": result.argv,
@@ -677,6 +1007,13 @@ def execute_one(row: dict[str, Any], args: argparse.Namespace, repo_root: Path, 
             "elapsed_seconds": result.elapsed_seconds,
             "timed_out": result.timed_out,
         }
+        meta["workspace_guardrail"] = {
+            "enabled": True,
+            "fail_on_violation": bool(args.fail_on_off_workspace_writes),
+            "scan_root": str(run_dir.parent),
+            "off_workspace_write_count": len(off_workspace_writes),
+            "off_workspace_writes": off_workspace_writes,
+        }
 
         patch = collect_patch(workspace_dir, patch_path)
         pred_paths = write_prediction_files(row=row, args=args, run_dir=run_dir, patch=patch)
@@ -685,7 +1022,10 @@ def execute_one(row: dict[str, Any], args: argparse.Namespace, repo_root: Path, 
         meta["patch_chars"] = len(patch)
         meta["patch_empty"] = patch == ""
 
-        if result.exit_code == 0:
+        if off_workspace_writes and args.fail_on_off_workspace_writes:
+            meta["status"] = "workspace_guardrail_failed"
+            meta["orchestrator_success"] = False
+        elif result.exit_code == 0:
             meta["status"] = "success_empty_patch" if patch == "" else "success"
             meta["orchestrator_success"] = True
         else:
@@ -824,6 +1164,12 @@ def write_report(
         "llm_base_url": args.llm_base_url,
         "llm_api_key_present": bool(args.llm_api_key),
         "openhands_bin": args.openhands_bin,
+        "openhands_runtime": args.openhands_runtime,
+        "image_openhands_bin": args.image_openhands_bin,
+        "container_run_dir": args.container_run_dir,
+        "image_run_network": args.image_run_network,
+        "image_run_as_current_user": bool(args.image_run_as_current_user),
+        "fail_on_off_workspace_writes": bool(args.fail_on_off_workspace_writes),
         "image_repo_path": args.image_repo_path,
         "timeout_seconds": args.timeout_seconds,
         "plan_path": str(args.execution_root / "plans" / f"{args.mode}_run_plan.json"),
@@ -853,6 +1199,42 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--llm-base-url", default=os.environ.get("LLM_BASE_URL", DEFAULT_LLM_BASE_URL))
     parser.add_argument("--llm-api-key", default=os.environ.get("LLM_API_KEY", DEFAULT_LLM_API_KEY))
     parser.add_argument("--openhands-bin", default=os.environ.get("OPENHANDS_BIN", "openhands"))
+    parser.add_argument(
+        "--openhands-runtime",
+        choices=["auto", "host", "image"],
+        default=os.environ.get("CONTEXTBENCH_OPENHANDS_RUNTIME", DEFAULT_OPENHANDS_RUNTIME),
+        help=(
+            "Where to run OpenHands. auto prefers sandbox_image if the image contains OpenHands, "
+            "otherwise falls back to the host OpenHands binary."
+        ),
+    )
+    parser.add_argument(
+        "--image-openhands-bin",
+        default=os.environ.get("CONTEXTBENCH_IMAGE_OPENHANDS_BIN", DEFAULT_IMAGE_OPENHANDS_BIN),
+        help="OpenHands executable name/path to use inside sandbox_image when --openhands-runtime=image/auto.",
+    )
+    parser.add_argument(
+        "--container-run-dir",
+        default=os.environ.get("CONTEXTBENCH_CONTAINER_RUN_DIR", DEFAULT_CONTAINER_RUN_DIR),
+        help="Container path where the run directory is mounted for image runtime.",
+    )
+    parser.add_argument(
+        "--image-run-network",
+        default=os.environ.get("CONTEXTBENCH_IMAGE_RUN_NETWORK", "host"),
+        help="Docker network mode for image runtime. Default host keeps localhost LLM endpoints reachable on Linux.",
+    )
+    parser.add_argument(
+        "--image-run-as-current-user",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run image-runtime containers with the current uid:gid to avoid root-owned workspace edits.",
+    )
+    parser.add_argument(
+        "--fail-on-off-workspace-writes",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Mark a run failed if files are modified outside the current workspace boundary.",
+    )
     parser.add_argument("--timeout-seconds", type=int, default=None)
     parser.add_argument("--max-runs", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true")
@@ -885,7 +1267,14 @@ def main(argv: list[str]) -> int:
 
     try:
         require_executable("docker")
-        args.openhands_bin = require_executable(args.openhands_bin)
+        args.host_openhands_available = False
+        if args.openhands_runtime in {"auto", "host"}:
+            found_openhands = shutil.which(args.openhands_bin)
+            if found_openhands:
+                args.openhands_bin = found_openhands
+                args.host_openhands_available = True
+            elif args.openhands_runtime == "host":
+                raise OrchestratorError(f"Required executable not found on PATH: {args.openhands_bin}")
         require_executable("git")
 
         rows = load_and_select_rows(args)
@@ -937,13 +1326,14 @@ def main(argv: list[str]) -> int:
             return 0
 
         pulled_images: set[str] = set()
+        image_openhands_cache: dict[tuple[str, str], bool] = {}
         results: list[dict[str, Any]] = []
         had_error = False
 
         for idx, row in enumerate(rows, start=1):
             print(f"\n=== [{idx}/{len(rows)}] {row['run_id']} ===", flush=True)
             try:
-                result = execute_one(row, args, repo_root, pulled_images)
+                result = execute_one(row, args, repo_root, pulled_images, image_openhands_cache)
                 results.append(result)
                 if result.get("status") not in {"success", "success_empty_patch", "skipped_success"}:
                     had_error = True

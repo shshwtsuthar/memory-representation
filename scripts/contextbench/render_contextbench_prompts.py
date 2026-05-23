@@ -48,7 +48,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
-PROMPT_TEMPLATE_VERSION = "contextbench_prompt_v1.0.0"
+PROMPT_TEMPLATE_VERSION = "contextbench_prompt_v1.1.0"
 EXPECTED_CONDITIONS = ("no_memory", "raw", "adp", "memory")
 EXPECTED_CONDITION_SET = set(EXPECTED_CONDITIONS)
 
@@ -237,6 +237,8 @@ Your task is to resolve the CURRENT_ISSUE in the current repository by inspectin
 A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
 
 Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+Workspace constraints: work only inside the current repository workspace. Do not create, edit, or delete files outside the workspace root. Do not change directory above the workspace root. If you create temporary reproduction scripts or notes, create them inside the workspace and remove them before finishing unless they are intentional test files. Prefer existing repository test commands over ad hoc scripts, and use python3 unless the repository clearly requires a different interpreter.
 """
 
     if condition == "no_memory":
