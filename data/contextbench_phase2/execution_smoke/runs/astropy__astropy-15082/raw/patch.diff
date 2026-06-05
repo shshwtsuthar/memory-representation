@@ -1,0 +1,102 @@
+diff --git a/astropy/nddata/mixins/ndarithmetic.py b/astropy/nddata/mixins/ndarithmetic.py
+index 97279507e..d41897459 100644
+--- a/astropy/nddata/mixins/ndarithmetic.py
++++ b/astropy/nddata/mixins/ndarithmetic.py
+@@ -376,13 +376,15 @@ class NDArithmeticMixin:
+         """
+         # Do the calculation with or without units
+         if self.unit is None:
+-            if operand.unit is None:
++            if operand is None:
++                result = operation(self.data, axis=kwds.get("axis"))
++            elif operand.unit is None:
+                 result = operation(self.data, operand.data)
+             else:
+                 result = operation(
+                     self.data << dimensionless_unscaled, operand.data << operand.unit
+                 )
+-        elif hasattr(operand, "unit"):
++        elif operand is not None and hasattr(operand, "unit"):
+             if operand.unit is not None:
+                 result = operation(self.data << self.unit, operand.data << operand.unit)
+             else:
+@@ -520,7 +522,7 @@ class NDArithmeticMixin:
+         elif self.mask is None and operand is not None:
+             # Make a copy so there is no reference in the result.
+             return deepcopy(operand.mask)
+-        elif operand.mask is None:
++        elif operand is None or operand.mask is None:
+             return deepcopy(self.mask)
+         else:
+             # Now let's calculate the resulting mask (operation enforces copy)
+diff --git a/test_bug_reproduction.py b/test_bug_reproduction.py
+new file mode 100644
+index 000000000..2e167ff2b
+--- /dev/null
++++ b/test_bug_reproduction.py
+@@ -0,0 +1,65 @@
++"""Test script to reproduce the bugs described in the issue."""
++import numpy as np
++from astropy.nddata import NDDataArray
++
++# Test 1: Collapse with mask should work
++print("Test 1: Collapse with mask")
++shape = (2, 3, 4)
++data = np.arange(np.prod(shape)).reshape(shape)
++mask = np.zeros(shape, dtype=bool)
++mask[0, 0, 0] = True
++nd = NDDataArray(data=data, mask=mask, unit='Jy')
++try:
++    result = nd.sum(axis=(0, 1))
++    print(f"  PASS: result = {result.data}, mask = {result.mask}")
++except Exception as e:
++    print(f"  FAIL: {type(e).__name__}: {e}")
++
++# Test 2: Collapse without mask should work
++print("\nTest 2: Collapse without mask")
++nd = NDDataArray(data=data, unit='Jy')
++try:
++    result = nd.sum(axis=(0, 1))
++    print(f"  PASS: result = {result.data}, mask = {result.mask}")
++except Exception as e:
++    print(f"  FAIL: {type(e).__name__}: {e}")
++
++# Test 3: Collapse without unit should work
++print("\nTest 3: Collapse without unit")
++nd = NDDataArray(data=data)
++try:
++    result = nd.sum(axis=(0, 1))
++    print(f"  PASS: result = {result.data}, unit = {result.unit}")
++except Exception as e:
++    print(f"  FAIL: {type(e).__name__}: {e}")
++
++# Test 4: Collapse without mask and without unit should work
++print("\nTest 4: Collapse without mask and without unit")
++nd = NDDataArray(data=data)
++try:
++    result = nd.sum(axis=(0, 1))
++    print(f"  PASS: result = {result.data}, unit = {result.unit}, mask = {result.mask}")
++except Exception as e:
++    print(f"  FAIL: {type(e).__name__}: {e}")
++
++# Test 5: Regular arithmetic with mask (from prior context)
++print("\nTest 5: Regular arithmetic with mask (bitwise_or)")
++from astropy.nddata import NDDataRef
++array = np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]])
++mask = np.array([[0, 1, 64], [8, 0, 1], [2, 1, 0]])
++nref_nomask = NDDataRef(array)
++nref_mask = NDDataRef(array, mask=mask)
++
++try:
++    result = nref_mask.multiply(1., handle_mask=np.bitwise_or).mask
++    print(f"  PASS: mask = {result}")
++except Exception as e:
++    print(f"  FAIL: {type(e).__name__}: {e}")
++
++try:
++    result = nref_mask.multiply(nref_nomask, handle_mask=np.bitwise_or).mask
++    print(f"  PASS: mask = {result}")
++except Exception as e:
++    print(f"  FAIL: {type(e).__name__}: {e}")
++
++print("\nAll tests completed.")

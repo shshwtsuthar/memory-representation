@@ -1,0 +1,78 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: no_memory
+
+No prior context is provided for this run.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: astropy/astropy
+Base commit: c5e2521db013d9641999be9c79d1d807741bc39a
+Instance ID: astropy__astropy-15082
+
+CURRENT_ISSUE
+Bugfix for collapses with NDData without masks, or without units
+<!-- This comments are hidden when you submit the pull request,
+so you do not need to remove them! -->
+
+<!-- Please be sure to check out our contributing guidelines,
+https://github.com/astropy/astropy/blob/main/CONTRIBUTING.md .
+Please be sure to check out our code of conduct,
+https://github.com/astropy/astropy/blob/main/CODE_OF_CONDUCT.md . -->
+
+<!-- If you are new or need to be re-acquainted with Astropy
+contributing workflow, please see
+http://docs.astropy.org/en/latest/development/workflow/development_workflow.html .
+There is even a practical example at
+https://docs.astropy.org/en/latest/development/workflow/git_edit_workflow_examples.html#astropy-fix-example . -->
+
+<!-- Please just have a quick search on GitHub to see if a similar
+pull request has already been posted.
+We have old closed pull requests that might provide useful code or ideas
+that directly tie in with your pull request. -->
+
+<!-- We have several automatic features that run when a pull request is open.
+They can appear daunting but do not worry because maintainers will help
+you navigate them, if necessary. -->
+
+### Description
+
+#14175 introduced collapse operations on NDDataArray objects. In #14995, a bugfix was added for handling masks in ND arithmetic to restore bitmask propagation in NDDataArray objects (released in v5.3.1). The bugfix in #14995 removed one bit of intended functionality from #14175, which is that NDData objects *without masks* should be collapsible. The fix in #14995 removed this option by replacing a conditional where I should have added an `or` to the existing one.
+
+As a result of the incomplete fix in #14995, a user calling `nddata.sum()` for NDDataArray without a mask raises an error in v5.3.1, since the `operand` in collapse operations is `None`:
+```
+from astropy.nddata import NDDataArray
+import numpy as np
+
+shape = (2, 3, 4)
+data = np.arange(np.prod(shape)).reshape(shape)
+nd = NDDataArray(data=data, unit='Jy')
+nd.sum(axis=(0, 1))
+# raises: AttributeError: 'NoneType' object has no attribute 'mask'
+```
+
+I also found that collapsing `NDData` without a `unit` triggers an error in `NDArithmeticMixin._arithmetic_data`, due to a missing condition in the logic for calling the `operation`. Revising only the second-to-last line in the example above raises a different error:
+```
+nd = NDDataArray(data=data)
+nd.sum(axis=(0, 1))
+# raises: AttributeError: 'NoneType' object has no attribute 'unit'
+```
+
+This pull request implements the whole (🤞🏻) solution to each bug, and adds a test to check that (1) masks are preserved in collapses, and (2) units are not required to collapse.
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

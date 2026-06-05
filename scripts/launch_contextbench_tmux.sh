@@ -9,10 +9,10 @@ Launch a ContextBench run with:
   3. the OpenHands orchestrator in another tmux session
 
 Examples:
-  export LLM_MODEL="openai/devstral-small-2:24b-32k"
-  export LLM_BASE_URL="http://127.0.0.1:11435/v1"
+  export LLM_MODEL="openai/qwen3.6:35b-a3b-65k"
+  export LLM_BASE_URL="http://127.0.0.1:11436/v1"
   export LLM_API_KEY="dummy"
-  export OLLAMA_HOST="127.0.0.1:11435"
+  export OLLAMA_HOST="127.0.0.1:11436"
   export OLLAMA_MODELS="/mnt/data/shashwat/ollama-models"
   export CUDA_VISIBLE_DEVICES="1"
 
@@ -72,7 +72,7 @@ RUN_MANIFEST="data/contextbench_phase2/run_manifest.jsonl"
 EXECUTION_ROOT=""
 CONDITIONS="no_memory raw adp memory"
 SMOKE_TARGET="astropy__astropy-15082"
-TIMEOUT_SECONDS="7200"
+TIMEOUT_SECONDS="14400"
 MAX_RUNS=""
 NO_PULL=1
 RESUME=0
@@ -130,9 +130,9 @@ REPO_ROOT="$(repo_root_from_script)"
 cd "$REPO_ROOT"
 
 LLM_MODEL_VALUE="${LLM_MODEL:-}"
-LLM_BASE_URL_VALUE="${LLM_BASE_URL:-http://127.0.0.1:11435/v1}"
+LLM_BASE_URL_VALUE="${LLM_BASE_URL:-http://127.0.0.1:11436/v1}"
 LLM_API_KEY_VALUE="${LLM_API_KEY:-dummy}"
-OLLAMA_HOST_VALUE="${OLLAMA_HOST:-127.0.0.1:11435}"
+OLLAMA_HOST_VALUE="${OLLAMA_HOST:-127.0.0.1:11436}"
 
 if [[ -z "$LLM_MODEL_VALUE" ]]; then
   echo "LLM_MODEL must be set in the environment before launching." >&2

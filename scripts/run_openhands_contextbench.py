@@ -55,6 +55,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -67,13 +68,13 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-SCRIPT_VERSION = "contextbench_openhands_orchestrator_v1.1.0"
+SCRIPT_VERSION = "contextbench_openhands_orchestrator_v1.2.1"
 DEFAULT_CONDITIONS = ["no_memory", "raw", "adp", "memory"]
 DEFAULT_SMOKE_TARGET = "astropy__astropy-15082"
 DEFAULT_EXECUTION_ROOT = Path("data/contextbench_phase2/execution")
-DEFAULT_MODEL_NAME = "openhands-qwen3-coder-30b-ollama-contextbench-memory-repr"
-DEFAULT_LLM_MODEL = "openai/qwen3-coder:30b"
-DEFAULT_LLM_BASE_URL = "http://127.0.0.1:11435/v1"
+DEFAULT_MODEL_NAME = "openhands-qwen3.6-35b-a3b-65k-ollama-contextbench-memory-repr"
+DEFAULT_LLM_MODEL = "openai/qwen3.6:35b-a3b-65k"
+DEFAULT_LLM_BASE_URL = "http://127.0.0.1:11436/v1"
 DEFAULT_LLM_API_KEY = "dummy"
 DEFAULT_OPENHANDS_RUNTIME = "auto"
 DEFAULT_CONTAINER_RUN_DIR = "/contextbench_run"
@@ -111,6 +112,11 @@ FORBIDDEN_PROMPT_PATTERNS = [
     ".claude",
     ".token_usage",
 ]
+CONTAINER_LABEL_PREFIX = "contextbench.openhands"
+EXECUTION_ROOT_LABEL = f"{CONTAINER_LABEL_PREFIX}.execution_root"
+TARGET_LABEL = f"{CONTAINER_LABEL_PREFIX}.target_instance_id"
+CONDITION_LABEL = f"{CONTAINER_LABEL_PREFIX}.condition"
+RUN_ID_LABEL = f"{CONTAINER_LABEL_PREFIX}.run_id"
 
 
 class OrchestratorError(RuntimeError):
@@ -237,6 +243,66 @@ def run_capture(
     return result
 
 
+def run_capture_bytes(
+    argv: list[str],
+    *,
+    cwd: Path | None = None,
+    timeout_seconds: int | None = None,
+    check: bool = False,
+) -> CommandResult:
+    start = time.monotonic()
+    try:
+        proc = subprocess.run(
+            argv,
+            cwd=str(cwd) if cwd else None,
+            text=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout_seconds,
+            check=False,
+        )
+        result = CommandResult(
+            argv=argv,
+            cwd=str(cwd) if cwd else None,
+            exit_code=proc.returncode,
+            stdout=proc.stdout.decode("utf-8", errors="replace"),
+            stderr=proc.stderr.decode("utf-8", errors="replace"),
+            elapsed_seconds=round(time.monotonic() - start, 3),
+            timed_out=False,
+        )
+    except subprocess.TimeoutExpired as e:
+        stdout = e.stdout or b""
+        stderr = e.stderr or b""
+        if isinstance(stdout, str):
+            stdout_text = stdout
+        else:
+            stdout_text = stdout.decode("utf-8", errors="replace")
+        if isinstance(stderr, str):
+            stderr_text = stderr
+        else:
+            stderr_text = stderr.decode("utf-8", errors="replace")
+        result = CommandResult(
+            argv=argv,
+            cwd=str(cwd) if cwd else None,
+            exit_code=124,
+            stdout=stdout_text,
+            stderr=stderr_text,
+            elapsed_seconds=round(time.monotonic() - start, 3),
+            timed_out=True,
+        )
+
+    if check and result.exit_code != 0:
+        raise OrchestratorError(
+            "Command failed:\n"
+            f"  cwd: {result.cwd}\n"
+            f"  argv: {' '.join(result.argv)}\n"
+            f"  exit: {result.exit_code}\n"
+            f"  stdout:\n{result.stdout[-4000:]}\n"
+            f"  stderr:\n{result.stderr[-4000:]}"
+        )
+    return result
+
+
 def run_streaming(
     argv: list[str],
     *,
@@ -295,6 +361,102 @@ def require_executable(name: str) -> str:
     if not found:
         raise OrchestratorError(f"Required executable not found on PATH: {name}")
     return found
+
+
+def sanitize_docker_name(value: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-.")
+    if not sanitized:
+        sanitized = "contextbench-run"
+    return sanitized[:128]
+
+
+def image_runtime_container_name(row: dict[str, Any]) -> str:
+    return sanitize_docker_name(f"contextbench-{row['run_id']}")
+
+
+def image_runtime_container_labels(row: dict[str, Any], args: argparse.Namespace) -> dict[str, str]:
+    return {
+        EXECUTION_ROOT_LABEL: str(args.execution_root.resolve()),
+        TARGET_LABEL: row["target_instance_id"],
+        CONDITION_LABEL: row["condition"],
+        RUN_ID_LABEL: row["run_id"],
+    }
+
+
+def running_container_ids() -> list[str]:
+    result = run_capture(["docker", "ps", "-q"], check=True)
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def inspect_running_containers() -> list[dict[str, Any]]:
+    ids = running_container_ids()
+    if not ids:
+        return []
+    result = run_capture(["docker", "inspect", *ids], check=True)
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        raise OrchestratorError(f"Failed to decode docker inspect output: {e}") from e
+    if not isinstance(payload, list):
+        raise OrchestratorError("docker inspect returned unexpected payload shape")
+    return [obj for obj in payload if isinstance(obj, dict)]
+
+
+def container_matches_execution_root(container: dict[str, Any], execution_root: Path) -> bool:
+    labels = ((container.get("Config") or {}).get("Labels")) or {}
+    if labels.get(EXECUTION_ROOT_LABEL) == str(execution_root.resolve()):
+        return True
+
+    root = resolve_loose(execution_root)
+    for mount in container.get("Mounts") or []:
+        source = mount.get("Source") or ""
+        if not source:
+            continue
+        candidate = resolve_loose(Path(source))
+        if candidate == root or is_relative_to(candidate, root):
+            return True
+    return False
+
+
+def docker_container_display_name(container: dict[str, Any]) -> str:
+    name = str(container.get("Name") or "").lstrip("/")
+    if name:
+        return name
+    return str(container.get("Id") or "")
+
+
+def remove_container(identifier: str) -> bool:
+    result = run_capture(["docker", "rm", "-f", identifier], check=False)
+    if result.exit_code != 0:
+        return False
+    verify = run_capture(["docker", "inspect", identifier], check=False)
+    return verify.exit_code != 0
+
+
+def cleanup_run_container(container_name: str | None) -> list[str]:
+    if not container_name:
+        return []
+    removed = remove_container(container_name)
+    return [container_name] if removed else []
+
+
+def cleanup_execution_root_containers(
+    execution_root: Path,
+    *,
+    exclude_names: set[str] | None = None,
+) -> list[str]:
+    removed: list[str] = []
+    excluded = exclude_names or set()
+    for container in inspect_running_containers():
+        if not container_matches_execution_root(container, execution_root):
+            continue
+        display_name = docker_container_display_name(container)
+        if display_name in excluded:
+            continue
+        identifier = str(container.get("Id") or display_name)
+        if remove_container(identifier):
+            removed.append(display_name)
+    return removed
 
 
 def condition_sort_key(condition: str, condition_order: list[str]) -> tuple[int, str]:
@@ -397,6 +559,141 @@ def run_dir_for(execution_root: Path, row: dict[str, Any]) -> Path:
     return execution_root / "runs" / row["target_instance_id"] / row["condition"]
 
 
+def extract_stdout_metrics(stdout_path: Path) -> dict[str, Any]:
+    """Parse stdout.jsonl and return agent behaviour metrics.
+
+    stdout.jsonl mixes plain-text OpenHands UI lines with multi-line JSON
+    objects. We extract all top-level JSON objects by brace-depth scanning.
+    """
+    if not stdout_path.exists():
+        return {}
+    try:
+        text = stdout_path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return {}
+
+    objects: list[dict] = []
+    depth = 0
+    start: int | None = None
+    for i, c in enumerate(text):
+        if c == "{" and depth == 0:
+            start = i
+            depth = 1
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0 and start is not None:
+                try:
+                    objects.append(json.loads(text[start : i + 1]))
+                except Exception:
+                    pass
+                start = None
+
+    llm_response_ids: set[str] = set()
+    action_type_counts: dict[str, int] = {}
+    agent_action_count = 0
+    agent_error_count = 0
+    condensation_count = 0
+    completion_reason = "unknown"
+    file_view_count = 0
+    file_edit_like_count = 0
+    agent_error_messages: dict[str, int] = {}
+
+    for obj in objects:
+        if not obj:
+            continue
+        rid = obj.get("llm_response_id")
+        if rid:
+            llm_response_ids.add(rid)
+
+        kind = obj.get("kind", "")
+        if kind == "ActionEvent":
+            agent_action_count += 1
+            action = obj.get("action") or {}
+            action_kind = action.get("kind", "unknown")
+            label = action_kind.replace("Action", "").lower() if action_kind else "unknown"
+            action_type_counts[label] = action_type_counts.get(label, 0) + 1
+            if action_kind == "FileEditorAction":
+                command = action.get("command")
+                if command == "view":
+                    file_view_count += 1
+                elif command in {"edit", "insert", "create", "str_replace", "write"}:
+                    file_edit_like_count += 1
+            if action_kind == "AgentFinishAction" and completion_reason == "unknown":
+                completion_reason = "AgentFinish"
+        elif kind == "AgentErrorEvent":
+            agent_error_count += 1
+            message = str(obj.get("error") or "").strip()
+            if message:
+                agent_error_messages[message] = agent_error_messages.get(message, 0) + 1
+        elif kind == "Condensation":
+            condensation_count += 1
+        elif kind == "ConversationErrorEvent":
+            completion_reason = obj.get("code", "error")
+
+    return {
+        "llm_call_count": len(llm_response_ids),
+        "agent_action_count": agent_action_count,
+        "agent_error_count": agent_error_count,
+        "condensation_count": condensation_count,
+        "completion_reason": completion_reason,
+        "action_type_breakdown": action_type_counts,
+        "file_view_count": file_view_count,
+        "file_edit_like_count": file_edit_like_count,
+        "agent_error_messages": agent_error_messages,
+    }
+
+
+def parse_patch_stats(patch: str) -> dict[str, Any]:
+    """Count files changed, lines added, and lines removed in a unified diff."""
+    lines = patch.splitlines()
+    files_changed = sum(1 for l in lines if l.startswith("diff --git "))
+    lines_added = sum(1 for l in lines if l.startswith("+") and not l.startswith("+++"))
+    lines_removed = sum(1 for l in lines if l.startswith("-") and not l.startswith("---"))
+    return {
+        "patch_files_changed": files_changed,
+        "patch_lines_added": lines_added,
+        "patch_lines_removed": lines_removed,
+    }
+
+
+def classify_failure_cause(meta: dict[str, Any]) -> str:
+    status = str(meta.get("status") or "")
+    completion_reason = str(meta.get("completion_reason") or "unknown")
+    patch_empty = bool(meta.get("patch_empty"))
+    file_edit_like_count = int(meta.get("file_edit_like_count") or 0)
+    agent_error_count = int(meta.get("agent_error_count") or 0)
+    error_messages = meta.get("agent_error_messages") or {}
+    repeated_agent_error = max((int(v) for v in error_messages.values()), default=0) >= 2
+
+    if meta.get("exception_type") == "KeyboardInterrupt":
+        return "interrupted"
+    if meta.get("workspace_guardrail", {}).get("off_workspace_write_count"):
+        return "workspace_guardrail"
+    if meta.get("openhands_result", {}).get("timed_out"):
+        return "timeout"
+    if meta.get("exception_type") == "OrchestratorError":
+        text = str(meta.get("exception") or "")
+        if "Workspace HEAD mismatch" in text or "Seeded workspace is not clean" in text:
+            return "workspace_seed_mismatch"
+        return "orchestrator_exception"
+
+    if patch_empty and file_edit_like_count == 0:
+        if completion_reason == "MaxIterationsReached" and (agent_error_count > 0 or repeated_agent_error):
+            return "tool_loop"
+        if repeated_agent_error and status in {"success_empty_patch", "openhands_failed"}:
+            return "tool_loop"
+
+    if status == "orchestrator_exception":
+        return "orchestrator_exception"
+    if status == "workspace_guardrail_failed":
+        return "workspace_guardrail"
+    if status == "openhands_failed":
+        return "openhands_nonzero"
+    return "none"
+
+
 def success_meta_exists(run_dir: Path) -> bool:
     meta_path = run_dir / "run_meta.json"
     prediction_path = run_dir / "prediction.json"
@@ -467,8 +764,15 @@ def git_output(workspace_dir: Path, args: list[str], *, check: bool = True) -> C
     return run_capture(["git", *args], cwd=workspace_dir, check=check)
 
 
+def git_output_bytes(workspace_dir: Path, args: list[str], *, check: bool = True) -> CommandResult:
+    return run_capture_bytes(["git", *args], cwd=workspace_dir, check=check)
+
+
 def resolve_loose(path: Path) -> Path:
-    return path.resolve(strict=False)
+    try:
+        return path.resolve(strict=False)
+    except RuntimeError:
+        return path.absolute()
 
 
 def is_relative_to(path: Path, parent: Path) -> bool:
@@ -496,6 +800,41 @@ def verify_workspace(row: dict[str, Any], workspace_dir: Path) -> dict[str, Any]
     return {"git_head": head, "initial_git_status_short": status}
 
 
+def seed_and_verify_workspace(
+    *,
+    row: dict[str, Any],
+    workspace_dir: Path,
+    image_repo_path: str,
+    pulled_images: set[str],
+    pull_images: bool,
+    max_attempts: int = 2,
+) -> dict[str, Any]:
+    last_error: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        if workspace_dir.exists():
+            shutil.rmtree(workspace_dir)
+        seed_workspace_from_image(
+            sandbox_image=row["sandbox_image"],
+            workspace_dir=workspace_dir,
+            image_repo_path=image_repo_path,
+            pulled_images=pulled_images,
+            pull_images=pull_images,
+        )
+        try:
+            return verify_workspace(row, workspace_dir)
+        except OrchestratorError as e:
+            last_error = e
+            if attempt >= max_attempts:
+                raise
+            print(
+                f"[reseed] {row['run_id']} workspace verification failed on attempt {attempt}/{max_attempts}: {e}",
+                flush=True,
+            )
+    if last_error is not None:
+        raise last_error
+    raise OrchestratorError(f"Workspace preparation failed unexpectedly for {row['run_id']}")
+
+
 def ensure_run_scoped_dirs(run_dir: Path) -> dict[str, Path]:
     paths = {name: run_dir / dirname for name, dirname in RUN_SCOPED_DIRS.items()}
     for path in paths.values():
@@ -512,6 +851,7 @@ def build_host_openhands_env(args: argparse.Namespace, *, run_dir: Path, workspa
             "LLM_BASE_URL": args.llm_base_url,
             "LLM_API_KEY": args.llm_api_key,
             "OPENHANDS_SUPPRESS_BANNER": "1",
+            "OPENHANDS_MAX_ITERATIONS": str(args.max_iterations),
             "HOME": str(scoped_dirs["home"]),
             "TMPDIR": str(scoped_dirs["tmp"]),
             "XDG_CACHE_HOME": str(scoped_dirs["cache"]),
@@ -531,6 +871,7 @@ def build_docker_cli_env(args: argparse.Namespace) -> dict[str, str]:
             "LLM_BASE_URL": args.llm_base_url,
             "LLM_API_KEY": args.llm_api_key,
             "OPENHANDS_SUPPRESS_BANNER": "1",
+            "OPENHANDS_MAX_ITERATIONS": str(args.max_iterations),
         }
     )
     return env
@@ -592,6 +933,7 @@ def scan_off_workspace_writes(
     scan_root = run_dir.parent
     allowed_files = workspace_guard_allowed_files(run_dir)
     scoped_dirs = ensure_run_scoped_dirs(run_dir)
+    current_run_dir = resolve_loose(run_dir)
     skipped_dirs = [resolve_loose(workspace_dir), *(resolve_loose(p) for p in scoped_dirs.values())]
 
     violations: list[str] = []
@@ -603,6 +945,8 @@ def scan_off_workspace_writes(
         kept_dirs: list[str] = []
         for dirname in dirs:
             candidate = root_path / dirname
+            if root_path == scan_root and dirname in DEFAULT_CONDITIONS and resolve_loose(candidate) != current_run_dir:
+                continue
             if any(is_relative_to(candidate, skipped) for skipped in skipped_dirs):
                 continue
             kept_dirs.append(dirname)
@@ -741,12 +1085,16 @@ def build_image_openhands_command(
     container_tmp = f"{container_run_dir}/{RUN_SCOPED_DIRS['tmp']}"
     container_cache = f"{container_run_dir}/{RUN_SCOPED_DIRS['cache']}"
     container_state = f"{container_run_dir}/{RUN_SCOPED_DIRS['state']}"
+    container_name = image_runtime_container_name(row)
+    labels = image_runtime_container_labels(row, args)
 
-    argv = ["docker", "run", "--rm"]
+    argv = ["docker", "run", "--rm", "--name", container_name]
     if args.image_run_network:
         argv.extend(["--network", args.image_run_network])
     if args.image_run_as_current_user and hasattr(os, "getuid") and hasattr(os, "getgid"):
         argv.extend(["--user", f"{os.getuid()}:{os.getgid()}"])
+    for key, value in labels.items():
+        argv.extend(["--label", f"{key}={value}"])
 
     argv.extend(
         [
@@ -764,6 +1112,8 @@ def build_image_openhands_command(
             "LLM_API_KEY",
             "--env",
             "OPENHANDS_SUPPRESS_BANNER=1",
+            "--env",
+            "OPENHANDS_MAX_ITERATIONS",
             "--env",
             f"HOME={container_home}",
             "--env",
@@ -788,6 +1138,8 @@ def build_image_openhands_command(
         "argv": argv,
         "cwd": str(run_dir),
         "container_image": row["sandbox_image"],
+        "container_name": container_name,
+        "container_labels": labels,
         "container_workspace": container_workspace,
         "container_run_dir": container_run_dir,
         "image_run_network": args.image_run_network,
@@ -810,7 +1162,7 @@ def build_image_openhands_command(
 def collect_patch(workspace_dir: Path, patch_path: Path) -> str:
     # Stage all changes so newly-created files and deletions are included.
     git_output(workspace_dir, ["add", "-A"], check=True)
-    diff = git_output(
+    diff = git_output_bytes(
         workspace_dir,
         ["diff", "--cached", "--binary", "--no-ext-diff"],
         check=True,
@@ -917,6 +1269,13 @@ def execute_one(
     meta_path = run_dir / "run_meta.json"
     prompt_src = validate_prompt_file(row, repo_root)
     prompt_dst = materialize_prompt(prompt_src, run_dir)
+    runtime = ""
+    current_container_name: str | None = None
+
+    try:
+        prompt_char_count = len(prompt_dst.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        prompt_char_count = None
 
     start_iso = utc_now_iso()
     meta: dict[str, Any] = {
@@ -925,6 +1284,7 @@ def execute_one(
         "orchestrator_success": False,
         "started_at": start_iso,
         "finished_at": None,
+        "elapsed_seconds": None,
         "mode": args.mode,
         "run_id": row["run_id"],
         "target_instance_id": row["target_instance_id"],
@@ -934,9 +1294,11 @@ def execute_one(
         "sandbox_image": row["sandbox_image"],
         "image_repo_path": args.image_repo_path,
         "openhands_runtime_requested": args.openhands_runtime,
+        "max_iterations": args.max_iterations,
         "manifest_lineno": row.get("_manifest_lineno"),
         "manifest_prompt_path": row["prompt_path"],
         "manifest_prompt_sha256": row.get("prompt_sha256", ""),
+        "prompt_char_count": prompt_char_count,
         "run_dir": str(run_dir),
         "workspace_dir": str(workspace_dir),
         "prompt_path": str(prompt_dst),
@@ -949,14 +1311,13 @@ def execute_one(
     write_json(meta_path, meta)
 
     try:
-        seed_workspace_from_image(
-            sandbox_image=row["sandbox_image"],
+        workspace_info = seed_and_verify_workspace(
+            row=row,
             workspace_dir=workspace_dir,
             image_repo_path=args.image_repo_path,
             pulled_images=pulled_images,
             pull_images=not args.no_pull,
         )
-        workspace_info = verify_workspace(row, workspace_dir)
         meta.update(workspace_info)
 
         runtime, runtime_reason = choose_openhands_runtime(
@@ -982,6 +1343,17 @@ def execute_one(
         write_json(command_path, command_meta)
         meta["openhands_runtime"] = runtime
         meta["openhands_runtime_reason"] = runtime_reason
+        if runtime == "image":
+            current_container_name = command_meta.get("container_name")
+            meta["image_runtime_container"] = {
+                "container_name": current_container_name,
+                "container_labels": command_meta.get("container_labels", {}),
+            }
+            swept = cleanup_run_container(current_container_name)
+            swept.extend(cleanup_execution_root_containers(args.execution_root))
+            meta["prelaunch_container_cleanup"] = swept
+            if swept:
+                print(f"[cleanup] removed stale execution-root containers: {', '.join(swept)}", flush=True)
 
         guard_started_ns = time.time_ns()
         print(f"[run] {row['run_id']} runtime={runtime} cwd={openhands_cwd}", flush=True)
@@ -998,6 +1370,7 @@ def execute_one(
             workspace_dir=workspace_dir,
             since_ns=guard_started_ns,
         )
+        meta["elapsed_seconds"] = result.elapsed_seconds
         meta["openhands_result"] = {
             "argv": result.argv,
             "cwd": result.cwd,
@@ -1021,6 +1394,8 @@ def execute_one(
         meta["patch_sha256"] = hashlib.sha256(patch.encode("utf-8", errors="replace")).hexdigest()
         meta["patch_chars"] = len(patch)
         meta["patch_empty"] = patch == ""
+        meta.update(parse_patch_stats(patch))
+        meta.update(extract_stdout_metrics(stdout_path))
 
         if off_workspace_writes and args.fail_on_off_workspace_writes:
             meta["status"] = "workspace_guardrail_failed"
@@ -1032,6 +1407,13 @@ def execute_one(
             meta["status"] = "openhands_failed"
             meta["orchestrator_success"] = False
 
+    except KeyboardInterrupt as e:
+        meta["status"] = "orchestrator_exception"
+        meta["orchestrator_success"] = False
+        meta["exception_type"] = type(e).__name__
+        meta["exception"] = "Interrupted by operator"
+        write_json(meta_path, meta)
+        raise
     except Exception as e:
         meta["status"] = "orchestrator_exception"
         meta["orchestrator_success"] = False
@@ -1040,7 +1422,12 @@ def execute_one(
         write_json(meta_path, meta)
         raise
     finally:
+        if runtime == "image":
+            removed = cleanup_run_container(current_container_name)
+            if removed:
+                meta["postrun_container_cleanup"] = removed
         meta["finished_at"] = utc_now_iso()
+        meta["failure_cause"] = classify_failure_cause(meta)
         write_json(meta_path, meta)
 
     print(f"[done] {row['run_id']} status={meta['status']} patch_chars={meta.get('patch_chars')}", flush=True)
@@ -1189,7 +1576,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         default=Path("data/contextbench_phase2/prompt_manifest.jsonl"),
         help="Prompt manifest JSONL. Prefer data/contextbench_phase2/prompt_manifest.jsonl.",
     )
-    parser.add_argument("--mode", choices=["smoke", "full"], required=True)
+    parser.add_argument("--mode", choices=["smoke", "full"])
     parser.add_argument("--smoke-target", default=DEFAULT_SMOKE_TARGET)
     parser.add_argument("--conditions", nargs="+", default=DEFAULT_CONDITIONS)
     parser.add_argument("--execution-root", type=Path, default=DEFAULT_EXECUTION_ROOT)
@@ -1236,8 +1623,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Mark a run failed if files are modified outside the current workspace boundary.",
     )
     parser.add_argument("--timeout-seconds", type=int, default=None)
+    parser.add_argument(
+        "--max-iterations",
+        type=int,
+        default=int(os.environ.get("OPENHANDS_MAX_ITERATIONS", "2000")),
+        help="Maximum agent iterations per run (passed as OPENHANDS_MAX_ITERATIONS to OpenHands). Default 2000.",
+    )
     parser.add_argument("--max-runs", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--cleanup-execution-root-containers",
+        action="store_true",
+        help="Remove all Docker containers still tied to --execution-root and exit.",
+    )
     parser.add_argument("--confirm-full-run", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--force", action="store_true")
@@ -1262,6 +1660,13 @@ def main(argv: list[str]) -> int:
     repo_root = Path.cwd()
     args.manifest = args.manifest if args.manifest.is_absolute() else repo_root / args.manifest
     args.execution_root = args.execution_root if args.execution_root.is_absolute() else repo_root / args.execution_root
+    if args.cleanup_execution_root_containers:
+        require_executable("docker")
+        removed = cleanup_execution_root_containers(args.execution_root)
+        print(json_dumps({"execution_root": str(args.execution_root), "removed_containers": removed}))
+        return 0
+    if not args.mode:
+        raise OrchestratorError("--mode is required unless --cleanup-execution-root-containers is used.")
     if args.stop_on_error is None:
         args.stop_on_error = args.mode == "smoke"
 
