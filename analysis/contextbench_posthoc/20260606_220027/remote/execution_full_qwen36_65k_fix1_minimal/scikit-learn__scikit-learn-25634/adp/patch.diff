@@ -1,0 +1,93 @@
+diff --git a/sklearn/utils/multiclass.py b/sklearn/utils/multiclass.py
+index 5eaef2fde..e85c80558 100644
+--- a/sklearn/utils/multiclass.py
++++ b/sklearn/utils/multiclass.py
+@@ -342,7 +342,26 @@ def type_of_target(y, input_name=""):
+         return "unknown"
+     if not issparse(y) and y.dtype == object and not isinstance(y.flat[0], str):
+         # [obj_1] and not ["label_1"]
+-        return "unknown"
++        # However, if the elements are numeric types (e.g., from nullable pandas
++        # dtypes like Int64, Float64, boolean), we should continue processing
++        # rather than returning "unknown". Check if all elements are numeric types
++        # that can be converted to a numeric array.
++        first_element = y.flat[0]
++        if isinstance(first_element, (int, float, bool, np.integer, np.floating, np.bool_)):
++            # Check if all elements are numeric types (not just the first one)
++            # to handle cases like [1, 'string'] which should still be "unknown"
++            all_numeric = all(
++                isinstance(elem, (int, float, bool, np.integer, np.floating, np.bool_))
++                for elem in y.flat
++            )
++            if all_numeric:
++                # The array contains numeric values stored as objects (e.g., from
++                # nullable pandas dtypes). Continue processing below.
++                pass
++            else:
++                return "unknown"
++        else:
++            return "unknown"
+ 
+     # Check if multioutput
+     if y.ndim == 2 and y.shape[1] > 1:
+diff --git a/sklearn/utils/tests/test_multiclass.py b/sklearn/utils/tests/test_multiclass.py
+index cf5858d0f..75e0d510e 100644
+--- a/sklearn/utils/tests/test_multiclass.py
++++ b/sklearn/utils/tests/test_multiclass.py
+@@ -346,6 +346,56 @@ def test_type_of_target_pandas_sparse():
+         type_of_target(y)
+ 
+ 
++def test_type_of_target_nullable_pandas_dtypes():
++    """Test that nullable pandas dtypes are correctly handled by type_of_target.
++
++    Non-regression test for:
++    https://github.com/scikit-learn/scikit-learn/issues/25634
++
++    Nullable pandas dtypes (Int64, Float64, boolean) become object dtype when
++    converted to numpy arrays, but should still be recognized as their original
++    types (binary, multiclass, etc.) rather than 'unknown'.
++    """
++    pd = pytest.importorskip("pandas")
++
++    # Test binary
++    y_binary = pd.Series([1, 0, 0, 1, 0, 1], dtype="Int64")
++    assert type_of_target(y_binary) == "binary"
++
++    y_binary = pd.Series([1, 0, 0, 1, 0, 1], dtype="Float64")
++    assert type_of_target(y_binary) == "binary"
++
++    y_binary = pd.Series([1, 0, 0, 1, 0, 1], dtype="boolean")
++    assert type_of_target(y_binary) == "binary"
++
++    # Test multiclass
++    y_multiclass = pd.Series([1, 0, 2, 3, 4], dtype="Int64")
++    assert type_of_target(y_multiclass) == "multiclass"
++
++    y_multiclass = pd.Series([1.0, 0.0, 2.0, 3.0, 4.0], dtype="Float64")
++    assert type_of_target(y_multiclass) == "multiclass"
++
++
++def test_unique_labels_nullable_pandas_dtypes():
++    """Test that nullable pandas dtypes are correctly handled by unique_labels.
++
++    Non-regression test for:
++    https://github.com/scikit-learn/scikit-learn/issues/25634
++
++    Nullable pandas dtypes (Int64, Float64, boolean) should work with unique_labels
++    without raising 'Mix type of y not allowed' errors.
++    """
++    pd = pytest.importorskip("pandas")
++
++    for dtype in ["Int64", "Float64", "boolean"]:
++        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
++        y_predicted = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
++
++        # This should not raise an error
++        labels = unique_labels(y_true, y_predicted)
++        assert len(labels) == 2
++
++
+ def test_class_distribution():
+     y = np.array(
+         [

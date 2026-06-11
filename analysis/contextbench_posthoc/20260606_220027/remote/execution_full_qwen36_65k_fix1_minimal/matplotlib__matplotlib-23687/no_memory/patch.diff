@@ -1,0 +1,162 @@
+diff --git a/test_bar_nan_bug.py b/test_bar_nan_bug.py
+new file mode 100644
+index 0000000000..56e4adc34d
+--- /dev/null
++++ b/test_bar_nan_bug.py
+@@ -0,0 +1,156 @@
++"""Test script to reproduce the bar plot NaN bug."""
++import numpy as np
++import matplotlib
++matplotlib.use('Agg')  # Non-interactive backend
++import matplotlib.pyplot as plt
++
++def test_bar_x_with_nan_at_extremities():
++    """Test that bars are shown when x has NaN at extremities."""
++    barx = np.arange(3, dtype=float)
++    barheights = np.array([0.5, 1.5, 2.0])
++    barstarts = np.array([0.77] * 3)
++
++    barx[[0, 2]] = np.NaN
++    
++    fig, ax = plt.subplots()
++    ax.bar(barx, barheights, bottom=barstarts)
++    
++    # Check that at least one bar is visible
++    patches = [p for p in ax.patches if isinstance(p, matplotlib.patches.Rectangle)]
++    print(f"Number of patches: {len(patches)}")
++    
++    # Get the x-axis limits
++    xlim = ax.get_xlim()
++    print(f"X-axis limits: {xlim}")
++    
++    # The middle bar should be visible (at x=1)
++    # Check if the data limits include the middle bar
++    datalim = ax.dataLim
++    print(f"Data limits: {datalim.bounds}")
++    
++    # Check if any finite x values exist in dataLim
++    x_interval = datalim.intervalx
++    print(f"X interval: {x_interval}")
++    
++    plt.close(fig)
++    
++    # The middle bar at x=1 should be visible
++    assert len(patches) == 3, f"Expected 3 patches, got {len(patches)}"
++    assert np.isfinite(x_interval[0]) and np.isfinite(x_interval[1]), \
++        f"X limits should be finite, got {x_interval}"
++    print("TEST 1 PASSED: bar with NaN at x extremities shows middle bar")
++
++
++def test_bar_bottom_with_nan_at_extremities():
++    """Test that bars are shown when bottom has NaN at extremities."""
++    barx = np.arange(3, dtype=float)
++    barheights = np.array([0.5, 1.5, 2.0])
++    barstarts = np.array([0.77] * 3)
++    barstarts[[0, 2]] = np.NaN
++    
++    fig, ax = plt.subplots()
++    ax.bar(barx, barheights, bottom=barstarts)
++    
++    patches = [p for p in ax.patches if isinstance(p, matplotlib.patches.Rectangle)]
++    print(f"Number of patches: {len(patches)}")
++    
++    ylim = ax.get_ylim()
++    print(f"Y-axis limits: {ylim}")
++    
++    datalim = ax.dataLim
++    y_interval = datalim.intervaly
++    print(f"Y interval: {y_interval}")
++    
++    plt.close(fig)
++    
++    assert len(patches) == 3, f"Expected 3 patches, got {len(patches)}"
++    assert np.isfinite(y_interval[0]) and np.isfinite(y_interval[1]), \
++        f"Y limits should be finite, got {y_interval}"
++    print("TEST 2 PASSED: bar with NaN at bottom extremities shows middle bar")
++
++
++def test_barh_left_with_nan_at_extremities():
++    """Test that horizontal bars are shown when left has NaN at extremities."""
++    bary = np.arange(3, dtype=float)
++    barwidths = np.array([0.5, 1.5, 2.0])
++    barlefts = np.array([0.77] * 3)
++    barlefts[[0, 2]] = np.NaN
++    
++    fig, ax = plt.subplots()
++    ax.barh(bary, barwidths, left=barlefts)
++    
++    patches = [p for p in ax.patches if isinstance(p, matplotlib.patches.Rectangle)]
++    print(f"Number of patches: {len(patches)}")
++    
++    xlim = ax.get_xlim()
++    print(f"X-axis limits: {xlim}")
++    
++    datalim = ax.dataLim
++    x_interval = datalim.intervalx
++    print(f"X interval: {x_interval}")
++    
++    plt.close(fig)
++    
++    assert len(patches) == 3, f"Expected 3 patches, got {len(patches)}"
++    assert np.isfinite(x_interval[0]) and np.isfinite(x_interval[1]), \
++        f"X limits should be finite, got {x_interval}"
++    print("TEST 3 PASSED: barh with NaN at left extremities shows middle bar")
++
++
++def test_bar_height_with_nan_at_extremities():
++    """Test that bars work correctly when height has NaN at extremities (should already work)."""
++    fig, ax = plt.subplots()
++    ax.bar(np.arange(3), np.array([np.NaN, 1, np.NaN]), bottom=np.array([0.2, 0.3, 0.4]))
++    
++    patches = [p for p in ax.patches if isinstance(p, matplotlib.patches.Rectangle)]
++    print(f"Number of patches: {len(patches)}")
++    
++    ylim = ax.get_ylim()
++    print(f"Y-axis limits: {ylim}")
++    
++    datalim = ax.dataLim
++    y_interval = datalim.intervaly
++    print(f"Y interval: {y_interval}")
++    
++    plt.close(fig)
++    
++    # Only the middle bar should be visible
++    assert len(patches) == 3, f"Expected 3 patches, got {len(patches)}"
++    assert np.isfinite(y_interval[0]) and np.isfinite(y_interval[1]), \
++        f"Y limits should be finite, got {y_interval}"
++    print("TEST 4 PASSED: bar with NaN at height extremities works correctly")
++
++
++if __name__ == '__main__':
++    print("Testing bar plot NaN handling...")
++    print("=" * 60)
++    
++    try:
++        test_bar_x_with_nan_at_extremities()
++    except AssertionError as e:
++        print(f"TEST 1 FAILED: {e}")
++    
++    print()
++    
++    try:
++        test_bar_bottom_with_nan_at_extremities()
++    except AssertionError as e:
++        print(f"TEST 2 FAILED: {e}")
++    
++    print()
++    
++    try:
++        test_barh_left_with_nan_at_extremities()
++    except AssertionError as e:
++        print(f"TEST 3 FAILED: {e}")
++    
++    print()
++    
++    try:
++        test_bar_height_with_nan_at_extremities()
++    except AssertionError as e:
++        print(f"TEST 4 FAILED: {e}")
++    
++    print()
++    print("=" * 60)
++    print("Tests complete!")

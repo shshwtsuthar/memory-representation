@@ -1,0 +1,74 @@
+diff --git a/django/db/models/sql/compiler.py b/django/db/models/sql/compiler.py
+index 676625df6f..ecdbb7d457 100644
+--- a/django/db/models/sql/compiler.py
++++ b/django/db/models/sql/compiler.py
+@@ -1263,7 +1263,7 @@ class SQLCompiler:
+                     related_field,
+                     restricted,
+                     requested,
+-                    related_select_mask,
++                    select_mask,
+                     reverse=True,
+                 ):
+                     continue
+diff --git a/tests/select_related_onetoone/models.py b/tests/select_related_onetoone/models.py
+index 5ffb6bfd8c..37a7588ea1 100644
+--- a/tests/select_related_onetoone/models.py
++++ b/tests/select_related_onetoone/models.py
+@@ -76,3 +76,14 @@ class LinkedList(models.Model):
+         blank=True,
+         null=True,
+     )
++
++
++class RecursiveExample(models.Model):
++    name = models.CharField(max_length=32)
++    source = models.OneToOneField(
++        "self",
++        models.CASCADE,
++        related_name="destination",
++        blank=True,
++        null=True,
++    )
+diff --git a/tests/select_related_onetoone/tests.py b/tests/select_related_onetoone/tests.py
+index 83462ed071..97712a48c6 100644
+--- a/tests/select_related_onetoone/tests.py
++++ b/tests/select_related_onetoone/tests.py
+@@ -13,6 +13,7 @@ from .models import (
+     Parent1,
+     Parent2,
+     Product,
++    RecursiveExample,
+     StatDetails,
+     User,
+     UserProfile,
+@@ -262,6 +263,29 @@ class ReverseSelectRelatedTestCase(TestCase):
+             item1_db = LinkedList.objects.select_related("next_item").get(name="item1")
+             self.assertEqual(item1_db.next_item.name, "item2")
+ 
++    def test_self_relation_with_only(self):
++        # Test that select_related() and only() work together with both
++        # forward and reverse recursive OneToOneField relations.
++        item1 = RecursiveExample.objects.create(name="item1")
++        item2 = RecursiveExample.objects.create(name="item2", source=item1)
++        # Both forward and reverse should work together.
++        qs = RecursiveExample.objects.select_related(
++            "source", "destination"
++        ).only("name", "source__name", "destination__name")
++        with self.assertNumQueries(1):
++            results = list(qs)
++        self.assertEqual(len(results), 2)
++        for item in results:
++            if item.name == "item1":
++                # item1 has no source, but has destination=item2
++                self.assertIsNone(item.source)
++                self.assertEqual(item.destination.name, "item2")
++            else:
++                # item2 has source=item1, but no destination
++                self.assertEqual(item.source.name, "item1")
++                with self.assertRaises(RecursiveExample.source.field.remote_field.model.DoesNotExist):
++                    _ = item.destination
++
+ 
+ class ReverseSelectRelatedValidationTests(SimpleTestCase):
+     """

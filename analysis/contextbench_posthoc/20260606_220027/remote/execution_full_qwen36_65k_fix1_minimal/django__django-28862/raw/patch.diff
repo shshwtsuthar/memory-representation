@@ -1,0 +1,189 @@
+diff --git a/test_issue_reproduce.py b/test_issue_reproduce.py
+new file mode 100644
+index 0000000000..8f69145360
+--- /dev/null
++++ b/test_issue_reproduce.py
+@@ -0,0 +1,183 @@
++"""
++Test to reproduce the issue:
++Removing a field from index_together/unique_together and from the model 
++generates a migration that crashes.
++"""
++import os
++import sys
++import django
++
++# Setup Django
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tests.settings')
++sys.path.insert(0, '/testbed')
++sys.path.insert(0, '/testbed/tests')
++
++django.setup()
++
++from django.db import connection, migrations, models
++from django.db.migrations.migration import Migration
++from django.db.migrations.state import ProjectState
++from django.test.utils import setup_test_environment, teardown_test_environment
++
++
++def apply_operations(app_label, project_state, operations, atomic=True):
++    migration = Migration('name', app_label)
++    migration.operations = operations
++    with connection.schema_editor(atomic=atomic) as editor:
++        return migration.apply(project_state, editor)
++
++
++def test_remove_field_with_index_together():
++    """Test removing a field that is part of index_together."""
++    print("Testing: RemoveField with index_together...")
++    
++    # Create initial state with a model that has index_together
++    initial_state = ProjectState()
++    initial_state = initial_state.clone()
++    
++    # Create the model with index_together
++    from django.db.migrations.state import ModelState
++    initial_model = ModelState("test_app", "TestModel", [
++        ("id", models.AutoField(primary_key=True)),
++        ("field1", models.IntegerField()),
++        ("field2", models.IntegerField()),
++    ], options={'index_together': [('field1', 'field2')]})
++    initial_state.models[('test_app', 'testmodel')] = initial_model
++    
++    # Apply CreateModel
++    create_ops = [
++        migrations.CreateModel(
++            "TestModel",
++            [
++                ("id", models.AutoField(primary_key=True)),
++                ("field1", models.IntegerField()),
++                ("field2", models.IntegerField()),
++            ],
++            options={'index_together': [('field1', 'field2')]},
++        ),
++    ]
++    project_state = apply_operations("test_app", initial_state, create_ops)
++    
++    # Verify the table and index exist
++    with connection.cursor() as cursor:
++        constraints = connection.introspection.get_constraints(cursor, 'test_app_testmodel')
++        print(f"  Constraints after creation: {list(constraints.keys())}")
++        idx_constraints = {k: v for k, v in constraints.items() if v.get('index')}
++        print(f"  Index constraints: {list(idx_constraints.keys())}")
++        assert any('field1' in v.get('columns', []) and 'field2' in v.get('columns', []) for k, v in idx_constraints.items()), \
++            "Expected index on (field1, field2)"
++    
++    # Now remove field2 from the model and from index_together
++    # This is the problematic scenario
++    new_state = project_state.clone()
++    
++    # Update the model state to remove field2 and update index_together
++    new_model = project_state.models[('test_app', 'testmodel')].clone()
++    new_model.fields = [(name, field) for name, field in new_model.fields if name != 'field2']
++    new_model.options['index_together'] = set()  # Remove index_together
++    new_state.models[('test_app', 'testmodel')] = new_model
++    
++    # Apply the operations
++    remove_ops = [
++        migrations.RemoveField(
++            model_name="TestModel",
++            name="field2",
++        ),
++        migrations.AlterIndexTogether(
++            name="TestModel",
++            index_together=[],
++        ),
++    ]
++    
++    try:
++        new_state = apply_operations("test_app", project_state, remove_ops)
++        print("  SUCCESS: Migration applied without error!")
++    except Exception as e:
++        print(f"  FAILED: {type(e).__name__}: {e}")
++        return False
++    
++    return True
++
++
++def test_remove_field_with_unique_together():
++    """Test removing a field that is part of unique_together."""
++    print("\nTesting: RemoveField with unique_together...")
++    
++    # Create initial state with a model that has unique_together
++    initial_state = ProjectState()
++    
++    # Apply CreateModel
++    create_ops = [
++        migrations.CreateModel(
++            "TestModel",
++            [
++                ("id", models.AutoField(primary_key=True)),
++                ("field1", models.IntegerField()),
++                ("field2", models.IntegerField()),
++            ],
++            options={'unique_together': [('field1', 'field2')]},
++        ),
++    ]
++    project_state = apply_operations("test_app", initial_state, create_ops)
++    
++    # Verify the table and unique constraint exist
++    with connection.cursor() as cursor:
++        constraints = connection.introspection.get_constraints(cursor, 'test_app_testmodel')
++        print(f"  Constraints after creation: {list(constraints.keys())}")
++        uniq_constraints = {k: v for k, v in constraints.items() if v.get('unique')}
++        print(f"  Unique constraints: {list(uniq_constraints.keys())}")
++        assert any('field1' in v.get('columns', []) and 'field2' in v.get('columns', []) for k, v in uniq_constraints.items()), \
++            "Expected unique constraint on (field1, field2)"
++    
++    # Now remove field2 from the model and from unique_together
++    new_state = project_state.clone()
++    
++    # Update the model state to remove field2 and update unique_together
++    new_model = project_state.models[('test_app', 'testmodel')].clone()
++    new_model.fields = [(name, field) for name, field in new_model.fields if name != 'field2']
++    new_model.options['unique_together'] = set()  # Remove unique_together
++    new_state.models[('test_app', 'testmodel')] = new_model
++    
++    # Apply the operations
++    remove_ops = [
++        migrations.RemoveField(
++            model_name="TestModel",
++            name="field2",
++        ),
++        migrations.AlterUniqueTogether(
++            name="TestModel",
++            unique_together=[],
++        ),
++    ]
++    
++    try:
++        new_state = apply_operations("test_app", project_state, remove_ops)
++        print("  SUCCESS: Migration applied without error!")
++    except Exception as e:
++        print(f"  FAILED: {type(e).__name__}: {e}")
++        return False
++    
++    return True
++
++
++if __name__ == '__main__':
++    setup_test_environment()
++    
++    success = True
++    
++    # Test 1: RemoveField with index_together
++    if not test_remove_field_with_index_together():
++        success = False
++    
++    # Test 2: RemoveField with unique_together
++    if not test_remove_field_with_unique_together():
++        success = False
++    
++    teardown_test_environment()
++    
++    if success:
++        print("\n✓ All tests passed!")
++        sys.exit(0)
++    else:
++        print("\n✗ Some tests failed!")
++        sys.exit(1)

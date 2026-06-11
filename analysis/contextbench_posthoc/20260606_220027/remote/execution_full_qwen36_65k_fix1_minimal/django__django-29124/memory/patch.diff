@@ -1,0 +1,175 @@
+diff --git a/django/db/migrations/operations/models.py b/django/db/migrations/operations/models.py
+index ad436cf611..2aee00dbd3 100644
+--- a/django/db/migrations/operations/models.py
++++ b/django/db/migrations/operations/models.py
+@@ -506,6 +506,15 @@ class AlterUniqueTogether(FieldRelatedOptionOperation):
+             )
+         )
+ 
++    def reduce(self, operation, app_label=None):
++        from .fields import RemoveField
++        if (isinstance(operation, RemoveField) and
++                self.name_lower == operation.model_name_lower):
++            # AlterUniqueTogether needs the field to exist in the from_state
++            # to delete the old constraint, so it must come before RemoveField.
++            return [self, operation]
++        return super().reduce(operation, app_label=app_label)
++
+     def describe(self):
+         return "Alter %s for %s (%s constraint(s))" % (self.option_name, self.name, len(self.unique_together or ''))
+ 
+@@ -560,6 +569,15 @@ class AlterIndexTogether(FieldRelatedOptionOperation):
+             )
+         )
+ 
++    def reduce(self, operation, app_label=None):
++        from .fields import RemoveField
++        if (isinstance(operation, RemoveField) and
++                self.name_lower == operation.model_name_lower):
++            # AlterIndexTogether needs the field to exist in the from_state
++            # to delete the old index, so it must come before RemoveField.
++            return [self, operation]
++        return super().reduce(operation, app_label=app_label)
++
+     def describe(self):
+         return "Alter %s for %s (%s constraint(s))" % (self.option_name, self.name, len(self.index_together or ''))
+ 
+diff --git a/test_issue_29124.py b/test_issue_29124.py
+new file mode 100644
+index 0000000000..4ab99e8060
+--- /dev/null
++++ b/test_issue_29124.py
+@@ -0,0 +1,114 @@
++"""
++Test for issue django__django-29124:
++Migration orders RemoveField and AlterUniqueTogether incorrectly, causing FieldDoesNotExist.
++
++When removing a field and its corresponding unique_together entry,
++the AlterUniqueTogether operation must come BEFORE RemoveField,
++because AlterUniqueTogether needs the field to exist in the from_state
++to delete the old constraint.
++"""
++import django
++from django.conf import settings
++
++# Configure Django settings
++if not settings.configured:
++    settings.configure(
++        DEBUG=True,
++        DATABASES={
++            'default': {
++                'ENGINE': 'django.db.backends.sqlite3',
++                'NAME': ':memory:',
++            }
++        },
++        INSTALLED_APPS=[
++            'django.contrib.contenttypes',
++            'django.contrib.auth',
++        ],
++        USE_TZ=True,
++    )
++    django.setup()
++
++from django.db import models
++from django.db.migrations.operations.models import AlterUniqueTogether, RemoveField
++from django.db.migrations.state import ModelState, ProjectState
++
++
++def test_alter_unique_together_reduce_with_remove_field():
++    """
++    Test that AlterUniqueTogether.reduce(RemoveField) returns the correct order.
++    
++    When AlterUniqueTogether is reducing against RemoveField, and the field
++    being removed is in the OLD unique_together (but not in the NEW one),
++    AlterUniqueTogether should come FIRST.
++    """
++    # Create operations
++    # Scenario: unique_together changes from {("title", "newfield")} to {("author", "title")}
++    # and 'newfield' is being removed
++    remove_field = RemoveField('Book', 'newfield')
++    alter_unique = AlterUniqueTogether('Book', {('author', 'title')})
++    
++    # Test reduce
++    result = alter_unique.reduce(remove_field)
++    
++    print(f"AlterUniqueTogether.reduce(RemoveField) = {result}")
++    print(f"AlterUniqueTogether.references_field('Book', 'newfield') = {alter_unique.references_field('Book', 'newfield')}")
++    
++    # The result should be [AlterUniqueTogether, RemoveField] (alter_unique first)
++    # because AlterUniqueTogether needs 'newfield' to exist in the from_state
++    # to delete the old constraint on ("title", "newfield")
++    if result is None:
++        print("FAIL: result is None")
++        return False
++    elif isinstance(result, list):
++        if len(result) == 2:
++            if result[0] == alter_unique and result[1] == remove_field:
++                print("PASS: AlterUniqueTogether comes before RemoveField")
++                return True
++            else:
++                print(f"FAIL: Wrong order. Expected [AlterUniqueTogether, RemoveField], got {[type(op).__name__ for op in result]}")
++                return False
++        else:
++            print(f"FAIL: Wrong list length. Expected 2, got {len(result)}")
++            return False
++    else:
++        print(f"FAIL: Unexpected result type: {type(result)}")
++        return False
++
++
++def test_alter_unique_together_references_field():
++    """
++    Test that AlterUniqueTogether.references_field correctly identifies
++    when a field is referenced.
++    """
++    # unique_together = {("author", "title")}
++    alter_unique = AlterUniqueTogether('Book', {('author', 'title')})
++    
++    # 'author' is in unique_together, so references_field should return True
++    assert alter_unique.references_field('Book', 'author') == True, \
++        "references_field('Book', 'author') should be True"
++    
++    # 'newfield' is NOT in unique_together, so references_field should return False
++    assert alter_unique.references_field('Book', 'newfield') == False, \
++        "references_field('Book', 'newfield') should be False"
++    
++    print("PASS: references_field works correctly")
++    return True
++
++
++if __name__ == '__main__':
++    print("=" * 60)
++    print("Testing AlterUniqueTogether.references_field")
++    print("=" * 60)
++    test_alter_unique_together_references_field()
++    
++    print()
++    print("=" * 60)
++    print("Testing AlterUniqueTogether.reduce with RemoveField")
++    print("=" * 60)
++    success = test_alter_unique_together_reduce_with_remove_field()
++    
++    print()
++    if success:
++        print("ALL TESTS PASSED")
++    else:
++        print("TESTS FAILED - This is the bug we need to fix!")
+diff --git a/tests/migrations/test_autodetector.py b/tests/migrations/test_autodetector.py
+index e3ce3a129a..b181b084be 100644
+--- a/tests/migrations/test_autodetector.py
++++ b/tests/migrations/test_autodetector.py
+@@ -1529,10 +1529,10 @@ class AutodetectorTests(TestCase):
+         )
+         # Right number/type of migrations?
+         self.assertNumberMigrations(changes, "otherapp", 1)
+-        self.assertOperationTypes(changes, "otherapp", 0, ["RemoveField", "AlterUniqueTogether", "AlterIndexTogether"])
+-        self.assertOperationAttributes(changes, "otherapp", 0, 0, model_name="book", name="newfield")
+-        self.assertOperationAttributes(changes, "otherapp", 0, 1, name="book", unique_together={("author", "title")})
+-        self.assertOperationAttributes(changes, "otherapp", 0, 2, name="book", index_together={("author", "title")})
++        self.assertOperationTypes(changes, "otherapp", 0, ["AlterUniqueTogether", "AlterIndexTogether", "RemoveField"])
++        self.assertOperationAttributes(changes, "otherapp", 0, 0, name="book", unique_together={("author", "title")})
++        self.assertOperationAttributes(changes, "otherapp", 0, 1, name="book", index_together={("author", "title")})
++        self.assertOperationAttributes(changes, "otherapp", 0, 2, model_name="book", name="newfield")
+ 
+     def test_rename_field_and_foo_together(self):
+         """

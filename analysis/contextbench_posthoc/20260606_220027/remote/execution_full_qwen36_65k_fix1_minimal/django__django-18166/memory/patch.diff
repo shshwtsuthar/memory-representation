@@ -1,0 +1,45 @@
+diff --git a/django/forms/formsets.py b/django/forms/formsets.py
+index eafe35720..bddc26204 100644
+--- a/django/forms/formsets.py
++++ b/django/forms/formsets.py
+@@ -54,7 +54,7 @@ class BaseFormSet(object):
+     A collection of instances of the same Form class.
+     """
+     def __init__(self, data=None, files=None, auto_id='id_%s', prefix=None,
+-                 initial=None, error_class=ErrorList):
++                 initial=None, error_class=ErrorList, form_kwargs=None):
+         self.is_bound = data is not None or files is not None
+         self.prefix = prefix or self.get_default_prefix()
+         self.auto_id = auto_id
+@@ -62,6 +62,7 @@ class BaseFormSet(object):
+         self.files = files or {}
+         self.initial = initial
+         self.error_class = error_class
++        self.form_kwargs = form_kwargs or {}
+         self._errors = None
+         self._non_form_errors = None
+ 
+@@ -142,6 +143,12 @@ class BaseFormSet(object):
+         forms = [self._construct_form(i) for i in range(self.total_form_count())]
+         return forms
+ 
++    def _kwargs_for_form(self, i):
++        """
++        Returns the kwargs that may be applied to the i-th form when instantiating it.
++        """
++        return {}
++
+     def _construct_form(self, i, **kwargs):
+         """
+         Instantiates and returns the i-th form instance in a formset.
+@@ -163,6 +170,10 @@ class BaseFormSet(object):
+         # the minimum forms.
+         if i >= self.initial_form_count() and i >= self.min_num:
+             defaults['empty_permitted'] = True
++        # Merge form_kwargs from __init__, _kwargs_for_form, and **kwargs
++        # in that order, with later values taking precedence.
++        defaults.update(self.form_kwargs)
++        defaults.update(self._kwargs_for_form(i))
+         defaults.update(kwargs)
+         form = self.form(**defaults)
+         self.add_fields(form, i)

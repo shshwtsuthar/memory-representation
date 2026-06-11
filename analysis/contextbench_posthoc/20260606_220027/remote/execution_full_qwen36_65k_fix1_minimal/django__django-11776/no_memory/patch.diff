@@ -1,0 +1,96 @@
+diff --git a/django/forms/forms.py b/django/forms/forms.py
+index b5cf17f4e..39fb9744c 100644
+--- a/django/forms/forms.py
++++ b/django/forms/forms.py
+@@ -11,7 +11,7 @@ import warnings
+ 
+ from django.core.exceptions import ValidationError, NON_FIELD_ERRORS
+ from django.forms.fields import Field, FileField
+-from django.forms.utils import flatatt, ErrorDict, ErrorList
++from django.forms.utils import flatatt, ErrorDict, ErrorList, NonFieldErrorList
+ from django.forms.widgets import Media, MediaDefiningClass, TextInput, Textarea
+ from django.utils.deprecation import RemovedInDjango19Warning
+ from django.utils.encoding import smart_text, force_text, python_2_unicode_compatible
+@@ -280,7 +280,7 @@ class BaseForm(object):
+         field -- i.e., from Form.clean(). Returns an empty ErrorList if there
+         are none.
+         """
+-        return self.errors.get(NON_FIELD_ERRORS, self.error_class())
++        return self.errors.get(NON_FIELD_ERRORS, NonFieldErrorList())
+ 
+     def _raw_value(self, fieldname):
+         """
+diff --git a/django/forms/utils.py b/django/forms/utils.py
+index f7f53e9a0..619fac040 100644
+--- a/django/forms/utils.py
++++ b/django/forms/utils.py
+@@ -80,6 +80,10 @@ class ErrorList(UserList, list):
+     """
+     A collection of errors that knows how to display itself in various formats.
+     """
++    def __init__(self, *args, **kwargs):
++        self.css_class = kwargs.pop('css_class', None)
++        super(ErrorList, self).__init__(*args, **kwargs)
++    
+     def as_data(self):
+         return ValidationError(self.data).error_list
+ 
+@@ -99,6 +103,12 @@ class ErrorList(UserList, list):
+     def as_ul(self):
+         if not self.data:
+             return ''
++        if self.css_class:
++            return format_html(
++                '<ul class="errorlist {0}">{1}</ul>',
++                self.css_class,
++                format_html_join('', '<li>{0}</li>', ((force_text(e),) for e in self))
++            )
+         return format_html(
+             '<ul class="errorlist">{0}</ul>',
+             format_html_join('', '<li>{0}</li>', ((force_text(e),) for e in self))
+@@ -110,6 +120,28 @@ class ErrorList(UserList, list):
+     def __str__(self):
+         return self.as_ul()
+ 
++
++@python_2_unicode_compatible
++class NonFieldErrorList(ErrorList):
++    """
++    A collection of non-field errors that knows how to display itself in various formats.
++    The CSS class 'nonfield' is added to the errorlist to allow styling non-field errors
++    differently from field errors.
++    """
++    def as_ul(self):
++        if not self.data:
++            return ''
++        return format_html(
++            '<ul class="errorlist nonfield">{0}</ul>',
++            format_html_join('', '<li>{0}</li>', ((force_text(e),) for e in self))
++        )
++
++    def as_text(self):
++        return '\n'.join('* %s' % e for e in self)
++
++    def __str__(self):
++        return self.as_ul()
++
+     def __repr__(self):
+         return repr(list(self))
+ 
+diff --git a/django/utils/html_parser.py b/django/utils/html_parser.py
+index efe54227d..2e147c905 100644
+--- a/django/utils/html_parser.py
++++ b/django/utils/html_parser.py
+@@ -9,7 +9,11 @@ use_workaround = (
+     (current_version >= (3, 0) and current_version < (3, 2, 3))
+ )
+ 
+-HTMLParseError = _html_parser.HTMLParseError
++# HTMLParseError was removed in Python 3.5, use ValueError instead
++if hasattr(_html_parser, 'HTMLParseError'):
++    HTMLParseError = _html_parser.HTMLParseError
++else:
++    HTMLParseError = ValueError
+ 
+ if not use_workaround:
+     if current_version >= (3, 4):

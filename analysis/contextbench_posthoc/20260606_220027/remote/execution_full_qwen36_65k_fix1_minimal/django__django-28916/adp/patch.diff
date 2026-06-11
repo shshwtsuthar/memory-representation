@@ -1,0 +1,145 @@
+diff --git a/test_issue_28916.py b/test_issue_28916.py
+new file mode 100644
+index 0000000000..1afe8b33af
+--- /dev/null
++++ b/test_issue_28916.py
+@@ -0,0 +1,139 @@
++"""
++Test for issue #28916: Changing the type of a ForeignKey and changing unique_together
++creates migrations in the wrong order, causing migrations to fail.
++
++The issue is that when we change fka to fkb and update unique_together from ('fka', 'date')
++to ('fkb', 'date'), the migration may have AlterUniqueTogether come AFTER RemoveField(fka),
++which causes a failure because AlterUniqueTogether references fka which no longer exists.
++"""
++import os
++import sys
++
++# Setup Django
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tests.test_sqlite')
++sys.path.insert(0, '/testbed')
++
++import django
++django.setup()
++
++from django.db import models
++from django.db.migrations.autodetector import MigrationAutodetector
++from django.db.migrations.state import ModelState, ProjectState
++from django.db.migrations.operations.models import AddField, RemoveField, AlterUniqueTogether
++
++
++def make_project_state(model_states):
++    """Create a ProjectState from a list of ModelState objects."""
++    state = ProjectState()
++    for model_state in model_states:
++        state.add_model(model_state.clone())
++    return state
++
++
++def get_changes(before_states, after_states):
++    """Get the changes between two sets of model states."""
++    before = make_project_state(before_states)
++    after = make_project_state(after_states)
++    detector = MigrationAutodetector(before, after)
++    return detector._detect_changes()
++
++
++def test_issue_28916():
++    """
++    Test that when changing a ForeignKey type and updating unique_together,
++    AlterUniqueTogether comes BEFORE RemoveField in the migration.
++    """
++    # Build from scratch
++    something_a = ModelState('testapp', 'SomethingA', [
++        ('id', models.AutoField(primary_key=True)),
++        ('name', models.CharField(max_length=100)),
++    ])
++    
++    something_b = ModelState('testapp', 'SomethingB', [
++        ('id', models.AutoField(primary_key=True)),
++        ('name', models.CharField(max_length=100)),
++    ])
++    
++    # Before: MyModel with fka and unique_together = ('fka', 'date')
++    mymodel_before = ModelState('testapp', 'MyModel', [
++        ('id', models.AutoField(primary_key=True)),
++        ('fka', models.ForeignKey('testapp.SomethingA', models.CASCADE)),
++        ('date', models.DateField()),
++    ], {
++        'unique_together': {('fka', 'date')},
++    })
++    
++    # After: MyModel with fkb and unique_together = ('fkb', 'date')
++    mymodel_after = ModelState('testapp', 'MyModel', [
++        ('id', models.AutoField(primary_key=True)),
++        ('fkb', models.ForeignKey('testapp.SomethingB', models.CASCADE)),
++        ('date', models.DateField()),
++    ], {
++        'unique_together': {('fkb', 'date')},
++    })
++    
++    before_states = [
++        something_a,
++        something_b,
++        mymodel_before,
++    ]
++    
++    after_states = [
++        something_a,
++        something_b,
++        mymodel_after,
++    ]
++    
++    changes = get_changes(before_states, after_states)
++    
++    if not changes or 'testapp' not in changes or not changes['testapp']:
++        print("ERROR: No changes detected!")
++        return False
++    
++    migration = changes['testapp'][0]
++    ops = migration.operations
++    
++    print("Generated operations:")
++    for i, op in enumerate(ops):
++        print(f"  {i}: {type(op).__name__}")
++        if hasattr(op, 'name'):
++            print(f"      name={op.name}")
++        if hasattr(op, 'model_name'):
++            print(f"      model_name={op.model_name}")
++        if hasattr(op, 'name_lower'):
++            print(f"      name_lower={op.name_lower}")
++        if hasattr(op, 'field_name'):
++            print(f"      field_name={op.field_name}")
++        if hasattr(op, 'unique_together'):
++            print(f"      unique_together={op.unique_together}")
++    
++    # Check order: AlterUniqueTogether should come BEFORE RemoveField
++    alter_unique_idx = None
++    remove_field_idx = None
++    
++    for i, op in enumerate(ops):
++        if isinstance(op, AlterUniqueTogether):
++            alter_unique_idx = i
++        if isinstance(op, RemoveField) and op.name_lower == 'fka':
++            remove_field_idx = i
++    
++    print(f"\nAlterUniqueTogether index: {alter_unique_idx}")
++    print(f"RemoveField(fka) index: {remove_field_idx}")
++    
++    if alter_unique_idx is not None and remove_field_idx is not None:
++        if alter_unique_idx < remove_field_idx:
++            print("\n✓ SUCCESS: AlterUniqueTogether comes before RemoveField(fka)")
++            return True
++        else:
++            print("\n✗ FAILURE: RemoveField(fka) comes before AlterUniqueTogether")
++            print("  This will cause migration to fail because AlterUniqueTogether")
++            print("  references 'fka' which has already been removed.")
++            return False
++    else:
++        print(f"\n? Could not find both operations (alter_unique={alter_unique_idx}, remove={remove_field_idx})")
++        return False
++
++
++if __name__ == '__main__':
++    success = test_issue_28916()
++    sys.exit(0 if success else 1)

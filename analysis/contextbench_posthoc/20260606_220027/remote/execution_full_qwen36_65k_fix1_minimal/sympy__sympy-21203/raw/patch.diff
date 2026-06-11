@@ -1,0 +1,68 @@
+diff --git a/sympy/assumptions/relation/equality.py b/sympy/assumptions/relation/equality.py
+index 43687e9f44..256c61c3d7 100644
+--- a/sympy/assumptions/relation/equality.py
++++ b/sympy/assumptions/relation/equality.py
+@@ -60,7 +60,7 @@ def negated(self):
+         return Q.ne
+ 
+     def eval(self, args, assumptions=True):
+-        return is_eq(*args)
++        return is_eq(*args, assumptions=assumptions)
+ 
+ 
+ class UnequalityPredicate(BinaryRelation):
+@@ -101,7 +101,7 @@ def negated(self):
+         return Q.eq
+ 
+     def eval(self, args, assumptions=True):
+-        return is_neq(*args)
++        return is_neq(*args, assumptions=assumptions)
+ 
+ 
+ class StrictGreaterThanPredicate(BinaryRelation):
+diff --git a/sympy/assumptions/tests/test_refine.py b/sympy/assumptions/tests/test_refine.py
+index e227081b1d..b03a91990d 100644
+--- a/sympy/assumptions/tests/test_refine.py
++++ b/sympy/assumptions/tests/test_refine.py
+@@ -1,5 +1,5 @@
+ from sympy import (Abs, exp, Expr, I, pi, Q, Rational, refine, S, sqrt,
+-                   atan, atan2, nan, Symbol, re, im, sign, arg)
++                   atan, atan2, nan, Symbol, re, im, sign, arg, ask)
+ from sympy.abc import w, x, y, z
+ from sympy.core.relational import Eq, Ne
+ from sympy.functions.elementary.piecewise import Piecewise
+@@ -212,3 +212,15 @@ def test_matrixelement():
+     assert refine(x[1, 0], Q.symmetric(x)) == x[0, 1]
+     assert refine(x[i, j], Q.symmetric(x)) == x[j, i]
+     assert refine(x[j, i], Q.symmetric(x)) == x[j, i]
++
++
++def test_eq_neq_assumptions():
++    # Test Q.eq with assumptions
++    assert ask(Q.eq(x, 0), Q.zero(x)) is True
++    assert ask(Q.eq(x, 0), Q.positive(x)) is False
++    assert ask(Q.eq(x, y), Q.eq(x, y)) is True
++
++    # Test Q.ne with assumptions
++    assert ask(Q.ne(x, 0), Q.zero(x)) is False
++    assert ask(Q.ne(x, 0), Q.positive(x)) is True
++    assert ask(Q.ne(x, y), Q.ne(x, y)) is True
+diff --git a/sympy/core/relational.py b/sympy/core/relational.py
+index 6c4b5ea5be..4a108f0fd3 100644
+--- a/sympy/core/relational.py
++++ b/sympy/core/relational.py
+@@ -1242,12 +1242,12 @@ def is_ge(lhs, rhs):
+                     return rv
+ 
+ 
+-def is_neq(lhs, rhs):
++def is_neq(lhs, rhs, assumptions=None):
+     """Fuzzy bool for lhs does not equal rhs.
+ 
+     See the docstring for is_eq for more
+     """
+-    return fuzzy_not(is_eq(lhs, rhs))
++    return fuzzy_not(is_eq(lhs, rhs, assumptions))
+ 
+ 
+ def is_eq(lhs, rhs, assumptions=None):

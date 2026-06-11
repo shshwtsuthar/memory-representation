@@ -1,0 +1,50 @@
+diff --git a/django/utils/tree.py b/django/utils/tree.py
+index cb45c7ee29..be2bb5ce4d 100644
+--- a/django/utils/tree.py
++++ b/django/utils/tree.py
+@@ -70,10 +70,20 @@ class Node:
+             self.children == other.children
+         )
+ 
++    def _make_hashable(self, value):
++        if isinstance(value, list):
++            return tuple(self._make_hashable(item) for item in value)
++        elif isinstance(value, tuple):
++            return tuple(self._make_hashable(item) for item in value)
++        elif isinstance(value, dict):
++            return tuple(sorted((k, self._make_hashable(v)) for k, v in value.items()))
++        elif isinstance(value, set):
++            return frozenset(self._make_hashable(item) for item in value)
++        return value
++
+     def __hash__(self):
+         return hash((self.__class__, self.connector, self.negated, *[
+-            tuple(child) if isinstance(child, list) else child
+-            for child in self.children
++            self._make_hashable(child) for child in self.children
+         ]))
+ 
+     def add(self, data, conn_type, squash=True):
+diff --git a/tests/utils_tests/test_tree.py b/tests/utils_tests/test_tree.py
+index c59398aedb..520e991f0a 100644
+--- a/tests/utils_tests/test_tree.py
++++ b/tests/utils_tests/test_tree.py
+@@ -31,6 +31,18 @@ class NodeTests(unittest.TestCase):
+         self.assertEqual(hash(self.node1), hash(node6))
+         self.assertEqual(hash(self.node2), hash(Node()))
+ 
++    def test_hash_with_list_values(self):
++        # Regression test for #29643 - hashing Q objects with __in lookups
++        # that contain lists should not raise TypeError
++        node_with_list = Node([('a', [1, 2])])
++        self.assertEqual(hash(node_with_list), hash(Node([('a', [1, 2])])))
++        # Test with nested lists
++        node_with_nested_list = Node([('a', [[1, 2], [3, 4]])])
++        hash(node_with_nested_list)  # Should not raise
++        # Test with dicts containing lists
++        node_with_dict = Node([('a', {'key': [1, 2]})])
++        hash(node_with_dict)  # Should not raise
++
+     def test_len(self):
+         self.assertEqual(len(self.node1), 2)
+         self.assertEqual(len(self.node2), 0)

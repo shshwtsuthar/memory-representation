@@ -1,0 +1,50 @@
+diff --git a/sympy/utilities/codegen.py b/sympy/utilities/codegen.py
+index f0befb2bd..cd2c3a354 100644
+--- a/sympy/utilities/codegen.py
++++ b/sympy/utilities/codegen.py
+@@ -739,7 +739,14 @@ def routine(self, name, expr, argument_sequence=None, global_vars=None):
+                 try:
+                     new_args.append(name_arg_dict[symbol])
+                 except KeyError:
+-                    new_args.append(InputArgument(symbol))
++                    # symbol is not in the expression, check if it's a MatrixSymbol
++                    if isinstance(symbol, MatrixSymbol):
++                        dims = []
++                        for dim in symbol.shape:
++                            dims.append((S.Zero, dim - 1))
++                        new_args.append(InputArgument(symbol, dimensions=dims))
++                    else:
++                        new_args.append(InputArgument(symbol))
+             arg_list = new_args
+ 
+         return Routine(name, arg_list, return_val, local_vars, global_vars)
+diff --git a/sympy/utilities/tests/test_codegen.py b/sympy/utilities/tests/test_codegen.py
+index 1cd56e12d..4d5fdeb2e 100644
+--- a/sympy/utilities/tests/test_codegen.py
++++ b/sympy/utilities/tests/test_codegen.py
+@@ -1556,3 +1556,25 @@ def test_fcode_complex():
+         )
+     assert source==expected
+     sympy.utilities.codegen.COMPLEX_ALLOWED = False
++
++
++def test_codegen_matrixsymbol_argument_sequence():
++    """Test that MatrixSymbol arguments in argument_sequence get correct type
++    even when not present in the expression. See sympy/sympy#16689."""
++    X = MatrixSymbol('X', 3, 1)
++    Y = MatrixSymbol('Y', 3, 1)
++    z = symbols('z', integer=True)
++
++    # Y is not in expression but in argument_sequence
++    [(cf, cs), (hf, hs)] = codegen(('testBug', X[0]+X[1]),
++           language='c', argument_sequence=(X, Y, z))
++    # Y should be double* not double
++    assert 'double *Y' in hs
++    assert 'double testBug(double *X, double *Y, int z)' in hs
++
++    # X is in expression, should also be double*
++    [(cf, cs), (hf, hs)] = codegen(('testBug', X[0]+X[1]+Y[0]),
++           language='c', argument_sequence=(X, Y, z))
++    assert 'double *X' in hs
++    assert 'double *Y' in hs
++    assert 'double testBug(double *X, double *Y, int z)' in hs

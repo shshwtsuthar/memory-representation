@@ -1,0 +1,45 @@
+diff --git a/django/db/models/query_utils.py b/django/db/models/query_utils.py
+index c2623f099f..182e706cf2 100644
+--- a/django/db/models/query_utils.py
++++ b/django/db/models/query_utils.py
+@@ -46,10 +46,18 @@ class Q(tree.Node):
+ 
+         # If the other Q() is empty, ignore it and just use `self`.
+         if not other:
+-            return copy.deepcopy(self)
++            obj = self.__class__()
++            obj.connector = self.connector
++            obj.negated = self.negated
++            obj.children = self.children[:]
++            return obj
+         # Or if this Q is empty, ignore it and just use `other`.
+         elif not self:
+-            return copy.deepcopy(other)
++            obj = other.__class__()
++            obj.connector = other.connector
++            obj.negated = other.negated
++            obj.children = other.children[:]
++            return obj
+ 
+         obj = type(self)()
+         obj.connector = conn
+diff --git a/tests/queries/test_q.py b/tests/queries/test_q.py
+index 9adff07ef2..1d5c058e29 100644
+--- a/tests/queries/test_q.py
++++ b/tests/queries/test_q.py
+@@ -19,6 +19,15 @@ class QTests(SimpleTestCase):
+     def test_combine_or_both_empty(self):
+         self.assertEqual(Q() | Q(), Q())
+ 
++    def test_combine_with_non_pickleable_value(self):
++        # Q objects containing non-pickleable values (e.g., dict_keys)
++        # should not raise TypeError when combined with | or & operators.
++        q = Q(x__in={}.keys())
++        self.assertEqual(Q() | q, q)
++        self.assertEqual(q | Q(), q)
++        self.assertEqual(Q() & q, q)
++        self.assertEqual(q & Q(), q)
++
+     def test_combine_not_q_object(self):
+         obj = object()
+         q = Q(x=1)

@@ -1,0 +1,45 @@
+diff --git a/src/flask/app.py b/src/flask/app.py
+index f0f31486..114ac3a1 100644
+--- a/src/flask/app.py
++++ b/src/flask/app.py
+@@ -2073,4 +2073,9 @@ class Flask(Scaffold):
+         if _request_ctx_stack.top.request.blueprint is None:
+             return []
+         else:
+-            return reversed(_request_ctx_stack.top.request.blueprint.split("."))
++            bp = _request_ctx_stack.top.request.blueprint
++            parts = bp.split(".")
++            if len(parts) > 1:
++                return [bp] + list(reversed(parts))
++            else:
++                return reversed(parts)
+diff --git a/tests/test_blueprints.py b/tests/test_blueprints.py
+index b986ca02..2df42c93 100644
+--- a/tests/test_blueprints.py
++++ b/tests/test_blueprints.py
+@@ -899,3 +899,25 @@ def test_nested_blueprint(app, client):
+     assert client.get("/parent/no").data == b"Parent no"
+     assert client.get("/parent/child/no").data == b"Parent no"
+     assert client.get("/parent/child/grandchild/no").data == b"Grandchild no"
++
++
++def test_dotted_blueprint_error_handler(app, client):
++    """Test that error handlers on blueprints with dots in their names are called."""
++    bp = flask.Blueprint("app.ui", __name__, url_prefix="/ui")
++    errors_handled = []
++
++    @bp.errorhandler(Exception)
++    def ui_error_handler(error):
++        errors_handled.append("handled")
++        return str(error), 500
++
++    @bp.route("/")
++    def ui_index():
++        raise Exception("test error")
++
++    app.register_blueprint(bp)
++
++    rv = client.get("/ui/")
++    assert rv.status_code == 500
++    assert rv.data == b"test error"
++    assert errors_handled == ["handled"]

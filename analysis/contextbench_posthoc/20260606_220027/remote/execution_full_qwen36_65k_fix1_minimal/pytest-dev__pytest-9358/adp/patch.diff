@@ -1,0 +1,76 @@
+diff --git a/src/_pytest/tmpdir.py b/src/_pytest/tmpdir.py
+index 29c7e19d7..c91564550 100644
+--- a/src/_pytest/tmpdir.py
++++ b/src/_pytest/tmpdir.py
+@@ -149,14 +149,24 @@ class TempdirFactory:
+ 
+ 
+ def get_user() -> Optional[str]:
+-    """Return the current user name, or None if getuser() does not work
+-    in the current environment (see #1010)."""
++    """Return the current user name (a.k.a. login name) as a string, or
++    ``None`` if getuser() does not work in the current environment (see #1010).
++
++    The username is sanitized to contain only characters valid for directory
++    names (alphanumeric, hyphen, underscore, dot, and at-sign). This is to
++    prevent issues when the username contains characters that are illegal for
++    directory names, such as backslashes in Windows domain usernames
++    (e.g., ``domain\\user``).
++    """
+     import getpass
+ 
+     try:
+-        return getpass.getuser()
++        user = getpass.getuser()
+     except (ImportError, KeyError):
+         return None
++    # Sanitize the username to only contain characters valid for directory names.
++    # Replace any character not in [a-zA-Z0-9_\-.@] with an underscore.
++    return re.sub(r"[^\w\-\.@]", "_", user)
+ 
+ 
+ def pytest_configure(config: Config) -> None:
+diff --git a/testing/test_tmpdir.py b/testing/test_tmpdir.py
+index d123287aa..638159105 100644
+--- a/testing/test_tmpdir.py
++++ b/testing/test_tmpdir.py
+@@ -246,6 +246,39 @@ def test_get_user(monkeypatch):
+     assert get_user() is None
+ 
+ 
++def test_get_user_sanitizes_illegal_characters(monkeypatch):
++    """Test that get_user() sanitizes illegal directory name characters.
++    
++    This is important for Windows domain usernames like 'domain\\user' which
++    contain backslashes that are illegal in directory names (#9358).
++    """
++    import getpass
++    
++    original_getuser = getpass.getuser
++    try:
++        # Simulate a Windows domain username with a backslash
++        monkeypatch.setattr(getpass, "getuser", lambda: r"domain\user")
++        result = get_user()
++        assert result == "domain_user", f"Expected 'domain_user', got '{result}'"
++        
++        # Test with other illegal characters
++        monkeypatch.setattr(getpass, "getuser", lambda: "user/name")
++        result = get_user()
++        assert result == "user_name", f"Expected 'user_name', got '{result}'"
++        
++        # Test with forward slashes
++        monkeypatch.setattr(getpass, "getuser", lambda: "path/to/user")
++        result = get_user()
++        assert result == "path_to_user", f"Expected 'path_to_user', got '{result}'"
++        
++        # Test that valid characters are preserved
++        monkeypatch.setattr(getpass, "getuser", lambda: "john.doe-123@domain")
++        result = get_user()
++        assert result == "john.doe-123@domain", f"Expected 'john.doe-123@domain', got '{result}'"
++    finally:
++        getpass.getuser = original_getuser
++
++
+ class TestNumberedDir:
+     PREFIX = "fun-"
+ 

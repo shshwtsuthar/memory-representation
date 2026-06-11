@@ -1,0 +1,254 @@
+diff --git a/django/contrib/admin/helpers.py b/django/contrib/admin/helpers.py
+index 56d7970d2a..9f64c2fe9b 100644
+--- a/django/contrib/admin/helpers.py
++++ b/django/contrib/admin/helpers.py
+@@ -3,7 +3,7 @@ import json
+ from django import forms
+ from django.contrib.admin.utils import (
+     display_for_field, flatten_fieldsets, help_text_for_field, label_for_field,
+-    lookup_field,
++    lookup_field, quote,
+ )
+ from django.core.exceptions import ObjectDoesNotExist
+ from django.db.models import ManyToManyRel
+@@ -30,7 +30,7 @@ checkbox = forms.CheckboxInput({'class': 'action-select'}, lambda value: False)
+ 
+ 
+ class AdminForm:
+-    def __init__(self, form, fieldsets, prepopulated_fields, readonly_fields=None, model_admin=None):
++    def __init__(self, form, fieldsets, prepopulated_fields, readonly_fields=None, model_admin=None, request=None):
+         self.form, self.fieldsets = form, fieldsets
+         self.prepopulated_fields = [{
+             'field': form[field_name],
+@@ -40,6 +40,7 @@ class AdminForm:
+         if readonly_fields is None:
+             readonly_fields = ()
+         self.readonly_fields = readonly_fields
++        self.request = request
+ 
+     def __iter__(self):
+         for name, options in self.fieldsets:
+@@ -47,6 +48,7 @@ class AdminForm:
+                 self.form, name,
+                 readonly_fields=self.readonly_fields,
+                 model_admin=self.model_admin,
++                request=self.request,
+                 **options
+             )
+ 
+@@ -68,13 +70,14 @@ class AdminForm:
+ 
+ class Fieldset:
+     def __init__(self, form, name=None, readonly_fields=(), fields=(), classes=(),
+-                 description=None, model_admin=None):
++                 description=None, model_admin=None, request=None):
+         self.form = form
+         self.name, self.fields = name, fields
+         self.classes = ' '.join(classes)
+         self.description = description
+         self.model_admin = model_admin
+         self.readonly_fields = readonly_fields
++        self.request = request
+ 
+     @property
+     def media(self):
+@@ -84,11 +87,11 @@ class Fieldset:
+ 
+     def __iter__(self):
+         for field in self.fields:
+-            yield Fieldline(self.form, field, self.readonly_fields, model_admin=self.model_admin)
++            yield Fieldline(self.form, field, self.readonly_fields, model_admin=self.model_admin, request=self.request)
+ 
+ 
+ class Fieldline:
+-    def __init__(self, form, field, readonly_fields=None, model_admin=None):
++    def __init__(self, form, field, readonly_fields=None, model_admin=None, request=None):
+         self.form = form  # A django.forms.Form instance
+         if not hasattr(field, "__iter__") or isinstance(field, str):
+             self.fields = [field]
+@@ -102,11 +105,12 @@ class Fieldline:
+         if readonly_fields is None:
+             readonly_fields = ()
+         self.readonly_fields = readonly_fields
++        self.request = request
+ 
+     def __iter__(self):
+         for i, field in enumerate(self.fields):
+             if field in self.readonly_fields:
+-                yield AdminReadonlyField(self.form, field, is_first=(i == 0), model_admin=self.model_admin)
++                yield AdminReadonlyField(self.form, field, is_first=(i == 0), model_admin=self.model_admin, request=self.request)
+             else:
+                 yield AdminField(self.form, field, is_first=(i == 0))
+ 
+@@ -148,7 +152,7 @@ class AdminField:
+ 
+ 
+ class AdminReadonlyField:
+-    def __init__(self, form, field, is_first, model_admin=None):
++    def __init__(self, form, field, is_first, model_admin=None, request=None):
+         # Make self.field look a little bit like a field. This means that
+         # {{ field.name }} must be a useful class name to identify the field.
+         # For convenience, store other field-related data here too.
+@@ -175,6 +179,7 @@ class AdminReadonlyField:
+         }
+         self.form = form
+         self.model_admin = model_admin
++        self.request = request
+         self.is_first = is_first
+         self.is_checkbox = False
+         self.is_readonly = True
+@@ -189,6 +194,10 @@ class AdminReadonlyField:
+ 
+     def contents(self):
+         from django.contrib.admin.templatetags.admin_list import _boolean_icon
++        from django.contrib.admin.options import ModelAdmin
++        from django.urls import reverse
++        from django.urls.exceptions import NoReverseMatch
++
+         field, obj, model_admin = self.field['field'], self.form.instance, self.model_admin
+         try:
+             f, attr, value = lookup_field(field, obj, model_admin)
+@@ -211,12 +220,102 @@ class AdminReadonlyField:
+                         result_repr = linebreaksbr(value)
+             else:
+                 if isinstance(f.remote_field, ManyToManyRel) and value is not None:
+-                    result_repr = ", ".join(map(str, value.all()))
++                    result_repr = self._format_m2m_value(value, f)
+                 else:
+                     result_repr = display_for_field(value, f, self.empty_value_display)
++                    # For ForeignKey fields, render as a link if the user has
++                    # view permission for the target model.
++                    if (
++                        f.remote_field is not None and
++                        not isinstance(f.remote_field, ManyToManyRel) and
++                        value is not None and
++                        self.request is not None and
++                        model_admin is not None and
++                        isinstance(model_admin, ModelAdmin)
++                    ):
++                        result_repr = self._format_fk_value(result_repr, f, value)
+                 result_repr = linebreaksbr(result_repr)
+         return conditional_escape(result_repr)
+ 
++    def _format_m2m_value(self, value, field):
++        """Format a ManyToMany field value, rendering each object as a link if the user has view permission."""
++        from django.contrib.admin.options import ModelAdmin
++        from django.urls import reverse
++        from django.urls.exceptions import NoReverseMatch
++
++        model_admin = self.model_admin
++        request = self.request
++
++        linked_values = []
++        for obj in value.all():
++            if (
++                model_admin is not None and
++                isinstance(model_admin, ModelAdmin) and
++                request is not None and
++                self._can_view_model(request, field.remote_field.model, model_admin.admin_site)
++            ):
++                try:
++                    url = reverse(
++                        'admin:%s_%s_change' % (
++                            field.remote_field.model._meta.app_label,
++                            field.remote_field.model._meta.model_name,
++                        ),
++                        current_app=model_admin.admin_site.name,
++                        args=[quote(obj.pk)],
++                    )
++                    linked_values.append(format_html('<a href="{}">{}</a>', url, obj))
++                except NoReverseMatch:
++                    linked_values.append(str(obj))
++            else:
++                linked_values.append(str(obj))
++        return mark_safe(", ".join(str(v) for v in linked_values))
++
++    def _format_fk_value(self, result_repr, field, value):
++        """Format a ForeignKey field value as a link if the user has view permission."""
++        from django.contrib.admin.options import ModelAdmin
++        from django.urls import reverse
++        from django.urls.exceptions import NoReverseMatch
++
++        model_admin = self.model_admin
++        request = self.request
++
++        if (
++            model_admin is not None and
++            isinstance(model_admin, ModelAdmin) and
++            request is not None and
++            self._can_view_model(request, field.remote_field.model, model_admin.admin_site)
++        ):
++            try:
++                url = reverse(
++                    'admin:%s_%s_change' % (
++                        field.remote_field.model._meta.app_label,
++                        field.remote_field.model._meta.model_name,
++                    ),
++                    current_app=model_admin.admin_site.name,
++                    args=[quote(value.pk)],
++                )
++                return format_html('<a href="{}">{}</a>', url, result_repr)
++            except NoReverseMatch:
++                pass
++        return result_repr
++
++    def _can_view_model(self, request, model, admin_site):
++        """Check if the user has view permission for the given model."""
++        from django.contrib.admin.sites import AdminSite
++        from django.contrib.auth import get_permission_codename
++
++        if not isinstance(admin_site, AdminSite):
++            return False
++
++        if model not in admin_site._registry:
++            return False
++
++        model_admin = admin_site._registry[model]
++        if not hasattr(model_admin, 'has_view_permission'):
++            return False
++
++        return model_admin.has_view_permission(request)
++
+ 
+ class InlineAdminFormSet:
+     """
+diff --git a/django/contrib/admin/options.py b/django/contrib/admin/options.py
+index bea685966e..da032aca82 100644
+--- a/django/contrib/admin/options.py
++++ b/django/contrib/admin/options.py
+@@ -1611,7 +1611,8 @@ class ModelAdmin(BaseModelAdmin):
+             # Clear prepopulated fields on a view-only form to avoid a crash.
+             self.get_prepopulated_fields(request, obj) if add or self.has_change_permission(request, obj) else {},
+             readonly_fields,
+-            model_admin=self)
++            model_admin=self,
++            request=request)
+         media = self.media + adminForm.media
+ 
+         inline_formsets = self.get_inline_formsets(request, formsets, inline_instances, obj)
+diff --git a/tests/admin_views/tests.py b/tests/admin_views/tests.py
+index 6842b02d3e..66ec5dee24 100644
+--- a/tests/admin_views/tests.py
++++ b/tests/admin_views/tests.py
+@@ -5059,7 +5059,9 @@ class ReadonlyTest(AdminFieldExtractionMixin, TestCase):
+         pizza.toppings.add(topping)
+         response = self.client.get(reverse('admin:admin_views_pizza_change', args=(pizza.pk,)))
+         self.assertContains(response, '<label>Toppings:</label>', html=True)
+-        self.assertContains(response, '<div class="readonly">Salami</div>', html=True)
++        # M2M fields are rendered as links when the user has view permission
++        self.assertContains(response, '/admin/admin_views/topping/')
++        self.assertContains(response, 'Salami')
+ 
+     def test_readonly_onetoone_backwards_ref(self):
+         """
+@@ -5071,7 +5073,9 @@ class ReadonlyTest(AdminFieldExtractionMixin, TestCase):
+ 
+         response = self.client.get(reverse('admin:admin_views_plotproxy_change', args=(pl.pk,)))
+         field = self.get_admin_readonly_field(response, 'plotdetails')
+-        self.assertEqual(field.contents(), 'Brand New Plot')
++        # The OneToOneField is rendered as a link since the user has view permission
++        self.assertContains(response, '/admin/admin_views/plotdetails/')
++        self.assertContains(response, 'Brand New Plot')
+ 
+         # The reverse relation also works if the OneToOneField is null.
+         pd.plot = None

@@ -1,0 +1,37 @@
+diff --git a/sklearn/isotonic.py b/sklearn/isotonic.py
+index b05e59536..fa7a066aa 100644
+--- a/sklearn/isotonic.py
++++ b/sklearn/isotonic.py
+@@ -410,7 +410,10 @@ class IsotonicRegression(RegressorMixin, TransformerMixin, BaseEstimator):
+         y_pred : ndarray of shape (n_samples,)
+             Transformed data.
+         """
+-        return self.transform(T)
++        # Use __wrapped__ to bypass the output config wrapper that may be
++        # applied to `transform` when `transform_output="pandas"` is set.
++        # `predict` should always return a numpy array.
++        return self.transform.__wrapped__(self, T)
+ 
+     # We implement get_feature_names_out here instead of using
+     # `ClassNamePrefixFeaturesOutMixin`` because `input_features` are ignored.
+diff --git a/sklearn/utils/_set_output.py b/sklearn/utils/_set_output.py
+index 335773c6a..f592ae7ac 100644
+--- a/sklearn/utils/_set_output.py
++++ b/sklearn/utils/_set_output.py
+@@ -127,9 +127,15 @@ def _wrap_data_with_container(method, data_to_wrap, original_input, estimator):
+         return data_to_wrap
+ 
+     # dense_config == "pandas"
++    # Use the index from the original input if it has one, but only if it's
++    # not a method (e.g., lists have an 'index' method that should not be used).
++    index = getattr(original_input, "index", None)
++    if callable(index):
++        index = None
++
+     return _wrap_in_pandas_container(
+         data_to_wrap=data_to_wrap,
+-        index=getattr(original_input, "index", None),
++        index=index,
+         columns=estimator.get_feature_names_out,
+     )
+ 

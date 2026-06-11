@@ -1,0 +1,39 @@
+diff --git a/requests/utils.py b/requests/utils.py
+index 6a3ed90e..8cec6f90 100644
+--- a/requests/utils.py
++++ b/requests/utils.py
+@@ -369,11 +369,11 @@ def stream_decode_response_unicode(iterator, r):
+     """Stream decodes a iterator."""
+ 
+     if r.encoding is None:
+-        for item in iterator:
+-            yield item
+-        return
++        encoding = r.apparent_encoding
++    else:
++        encoding = r.encoding
+ 
+-    decoder = codecs.getincrementaldecoder(r.encoding)(errors='replace')
++    decoder = codecs.getincrementaldecoder(encoding)(errors='replace')
+     for chunk in iterator:
+         rv = decoder.decode(chunk)
+         if rv:
+diff --git a/tests/test_requests.py b/tests/test_requests.py
+index d8d7ea54..3bf1c6bf 100755
+--- a/tests/test_requests.py
++++ b/tests/test_requests.py
+@@ -1042,6 +1042,14 @@ class TestRequests:
+         chunks = r.iter_content(decode_unicode=True)
+         assert all(isinstance(chunk, str) for chunk in chunks)
+ 
++        # also when encoding is None (should use apparent_encoding)
++        r = requests.Response()
++        r._content_consumed = True
++        r._content = b'the content'
++        r.encoding = None
++        chunks = r.iter_content(decode_unicode=True)
++        assert all(isinstance(chunk, str) for chunk in chunks)
++
+     def test_response_reason_unicode(self):
+         # check for unicode HTTP status
+         r = requests.Response()

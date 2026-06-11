@@ -1,0 +1,47 @@
+diff --git a/test_issue_repro.py b/test_issue_repro.py
+new file mode 100644
+index 00000000..0aee5aff
+--- /dev/null
++++ b/test_issue_repro.py
+@@ -0,0 +1,41 @@
++"""Test to reproduce the iter_lines decode_unicode issue."""
++import io
++import requests
++
++
++def test_iter_lines_decode_unicode_streamed():
++    """Test that iter_lines with decode_unicode=True works on streamed response."""
++    r = requests.Response()
++    r.raw = io.BytesIO(b'line1\nline2\nline3\n')
++    r.encoding = 'ascii'
++    r._content_consumed = False
++    
++    # This should not raise an error
++    lines = list(r.iter_lines(chunk_size=1024, decode_unicode=True))
++    
++    # Verify the lines are unicode strings
++    assert all(isinstance(line, str) for line in lines), f"Expected str, got {[type(l) for l in lines]}"
++    assert lines == ['line1', 'line2', 'line3']
++    print("PASS: iter_lines(decode_unicode=True) works correctly on streamed response")
++
++
++def test_iter_content_decode_unicode_streamed():
++    """Test that iter_content with decode_unicode=True works on streamed response."""
++    r = requests.Response()
++    r.raw = io.BytesIO(b'the content')
++    r.encoding = 'ascii'
++    r._content_consumed = False
++    
++    chunks = list(r.iter_content(chunk_size=5, decode_unicode=True))
++    
++    # Verify the chunks are unicode strings
++    assert all(isinstance(chunk, str) for chunk in chunks), f"Expected str, got {[type(c) for c in chunks]}"
++    # Join chunks and verify content
++    assert ''.join(chunks) == 'the content'
++    print("PASS: iter_content(decode_unicode=True) works correctly on streamed response")
++
++
++if __name__ == '__main__':
++    test_iter_content_decode_unicode_streamed()
++    test_iter_lines_decode_unicode_streamed()
++    print("\nAll tests passed!")

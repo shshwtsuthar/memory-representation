@@ -1,0 +1,323 @@
+diff --git a/sympy/ntheory/residue_ntheory.py b/sympy/ntheory/residue_ntheory.py
+index 9a3052d4c3..f11a2f0729 100644
+--- a/sympy/ntheory/residue_ntheory.py
++++ b/sympy/ntheory/residue_ntheory.py
+@@ -743,6 +743,180 @@ def _nthroot_mod1(s, q, p, all_roots):
+     return min(res)
+ 
+ 
++def _nthroot_mod_prime_power(a, n, p, k, all_roots):
++    """
++    Find the nth root of ``a`` modulo ``p**k`` where ``p`` is prime.
++
++    Parameters
++    ==========
++
++    a : integer
++        The number to find the root of
++    n : integer
++        The degree of the root
++    p : integer
++        A prime number
++    k : integer
++        The power of the prime
++    all_roots : boolean
++        If True, return all roots; otherwise return the smallest root
++
++    Returns
++    =======
++
++    root : integer or list
++        The nth root(s) of ``a`` modulo ``p**k``
++    """
++    from sympy.polys.galoistools import gf_crt1, gf_crt2
++    from sympy.polys.domains import ZZ
++
++    pk = p**k
++    a = a % pk
++
++    if a == 0:
++        # x**n = 0 mod p**k => x = 0 mod p**ceil(k/n)
++        # The smallest root is 0
++        if all_roots:
++            return [0]
++        return 0
++
++    # Find the multiplicity of p in a
++    mu = multiplicity(p, a)
++    if mu > 0:
++        # a = p**mu * a', where a' is not divisible by p
++        # x**n = p**mu * a' mod p**k
++        # x = p**j * x', where x' is not divisible by p
++        # n*j = mu, so j = mu/n must be an integer
++        if mu % n != 0:
++            return None if all_roots else None
++        j = mu // n
++        a_prime = a // (p**mu)
++        # Now solve x'**n = a' mod p**(k-mu)
++        if k <= mu:
++            # All x divisible by p**j are solutions
++            res = []
++            for x in range(pk):
++                if x % (p**j) == 0 and pow(x, n, pk) == a:
++                    res.append(x)
++            if not res:
++                return None if all_roots else None
++            if all_roots:
++                return sorted(res)
++            return min(res)
++        res = _nthroot_mod_prime_power(a_prime, n, p, k - mu, all_roots)
++        if res is None:
++            return None
++        if all_roots:
++            return [r * (p**j) % pk for r in res]
++        return (res * (p**j)) % pk
++
++    # a is coprime to p, so we can use the primitive root approach
++    # First find roots mod p
++    if k == 1:
++        if (p - 1) % n == 0:
++            return _nthroot_mod1(a, n, p, all_roots)
++        else:
++            # Use the Euclidean-like algorithm
++            from sympy.core.numbers import igcdex
++            pa = n
++            pb = p - 1
++            b = 1
++            aa = a
++            if pa < pb:
++                aa, pa, b, pb = b, pb, aa, pa
++            while pb:
++                q, r = divmod(pa, pb)
++                c = pow(b, q, p)
++                c = igcdex(c, p)[0]
++                c = (c * aa) % p
++                pa, pb = pb, r
++                aa, b = b, c
++            if pa == 1:
++                if all_roots:
++                    return [aa]
++                return aa
++            elif pa == 2:
++                return sqrt_mod(aa, p, all_roots)
++            else:
++                return _nthroot_mod1(aa, pa, p, all_roots)
++    else:
++        # k > 1: find roots mod p, then lift using Hensel lifting
++        # First find roots mod p
++        if (p - 1) % n == 0:
++            roots_mod_p = _nthroot_mod1(a, n, p, True)
++        else:
++            # Use the Euclidean-like algorithm
++            from sympy.core.numbers import igcdex
++            pa = n
++            pb = p - 1
++            b = 1
++            aa = a
++            if pa < pb:
++                aa, pa, b, pb = b, pb, aa, pa
++            while pb:
++                q, r = divmod(pa, pb)
++                c = pow(b, q, p)
++                c = igcdex(c, p)[0]
++                c = (c * aa) % p
++                pa, pb = pb, r
++                aa, b = b, c
++            if pa == 1:
++                roots_mod_p = [aa]
++            elif pa == 2:
++                roots_mod_p = sqrt_mod(aa, p, True)
++            else:
++                roots_mod_p = _nthroot_mod1(aa, pa, p, True)
++
++        if roots_mod_p is None:
++            return None
++
++        # Lift each root from mod p to mod p**k using Hensel lifting
++        all_roots_lifted = []
++        for x0 in roots_mod_p:
++            x = x0
++            for i in range(1, k):
++                # Lift from mod p**i to mod p**(i+1)
++                # f(x) = x**n - a, f'(x) = n*x**(n-1)
++                # x_new = x - f(x)/f'(x) mod p**(i+1)
++                # f(x) mod p**(i+1)
++                f_x = (pow(x, n, pk) - a) % pk
++                if f_x == 0:
++                    break
++                # f'(x) mod p
++                fp_x = (n * pow(x, n - 1, p)) % p
++                if fp_x == 0:
++                    # Derivative is 0 mod p, need to try all lifts
++                    # x = x0 + t*p**i for t in 0..p-1
++                    found = False
++                    for t in range(p):
++                        x_candidate = x + t * (p**i)
++                        if pow(x_candidate, n, pk) == a:
++                            x = x_candidate
++                            found = True
++                            break
++                    if not found:
++                        x = None
++                        break
++                else:
++                    # fp_x is invertible mod p
++                    fp_inv = igcdex(fp_x, p)[0]
++                    # f_x is divisible by p**i (since x is a root mod p**i)
++                    # We need f_x / (p**i) * fp_inv mod p
++                    f_x_div = (f_x // (p**i)) % p
++                    t = (f_x_div * fp_inv) % p
++                    x = x - t * (p**i)
++                    x = x % pk
++            if x is not None:
++                all_roots_lifted.append(x)
++
++        if not all_roots_lifted:
++            return None
++
++        if all_roots:
++            return sorted(all_roots_lifted)
++        return min(all_roots_lifted)
++
++
+ def nthroot_mod(a, n, p, all_roots=False):
+     """
+     Find the solutions to ``x**n = a mod p``
+@@ -767,44 +941,74 @@ def nthroot_mod(a, n, p, all_roots=False):
+     23
+     """
+     from sympy.core.numbers import igcdex
++    from sympy.polys.galoistools import gf_crt1, gf_crt2
++    from sympy.polys.domains import ZZ
+     a, n, p = as_int(a), as_int(n), as_int(p)
+     if n == 2:
+         return sqrt_mod(a, p, all_roots)
+     # see Hackman "Elementary Number Theory" (2009), page 76
+     if not is_nthpow_residue(a, n, p):
+         return None
+-    if not isprime(p):
+-        raise NotImplementedError("Not implemented for composite p")
+-
+-    if (p - 1) % n == 0:
+-        return _nthroot_mod1(a, n, p, all_roots)
+-    # The roots of ``x**n - a = 0 (mod p)`` are roots of
+-    # ``gcd(x**n - a, x**(p - 1) - 1) = 0 (mod p)``
+-    pa = n
+-    pb = p - 1
+-    b = 1
+-    if pa < pb:
+-        a, pa, b, pb = b, pb, a, pa
+-    while pb:
+-        # x**pa - a = 0; x**pb - b = 0
+-        # x**pa - a = x**(q*pb + r) - a = (x**pb)**q * x**r - a =
+-        #             b**q * x**r - a; x**r - c = 0; c = b**-q * a mod p
+-        q, r = divmod(pa, pb)
+-        c = pow(b, q, p)
+-        c = igcdex(c, p)[0]
+-        c = (c * a) % p
+-        pa, pb = pb, r
+-        a, b = b, c
+-    if pa == 1:
+-        if all_roots:
+-            res = [a]
++
++    if isprime(p):
++        if (p - 1) % n == 0:
++            return _nthroot_mod1(a, n, p, all_roots)
++        # The roots of ``x**n - a = 0 (mod p)`` are roots of
++        # ``gcd(x**n - a, x**(p - 1) - 1) = 0 (mod p)``
++        pa = n
++        pb = p - 1
++        b = 1
++        if pa < pb:
++            a, pa, b, pb = b, pb, a, pa
++        while pb:
++            # x**pa - a = 0; x**pb - b = 0
++            # x**pa - a = x**(q*pb + r) - a = (x**pb)**q * x**r - a =
++            #             b**q * x**r - a; x**r - c = 0; c = b**-q * a mod p
++            q, r = divmod(pa, pb)
++            c = pow(b, q, p)
++            c = igcdex(c, p)[0]
++            c = (c * a) % p
++            pa, pb = pb, r
++            a, b = b, c
++        if pa == 1:
++            if all_roots:
++                res = [a]
++            else:
++                res = a
++        elif pa == 2:
++            return sqrt_mod(a, p , all_roots)
+         else:
+-            res = a
+-    elif pa == 2:
+-        return sqrt_mod(a, p , all_roots)
++            res = _nthroot_mod1(a, pa, p, all_roots)
++        return res
+     else:
+-        res = _nthroot_mod1(a, pa, p, all_roots)
+-    return res
++        # p is composite, use CRT
++        # Factor p into prime powers
++        factors = factorint(p)
++        prime_powers = []
++        roots_lists = []
++        for px, kx in factors.items():
++            pk = px**kx
++            roots = _nthroot_mod_prime_power(a, n, px, kx, True)
++            if roots is None:
++                return None
++            prime_powers.append(pk)
++            roots_lists.append(roots)
++
++        # Combine using CRT
++        if all_roots:
++            from sympy.core.compatibility import reduce
++            mm, e, s = gf_crt1(prime_powers, ZZ)
++            result = []
++            for roots in _product(*roots_lists):
++                r = gf_crt2(roots, prime_powers, mm, e, s, ZZ)
++                result.append(r)
++            return sorted(result)
++        else:
++            # Get the smallest root for each prime power
++            mm, e, s = gf_crt1(prime_powers, ZZ)
++            roots = [min(rl) for rl in roots_lists]
++            r = gf_crt2(roots, prime_powers, mm, e, s, ZZ)
++            return r
+ 
+ 
+ def quadratic_residues(p):
+diff --git a/sympy/ntheory/tests/test_residue.py b/sympy/ntheory/tests/test_residue.py
+index d4854547be..e0411d3970 100644
+--- a/sympy/ntheory/tests/test_residue.py
++++ b/sympy/ntheory/tests/test_residue.py
+@@ -162,7 +162,9 @@ def test_residue():
+     assert is_nthpow_residue(31, 4, 41)
+     assert not is_nthpow_residue(2, 2, 5)
+     assert is_nthpow_residue(8547, 12, 10007)
+-    raises(NotImplementedError, lambda: nthroot_mod(29, 31, 74))
++    # Test composite modulus support (issue sympy__sympy-17377)
++    assert nthroot_mod(29, 31, 74) == 45
++    assert pow(45, 31, 74) == 29
+     assert nthroot_mod(1801, 11, 2663) == 44
+     for a, q, p in [(51922, 2, 203017), (43, 3, 109), (1801, 11, 2663),
+           (26118163, 1303, 33333347), (1499, 7, 2663), (595, 6, 2663),
+@@ -170,8 +172,15 @@ def test_residue():
+         r = nthroot_mod(a, q, p)
+         assert pow(r, q, p) == a
+     assert nthroot_mod(11, 3, 109) is None
+-    raises(NotImplementedError, lambda: nthroot_mod(16, 5, 36))
+-    raises(NotImplementedError, lambda: nthroot_mod(9, 16, 36))
++    # Test composite modulus with prime power factors
++    assert nthroot_mod(16, 5, 36) == 4
++    assert pow(4, 5, 36) == 16
++    assert nthroot_mod(9, 16, 36) == 9
++    assert pow(9, 16, 36) == 9
++    # Test the original issue: nthroot_mod(13, 8, 9)
++    assert nthroot_mod(13, 8, 9) == 2
++    assert pow(2, 8, 9) == 4  # 13 mod 9 = 4
++    assert nthroot_mod(13, 8, 9, True) == [2, 7]
+ 
+     for p in primerange(5, 100):
+         qv = range(3, p, 4)

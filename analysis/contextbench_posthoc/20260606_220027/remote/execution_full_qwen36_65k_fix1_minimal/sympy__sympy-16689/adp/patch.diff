@@ -1,0 +1,49 @@
+diff --git a/test_issue.py b/test_issue.py
+new file mode 100644
+index 000000000..61c08d601
+--- /dev/null
++++ b/test_issue.py
+@@ -0,0 +1,43 @@
++"""Test for codegen with matrix arguments not in expression."""
++import sympy as sy
++from sympy.utilities.codegen import codegen, make_routine
++from sympy import MatrixSymbol
++
++# Test case from the issue
++X = MatrixSymbol('X', 3, 1)
++Y = MatrixSymbol('Y', 3, 1)
++z = sy.symbols('z', integer=True)
++
++# Y does not appear in the expression X[0]+X[1]
++[(cf, cs), (hf, hs)] = codegen(('testBug', X[0]+X[1]),
++           language='c', argument_sequence=(X, Y, z))
++print("Header for expression without Y:")
++print(hs)
++
++# Check if Y has the correct pointer type
++if 'double *Y' in hs:
++    print("PASS: Y has correct pointer type (double *)")
++else:
++    print("FAIL: Y does not have pointer type (double *)")
++    print("Expected: double testBug(double *X, double *Y, int z);")
++
++# This should work correctly (Y appears in expression)
++[(cf2, cs2), (hf2, hs2)] = codegen(('testBug2', X[0]+X[1]+Y[0]),
++           language='c', argument_sequence=(X, Y, z))
++print("\nHeader for expression with Y:")
++print(hs2)
++
++if 'double *Y' in hs2:
++    print("PASS: Y has correct pointer type (double *)")
++else:
++    print("FAIL: Y does not have pointer type (double *)")
++
++# Also test with make_routine directly
++print("\n=== Testing with make_routine ===")
++r = make_routine('testBug', X[0]+X[1], argument_sequence=(X, Y, z), language='C99')
++print(f"Arguments: {[(arg.name, type(arg).__name__) for arg in r.arguments]}")
++for arg in r.arguments:
++    if hasattr(arg, 'metadata') and 'dimensions' in arg.metadata:
++        print(f"  {arg.name}: has dimensions metadata: {arg.metadata['dimensions']}")
++    else:
++        print(f"  {arg.name}: NO dimensions metadata")

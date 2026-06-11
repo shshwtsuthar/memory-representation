@@ -1,0 +1,267 @@
+diff --git a/xarray/core/concat.py b/xarray/core/concat.py
+index 2eea2ecb..db9eb9f4 100644
+--- a/xarray/core/concat.py
++++ b/xarray/core/concat.py
+@@ -1,5 +1,6 @@
+ from __future__ import annotations
+ 
++import numpy as np
+ from typing import TYPE_CHECKING, Any, Hashable, Iterable, cast, overload
+ 
+ import pandas as pd
+@@ -38,6 +39,7 @@ def concat(
+     fill_value: object = dtypes.NA,
+     join: JoinOptions = "outer",
+     combine_attrs: CombineAttrsOptions = "override",
++    ignore_missing_vars: bool = False,
+ ) -> T_Dataset:
+     ...
+ 
+@@ -53,6 +55,7 @@ def concat(
+     fill_value: object = dtypes.NA,
+     join: JoinOptions = "outer",
+     combine_attrs: CombineAttrsOptions = "override",
++    ignore_missing_vars: bool = False,
+ ) -> T_DataArray:
+     ...
+ 
+@@ -67,6 +70,7 @@ def concat(
+     fill_value=dtypes.NA,
+     join: JoinOptions = "outer",
+     combine_attrs: CombineAttrsOptions = "override",
++    ignore_missing_vars: bool = False,
+ ):
+     """Concatenate xarray objects along a new or existing dimension.
+ 
+@@ -160,6 +164,12 @@ def concat(
+ 
+         If a callable, it must expect a sequence of ``attrs`` dicts and a context object
+         as its only parameters.
++    ignore_missing_vars : bool, optional
++        If False (default), raise an error if a variable is present in some
++        datasets but not others. If True, missing variables are silently
++        ignored. This is useful for concatenating datasets with different
++        variables, similar to how ``pd.concat`` handles DataFrames with
++        different columns.
+ 
+     Returns
+     -------
+@@ -243,6 +253,7 @@ def concat(
+             fill_value=fill_value,
+             join=join,
+             combine_attrs=combine_attrs,
++            ignore_missing_vars=ignore_missing_vars,
+         )
+     elif isinstance(first_obj, Dataset):
+         return _dataset_concat(
+@@ -255,6 +266,7 @@ def concat(
+             fill_value=fill_value,
+             join=join,
+             combine_attrs=combine_attrs,
++            ignore_missing_vars=ignore_missing_vars,
+         )
+     else:
+         raise TypeError(
+@@ -290,7 +302,7 @@ def _calc_concat_dim_index(
+     return dim, index
+ 
+ 
+-def _calc_concat_over(datasets, dim, dim_names, data_vars, coords, compat):
++def _calc_concat_over(datasets, dim, dim_names, data_vars, coords, compat, ignore_missing_vars=False):
+     """
+     Determine which dataset variables need to be concatenated in the result,
+     """
+@@ -334,11 +346,14 @@ def _calc_concat_over(datasets, dim, dim_names, data_vars, coords, compat):
+                             # contains a particular variable.
+                             break
+                         elif len(variables) != len(datasets) and opt == "different":
+-                            raise ValueError(
+-                                f"{k!r} not present in all datasets and coords='different'. "
+-                                f"Either add {k!r} to datasets where it is missing or "
+-                                "specify coords='minimal'."
+-                            )
++                            if not ignore_missing_vars:
++                                raise ValueError(
++                                    f"{k!r} not present in all datasets and coords='different'. "
++                                    f"Either add {k!r} to datasets where it is missing or "
++                                    "specify coords='minimal'."
++                                )
++                            else:
++                                continue
+ 
+                         # first check without comparing values i.e. no computes
+                         for var in variables[1:]:
+@@ -442,6 +457,7 @@ def _dataset_concat(
+     fill_value: object = dtypes.NA,
+     join: JoinOptions = "outer",
+     combine_attrs: CombineAttrsOptions = "override",
++    ignore_missing_vars: bool = False,
+ ) -> T_Dataset:
+     """
+     Concatenate a sequence of datasets along a new or existing dimension
+@@ -491,7 +507,7 @@ def _dataset_concat(
+ 
+     # determine which variables to concatenate
+     concat_over, equals, concat_dim_lengths = _calc_concat_over(
+-        datasets, dim, dim_names, data_vars, coords, compat
++        datasets, dim, dim_names, data_vars, coords, compat, ignore_missing_vars
+     )
+ 
+     # determine which variables to merge, and then merge them according to compat
+@@ -560,6 +576,8 @@ def _dataset_concat(
+             try:
+                 vars = ensure_common_dims([ds[name].variable for ds in datasets])
+             except KeyError:
++                if ignore_missing_vars:
++                    continue
+                 raise ValueError(f"{name!r} is not present in all datasets.")
+ 
+             # Try concatenate the indexes, concatenate the variables when no index
+@@ -595,6 +613,33 @@ def _dataset_concat(
+             # preserves original variable order
+             result_vars[name] = result_vars.pop(name)
+ 
++    # Also handle variables that are present in some datasets but not the first one
++    if ignore_missing_vars:
++        all_vars = set()
++        for ds in datasets:
++            all_vars.update(ds.variables.keys())
++        for name in all_vars:
++            if name not in result_vars and name in concat_over and name not in result_indexes:
++                # This variable is present in some datasets but not all
++                # Get the variables that are present
++                vars_list = [ds[name].variable for ds in datasets if name in ds]
++                if len(vars_list) < len(datasets):
++                    # Not all datasets have this variable, pad with NaN
++                    common_dims = vars_list[0].dims
++                    padded_vars = []
++                    for ds in datasets:
++                        if name in ds:
++                            padded_vars.append(ds[name].variable)
++                        else:
++                            # Create a variable filled with fill_value
++                            shape = tuple(ds.dims[d] for d in common_dims)
++                            actual_fill = np.nan if fill_value is dtypes.NA else fill_value
++                            # Use float dtype when filling with NaN to avoid casting issues
++                            fill_dtype = vars_list[0].dtype if fill_value is not dtypes.NA else np.float64
++                            padded_vars.append(Variable(common_dims, np.full(shape, actual_fill, dtype=fill_dtype)))
++                    combined_var = concat_vars(padded_vars, dim, positions, combine_attrs=combine_attrs)
++                    result_vars[name] = combined_var
++
+     result = type(datasets[0])(result_vars, attrs=result_attrs)
+ 
+     absent_coord_names = coord_names - set(result.variables)
+@@ -632,6 +677,7 @@ def _dataarray_concat(
+     fill_value: object = dtypes.NA,
+     join: JoinOptions = "outer",
+     combine_attrs: CombineAttrsOptions = "override",
++    ignore_missing_vars: bool = False,
+ ) -> T_DataArray:
+     from xarray.core.dataarray import DataArray
+ 
+@@ -669,6 +715,7 @@ def _dataarray_concat(
+         fill_value=fill_value,
+         join=join,
+         combine_attrs=combine_attrs,
++        ignore_missing_vars=ignore_missing_vars,
+     )
+ 
+     merged_attrs = merge_attrs([da.attrs for da in arrays], combine_attrs)
+diff --git a/xarray/tests/test_concat.py b/xarray/tests/test_concat.py
+index e0e0038c..feee16f0 100644
+--- a/xarray/tests/test_concat.py
++++ b/xarray/tests/test_concat.py
+@@ -859,3 +859,93 @@ def test_concat_index_not_same_dim() -> None:
+         match=r"Cannot concatenate along dimension 'x' indexes with dimensions.*",
+     ):
+         concat([ds1, ds2], dim="x")
++
++
++class TestConcatIgnoreMissingVars:
++    def test_ignore_missing_vars_basic(self) -> None:
++        """Test that ignore_missing_vars=True allows concatenating datasets with different variables."""
++        ds1 = Dataset({"a": ("x", [1, 2])})
++        ds2 = Dataset({"b": ("x", [3, 4])})
++
++        result = concat([ds1, ds2], dim="x", ignore_missing_vars=True)
++
++        assert "a" in result.data_vars
++        assert "b" in result.data_vars
++        assert result["a"].shape == (4,)
++        assert result["b"].shape == (4,)
++        # Check that missing values are NaN
++        assert np.isnan(result["a"].isel(x=slice(2, None))).all()
++        assert np.isnan(result["b"].isel(x=slice(None, 2))).all()
++
++    def test_ignore_missing_vars_overlapping_variables(self) -> None:
++        """Test that overlapping variables are concatenated normally."""
++        ds1 = Dataset({"a": ("x", [1, 2]), "c": ("x", [5, 6])})
++        ds2 = Dataset({"b": ("x", [3, 4]), "c": ("x", [7, 8])})
++
++        result = concat([ds1, ds2], dim="x", ignore_missing_vars=True)
++
++        assert "a" in result.data_vars
++        assert "b" in result.data_vars
++        assert "c" in result.data_vars
++        # c should be concatenated normally (no NaN)
++        assert_identical(result["c"], Dataset({"c": ("x", [5, 6, 7, 8])})["c"])
++
++    def test_ignore_missing_vars_false_raises(self) -> None:
++        """Test that ignore_missing_vars=False (default) raises when variables differ."""
++        ds1 = Dataset({"a": ("x", [1, 2])})
++        ds2 = Dataset({"b": ("x", [3, 4])})
++
++        with pytest.raises(ValueError, match=r"is not present in all datasets"):
++            concat([ds1, ds2], dim="x", ignore_missing_vars=False)
++
++    def test_ignore_missing_vars_with_coords(self) -> None:
++        """Test that ignore_missing_vars works with coordinate variables."""
++        ds1 = Dataset(
++            {"a": ("x", [1, 2])},
++            coords={"x": [0, 1], "common_coord": 10},
++        )
++        ds2 = Dataset(
++            {"b": ("x", [3, 4])},
++            coords={"x": [2, 3], "common_coord": 10},
++        )
++
++        result = concat([ds1, ds2], dim="x", ignore_missing_vars=True)
++
++        assert "a" in result.data_vars
++        assert "b" in result.data_vars
++        assert "common_coord" in result.coords
++
++    def test_ignore_missing_vars_custom_fill_value(self) -> None:
++        """Test that custom fill_value is used for missing variables."""
++        ds1 = Dataset({"a": ("x", [1.0, 2.0])})
++        ds2 = Dataset({"b": ("x", [3.0, 4.0])})
++
++        result = concat(
++            [ds1, ds2], dim="x", ignore_missing_vars=True, fill_value=-999.0
++        )
++
++        assert "a" in result.data_vars
++        assert "b" in result.data_vars
++        # Check that custom fill value is used
++        assert (result["a"].isel(x=slice(2, None)) == -999.0).all()
++        assert (result["b"].isel(x=slice(None, 2)) == -999.0).all()
++
++    def test_ignore_missing_vars_three_datasets(self) -> None:
++        """Test ignore_missing_vars with three datasets having different variables."""
++        ds1 = Dataset({"a": ("x", [1, 2])})
++        ds2 = Dataset({"b": ("x", [3, 4])})
++        ds3 = Dataset({"c": ("x", [5, 6])})
++
++        result = concat([ds1, ds2, ds3], dim="x", ignore_missing_vars=True)
++
++        assert "a" in result.data_vars
++        assert "b" in result.data_vars
++        assert "c" in result.data_vars
++        assert result["a"].shape == (6,)
++        assert result["b"].shape == (6,)
++        assert result["c"].shape == (6,)
++        # Each variable should have values only in its portion
++        assert np.isnan(result["a"].isel(x=slice(2, None))).all()
++        assert np.isnan(result["b"].isel(x=slice(0, 2))).all()
++        assert np.isnan(result["b"].isel(x=slice(4, None))).all()
++        assert np.isnan(result["c"].isel(x=slice(None, 4))).all()

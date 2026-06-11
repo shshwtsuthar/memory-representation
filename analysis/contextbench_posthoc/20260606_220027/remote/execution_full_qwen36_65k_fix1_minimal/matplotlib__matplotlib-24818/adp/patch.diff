@@ -1,0 +1,111 @@
+diff --git a/lib/matplotlib/axes/_axes.py b/lib/matplotlib/axes/_axes.py
+index f80efddfe1..7126251c57 100644
+--- a/lib/matplotlib/axes/_axes.py
++++ b/lib/matplotlib/axes/_axes.py
+@@ -3489,6 +3489,8 @@ class Axes(_AxesBase):
+                     # safe_first_element because getitem is index-first not
+                     # location first on pandas objects so err[0] almost always
+                     # fails.
++                    # Also handle the case where _safe_first_finite returns None
++                    # (all values are non-finite)
+                     isinstance(cbook._safe_first_finite(err), np.ndarray)
+             ):
+                 # Get the type of the first element
+diff --git a/lib/matplotlib/cbook.py b/lib/matplotlib/cbook.py
+index 483039e337..f7043110fc 100644
+--- a/lib/matplotlib/cbook.py
++++ b/lib/matplotlib/cbook.py
+@@ -24,7 +24,7 @@ import weakref
+ import numpy as np
+ 
+ import matplotlib
+-from matplotlib import _api, _c_internal_utils
++from matplotlib import _api
+ 
+ 
+ def _get_running_interactive_framework():
+@@ -72,6 +72,7 @@ def _get_running_interactive_framework():
+     macosx = sys.modules.get("matplotlib.backends._macosx")
+     if macosx and macosx.event_loop_is_running():
+         return "macosx"
++    from matplotlib import _c_internal_utils
+     if not _c_internal_utils.display_is_valid():
+         return "headless"
+     return None
+@@ -1657,7 +1658,10 @@ def _safe_first_finite(obj, *, skip_nonfinite=True):
+         raise RuntimeError("matplotlib does not "
+                            "support generators as input")
+     else:
+-        return next(val for val in obj if safe_isfinite(val))
++        try:
++            return next(val for val in obj if safe_isfinite(val))
++        except StopIteration:
++            return None
+ 
+ 
+ def sanitize_sequence(data):
+@@ -2113,6 +2117,7 @@ def _setup_new_guiapp():
+     """
+     Perform OS-dependent setup when Matplotlib creates a new GUI application.
+     """
++    from matplotlib import _c_internal_utils
+     # Windows: If not explicit app user model id has been set yet (so we're not
+     # already embedded), then set it to "matplotlib", so that taskbar icons are
+     # correct.
+diff --git a/test_errorbar_nan.py b/test_errorbar_nan.py
+new file mode 100644
+index 0000000000..a334cdf914
+--- /dev/null
++++ b/test_errorbar_nan.py
+@@ -0,0 +1,51 @@
++"""Test that ax.errorbar does not raise StopIteration for all-NaN error data."""
++import numpy as np
++import matplotlib
++matplotlib.use('Agg')
++import matplotlib.pyplot as plt
++
++def test_errorbar_all_nan_yerr():
++    """Test that ax.errorbar works with all-NaN yerr values."""
++    fig, ax = plt.subplots(1, 1)
++    # This should not raise StopIteration
++    ax.errorbar([0], [0], [np.nan])
++    print("Test 1 PASSED: ax.errorbar([0], [0], [np.nan]) works")
++    plt.close(fig)
++
++def test_errorbar_all_nan_xerr():
++    """Test that ax.errorbar works with all-NaN xerr values."""
++    fig, ax = plt.subplots(1, 1)
++    # This should not raise StopIteration
++    ax.errorbar([0], [0], xerr=[np.nan])
++    print("Test 2 PASSED: ax.errorbar([0], [0], xerr=[np.nan]) works")
++    plt.close(fig)
++
++def test_errorbar_all_nan_both():
++    """Test that ax.errorbar works with all-NaN xerr and yerr values."""
++    fig, ax = plt.subplots(1, 1)
++    # This should not raise StopIteration
++    ax.errorbar([0], [0], xerr=[np.nan], yerr=[np.nan])
++    print("Test 3 PASSED: ax.errorbar([0], [0], xerr=[np.nan], yerr=[np.nan]) works")
++    plt.close(fig)
++
++def test_errorbar_mixed_nan():
++    """Test that ax.errorbar works with mixed NaN/non-NaN values."""
++    fig, ax = plt.subplots(1, 1)
++    ax.errorbar([0, 1, 2], [0, 1, 2], yerr=[np.nan, 1, np.nan])
++    print("Test 4 PASSED: ax.errorbar with mixed NaN works")
++    plt.close(fig)
++
++def test_errorbar_normal():
++    """Test that ax.errorbar works with normal (non-NaN) values."""
++    fig, ax = plt.subplots(1, 1)
++    ax.errorbar([0, 1, 2], [0, 1, 2], yerr=[0.1, 0.2, 0.3])
++    print("Test 5 PASSED: ax.errorbar with normal values works")
++    plt.close(fig)
++
++if __name__ == '__main__':
++    test_errorbar_normal()
++    test_errorbar_mixed_nan()
++    test_errorbar_all_nan_yerr()
++    test_errorbar_all_nan_xerr()
++    test_errorbar_all_nan_both()
++    print("\n=== All tests completed ===")

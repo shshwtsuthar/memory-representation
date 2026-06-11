@@ -1,0 +1,207 @@
+diff --git a/django/forms/formsets.py b/django/forms/formsets.py
+index eafe35720..cb821bc6e 100644
+--- a/django/forms/formsets.py
++++ b/django/forms/formsets.py
+@@ -54,7 +54,7 @@ class BaseFormSet(object):
+     A collection of instances of the same Form class.
+     """
+     def __init__(self, data=None, files=None, auto_id='id_%s', prefix=None,
+-                 initial=None, error_class=ErrorList):
++                 initial=None, error_class=ErrorList, form_kwargs=None):
+         self.is_bound = data is not None or files is not None
+         self.prefix = prefix or self.get_default_prefix()
+         self.auto_id = auto_id
+@@ -64,6 +64,7 @@ class BaseFormSet(object):
+         self.error_class = error_class
+         self._errors = None
+         self._non_form_errors = None
++        self.form_kwargs = (form_kwargs if form_kwargs is not None else {})
+ 
+     def __str__(self):
+         return self.as_table()
+@@ -151,10 +152,14 @@ class BaseFormSet(object):
+             'prefix': self.add_prefix(i),
+             'error_class': self.error_class,
+         }
++        # Merge form_kwargs from __init__ with _kwargs_for_form(i)
++        defaults.update(self.form_kwargs)
++        defaults.update(self._kwargs_for_form(i))
++        defaults.update(kwargs)
+         if self.is_bound:
+             defaults['data'] = self.data
+             defaults['files'] = self.files
+-        if self.initial and 'initial' not in kwargs:
++        if self.initial and 'initial' not in defaults:
+             try:
+                 defaults['initial'] = self.initial[i]
+             except IndexError:
+@@ -163,11 +168,18 @@ class BaseFormSet(object):
+         # the minimum forms.
+         if i >= self.initial_form_count() and i >= self.min_num:
+             defaults['empty_permitted'] = True
+-        defaults.update(kwargs)
+         form = self.form(**defaults)
+         self.add_fields(form, i)
+         return form
+ 
++    def _kwargs_for_form(self, i):
++        """
++        Return additional kwargs to pass to the form constructor for the
++        i-th form in the formset. Subclasses can override this method to
++        provide form-specific kwargs.
++        """
++        return {}
++
+     @property
+     def initial_forms(self):
+         """Return a list of all the initial forms in this formset."""
+diff --git a/test_form_kwargs.py b/test_form_kwargs.py
+new file mode 100644
+index 000000000..eb98d47e7
+--- /dev/null
++++ b/test_form_kwargs.py
+@@ -0,0 +1,144 @@
++# -*- coding: utf-8 -*-
++"""Test form_kwargs feature for formsets."""
++from __future__ import unicode_literals
++
++import os
++import sys
++
++os.environ['DJANGO_SETTINGS_MODULE'] = 'tests.test_sqlite'
++sys.path.insert(0, '/testbed')
++
++import django
++django.setup()
++
++from django import forms
++from django.forms import Form, CharField, IntegerField
++from django.forms.formsets import BaseFormSet, formset_factory
++
++
++class Choice(Form):
++    choice = CharField()
++    votes = IntegerField()
++
++
++# Test 1: form_kwargs passed to formset constructor - use 'initial' kwarg
++print("Test 1: form_kwargs passed to formset constructor")
++
++class CustomForm(Form):
++    name = CharField()
++    description = CharField(required=False)
++
++CustomFormSet = formset_factory(CustomForm, extra=2)
++formset = CustomFormSet(form_kwargs={'initial': {'name': 'default_name', 'description': 'default_desc'}})
++for i, form in enumerate(formset.forms):
++    print("  Form %s initial name: %s" % (i, form.initial.get('name', 'N/A')))
++assert formset.forms[0].initial['name'] == 'default_name'
++assert formset.forms[1].initial['name'] == 'default_name'
++print("  PASS")
++
++
++# Test 2: _kwargs_for_form can provide per-form kwargs
++print("\nTest 2: _kwargs_for_form can provide per-form kwargs")
++
++class PerFormFormSet(BaseFormSet):
++    def _kwargs_for_form(self, i):
++        if i == 0:
++            return {'initial': {'name': 'form0_name'}}
++        return {}
++
++class CustomForm2(Form):
++    name = CharField()
++    description = CharField(required=False)
++
++PerFormFormSet2 = formset_factory(CustomForm2, extra=2, formset=PerFormFormSet)
++formset2 = PerFormFormSet2(form_kwargs={'initial': {'name': 'default_name'}})
++# _kwargs_for_form should override form_kwargs for form 0
++assert formset2.forms[0].initial['name'] == 'form0_name'
++assert formset2.forms[1].initial['name'] == 'default_name'
++print("  Form 0 initial name: %s" % formset2.forms[0].initial['name'])
++print("  Form 1 initial name: %s" % formset2.forms[1].initial['name'])
++print("  PASS")
++
++
++# Test 3: form_kwargs with empty_permitted doesn't crash
++print("\nTest 3: form_kwargs with empty_permitted doesn't crash")
++
++class SimpleForm(Form):
++    name = CharField()
++
++SimpleFormSet = formset_factory(SimpleForm, extra=1)
++formset3 = SimpleFormSet(form_kwargs={'empty_permitted': True})
++# Access empty_form - this should not crash
++empty_form = formset3.empty_form
++print("  empty_form created successfully")
++print("  PASS")
++
++
++# Test 4: Verify regular forms still work without form_kwargs
++print("\nTest 4: Regular forms still work without form_kwargs")
++formset4 = SimpleFormSet()
++assert len(formset4.forms) == 1
++print("  PASS")
++
++
++# Test 5: form_kwargs with bound data
++print("\nTest 5: form_kwargs with bound data")
++formset5 = SimpleFormSet(
++    data={'choices-0-name': 'test_value'},
++    form_kwargs={'initial': {'name': 'initial_name'}},
++    prefix='choices'
++)
++assert formset5.is_bound
++print("  PASS")
++
++
++# Test 6: Empty form_kwargs (None)
++print("\nTest 6: Empty form_kwargs (None)")
++formset6 = SimpleFormSet(form_kwargs=None)
++assert formset6.form_kwargs == {}
++print("  PASS")
++
++
++# Test 7: _kwargs_for_form with index-specific logic
++print("\nTest 7: _kwargs_for_form with index-specific logic")
++
++class IndexAwareFormSet(BaseFormSet):
++    def _kwargs_for_form(self, i):
++        return {'initial': {'name': 'form_%d' % i}}
++
++class InitialForm(Form):
++    name = CharField()
++
++IndexAwareFormSet2 = formset_factory(InitialForm, extra=2, formset=IndexAwareFormSet)
++formset7 = IndexAwareFormSet2()
++for i, form in enumerate(formset7.forms):
++    print("  Form %s initial name: %s" % (i, form.initial.get('name', 'N/A')))
++assert formset7.forms[0].initial['name'] == 'form_0'
++assert formset7.forms[1].initial['name'] == 'form_1'
++print("  PASS")
++
++
++# Test 8: Verify that form_kwargs can be used to pass custom attributes to form subclasses
++print("\nTest 8: form_kwargs with custom form attribute")
++
++class CustomAttrForm(Form):
++    name = CharField()
++    custom_attr = None
++    
++    def __init__(self, *args, **kwargs):
++        self.custom_attr = kwargs.pop('custom_attr', None)
++        super(CustomAttrForm, self).__init__(*args, **kwargs)
++
++class CustomAttrFormSet(BaseFormSet):
++    form = CustomAttrForm
++
++CustomAttrFormSet2 = formset_factory(CustomAttrForm, extra=2, formset=CustomAttrFormSet)
++formset8 = CustomAttrFormSet2(form_kwargs={'custom_attr': 'my_custom_value'})
++for i, form in enumerate(formset8.forms):
++    print("  Form %s custom_attr: %s" % (i, form.custom_attr))
++assert formset8.forms[0].custom_attr == 'my_custom_value'
++print("  PASS")
++
++
++print("\n" + "=" * 50)
++print("All tests passed!")

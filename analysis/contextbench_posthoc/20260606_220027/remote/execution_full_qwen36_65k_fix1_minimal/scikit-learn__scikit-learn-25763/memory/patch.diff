@@ -1,0 +1,80 @@
+diff --git a/sklearn/isotonic.py b/sklearn/isotonic.py
+index b05e59536..3f938d4f4 100644
+--- a/sklearn/isotonic.py
++++ b/sklearn/isotonic.py
+@@ -410,7 +410,7 @@ class IsotonicRegression(RegressorMixin, TransformerMixin, BaseEstimator):
+         y_pred : ndarray of shape (n_samples,)
+             Transformed data.
+         """
+-        return self.transform(T)
++        return np.asarray(self.transform(T)).ravel()
+ 
+     # We implement get_feature_names_out here instead of using
+     # `ClassNamePrefixFeaturesOutMixin`` because `input_features` are ignored.
+diff --git a/sklearn/tests/test_isotonic.py b/sklearn/tests/test_isotonic.py
+index 7c9dad8d1..99295b4e5 100644
+--- a/sklearn/tests/test_isotonic.py
++++ b/sklearn/tests/test_isotonic.py
+@@ -680,3 +680,43 @@ def test_get_feature_names_out(shape):
+     assert isinstance(names, np.ndarray)
+     assert names.dtype == object
+     assert_array_equal(["isotonicregression0"], names)
++
++
++def test_isotonic_regression_predict_with_pandas_output():
++    """Check that `predict` returns a 1D array regardless of `set_output` config.
++
++    Non-regression test for:
++    https://github.com/scikit-learn/scikit-learn/issues/25763
++    """
++    X = np.arange(10)
++    y = np.arange(10)
++
++    iso = IsotonicRegression().fit(X, y)
++    result = iso.predict([5])
++    assert isinstance(result, np.ndarray)
++    assert result.ndim == 1
++    assert result.shape == (1,)
++    assert_allclose(result, [5])
++
++    # With pandas output config
++    iso_pandas = IsotonicRegression().set_output(transform="pandas").fit(X, y)
++    result_pandas = iso_pandas.predict([5])
++    assert isinstance(result_pandas, np.ndarray)
++    assert result_pandas.ndim == 1
++    assert result_pandas.shape == (1,)
++    assert_allclose(result_pandas, [5])
++
++    # With global set_config
++    pd = pytest.importorskip("pandas")
++    from sklearn import set_config
++
++    set_config(transform_output="pandas")
++    try:
++        iso_global = IsotonicRegression().fit(X, y)
++        result_global = iso_global.predict([5])
++        assert isinstance(result_global, np.ndarray)
++        assert result_global.ndim == 1
++        assert result_global.shape == (1,)
++        assert_allclose(result_global, [5])
++    finally:
++        set_config(transform_output=None)
+diff --git a/sklearn/utils/_set_output.py b/sklearn/utils/_set_output.py
+index 335773c6a..3e0daf86b 100644
+--- a/sklearn/utils/_set_output.py
++++ b/sklearn/utils/_set_output.py
+@@ -127,9 +127,13 @@ def _wrap_data_with_container(method, data_to_wrap, original_input, estimator):
+         return data_to_wrap
+ 
+     # dense_config == "pandas"
++    original_input_index = getattr(original_input, "index", None)
++    # Avoid passing callable attributes (e.g., list.index) as index
++    if callable(original_input_index):
++        original_input_index = None
+     return _wrap_in_pandas_container(
+         data_to_wrap=data_to_wrap,
+-        index=getattr(original_input, "index", None),
++        index=original_input_index,
+         columns=estimator.get_feature_names_out,
+     )
+ 

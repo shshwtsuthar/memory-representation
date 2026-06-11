@@ -1,0 +1,208 @@
+diff --git a/debug_types.py b/debug_types.py
+new file mode 100644
+index 00000000..9a51cd47
+--- /dev/null
++++ b/debug_types.py
+@@ -0,0 +1,37 @@
++"""Debug script to understand the issue."""
++import numpy as np
++import xarray as xr
++
++# Check what NON_NUMPY_SUPPORTED_ARRAY_TYPES contains
++from xarray.core.variable import NON_NUMPY_SUPPORTED_ARRAY_TYPES
++print("NON_NUMPY_SUPPORTED_ARRAY_TYPES:", NON_NUMPY_SUPPORTED_ARRAY_TYPES)
++
++# Check what dask_array_type is
++from xarray.core.pycompat import dask_array_type
++print("dask_array_type:", dask_array_type)
++
++# Check if we can import dask
++try:
++    import dask.array as da
++    print("Dask is available!")
++    HAS_DASK = True
++except ImportError:
++    print("Dask is NOT available")
++    HAS_DASK = False
++
++# Check what types are in NON_NUMPY_SUPPORTED_ARRAY_TYPES
++from xarray.core import indexing
++print("\nTypes in NON_NUMPY_SUPPORTED_ARRAY_TYPES:")
++for t in NON_NUMPY_SUPPORTED_ARRAY_TYPES:
++    print(f"  - {t}")
++
++# Check if dask arrays are in there
++if HAS_DASK:
++    x = da.random.randint(1, 10, size=(10, 5))
++    print(f"\nType of dask array: {type(x)}")
++    print(f"isinstance(x, NON_NUMPY_SUPPORTED_ARRAY_TYPES): {isinstance(x, NON_NUMPY_SUPPORTED_ARRAY_TYPES)}")
++    
++    # Create DataArray
++    da1 = xr.DataArray(x, dims=('x', 'y'))
++    print(f"\nType of da1.variable._data: {type(da1.variable._data)}")
++    print(f"isinstance(da1.variable._data, NON_NUMPY_SUPPORTED_ARRAY_TYPES): {isinstance(da1.variable._data, NON_NUMPY_SUPPORTED_ARRAY_TYPES)}")
+diff --git a/test_fix.py b/test_fix.py
+new file mode 100644
+index 00000000..4999b869
+--- /dev/null
++++ b/test_fix.py
+@@ -0,0 +1,135 @@
++"""Test that Dataset constructor with DataArray preserves dask arrays."""
++import sys
++import numpy as np
++
++# First, let's check if we can import dask
++try:
++    import dask.array as da
++    HAS_DASK = True
++except ImportError:
++    HAS_DASK = False
++    print("WARNING: dask not available, testing with mock objects instead")
++
++import xarray as xr
++
++def test_dataset_from_dataarray_preserves_dask():
++    """Test that creating a Dataset from a DataArray preserves dask arrays."""
++    if HAS_DASK:
++        # Create a dask array
++        x = da.random.randint(1, 10, size=(100, 25))
++        
++        # Create a DataArray with the dask array
++        da1 = xr.DataArray(x, dims=('x', 'y'))
++        
++        # Test 1: Creating Dataset without explicit dims should preserve dask
++        ds = xr.Dataset(dict(a=da1))
++        print(f"Test 1 - Without explicit dims: type(ds.a.data) = {type(ds.a.data)}")
++        assert hasattr(ds.a.data, 'compute') or 'dask' in str(type(ds.a.data)).lower(), \
++            f"Expected dask array, got {type(ds.a.data)}"
++        print("✓ Test 1 passed: dask array preserved without explicit dims")
++        
++        # Test 2: Creating Dataset with explicit dims should also preserve dask
++        # This is the bug case from the issue
++        ds2 = xr.Dataset(dict(a=(('x', 'y'), da1)))
++        print(f"Test 2 - With explicit dims: type(ds2.a.data) = {type(ds2.a.data)}")
++        assert hasattr(ds2.a.data, 'compute') or 'dask' in str(type(ds2.a.data)).lower(), \
++            f"Expected dask array, got {type(ds2.a.data)}"
++        print("✓ Test 2 passed: dask array preserved with explicit dims")
++        
++        # Test 3: Verify the array is actually lazy (not computed)
++        # If it were computed, it would be a numpy array
++        assert not isinstance(ds2.a.data, np.ndarray), \
++            f"Data should not be a numpy array, got {type(ds2.a.data)}"
++        print("✓ Test 3 passed: data is not a numpy array")
++        
++        return True
++    else:
++        # Test with a mock dask-like object
++        class MockDaskArray:
++            """Mock dask array for testing without dask installed."""
++            def __init__(self, data):
++                self._data = np.asarray(data)
++                self.shape = self._data.shape
++                self.dtype = self._data.dtype
++                self.ndim = self._data.ndim
++                # Make it look like a proper array
++                self.__array_priority__ = 0
++            
++            def __array__(self, dtype=None):
++                if dtype is not None:
++                    return self._data.astype(dtype)
++                return np.array(self._data)
++            
++            def compute(self):
++                return self._data
++        
++        # Create mock dask array
++        x = MockDaskArray(np.random.randint(1, 10, size=(100, 25)))
++        
++        # Create a DataArray with the mock dask array
++        da1 = xr.DataArray(x, dims=('x', 'y'))
++        
++        # Test: Creating Dataset with explicit dims should preserve the mock dask array
++        ds2 = xr.Dataset(dict(a=(('x', 'y'), da1)))
++        print(f"Test - With explicit dims: type(ds2.a.data) = {type(ds2.a.data)}")
++        
++        # Check if it's our mock dask array or at least not computed to numpy
++        if hasattr(ds2.a.data, 'compute'):
++            print("✓ Test passed: mock dask array preserved with explicit dims")
++            return True
++        elif isinstance(ds2.a.data, np.ndarray):
++            print("✗ Test failed: data was converted to numpy array")
++            return False
++        else:
++            # Some other array type - might be acceptable
++            print(f"✓ Test passed: data preserved as {type(ds2.a.data)}")
++            return True
++
++def test_dataset_from_dataarray_without_tuple():
++    """Test that creating Dataset from DataArray without tuple still works."""
++    # Create a regular numpy DataArray
++    data = np.random.randn(10, 20)
++    da1 = xr.DataArray(data, dims=('x', 'y'))
++    
++    # Create Dataset without explicit dims
++    ds = xr.Dataset(dict(a=da1))
++    
++    # Should preserve the data
++    assert np.allclose(ds.a.data, data), "Data should be preserved"
++    print("✓ Test passed: numpy data preserved without explicit dims")
++    return True
++
++if __name__ == '__main__':
++    print("=" * 70)
++    print("Testing Dataset constructor with DataArray")
++    print("=" * 70)
++    
++    all_passed = True
++    
++    print("\n--- Test 1: Dataset from DataArray with explicit dims ---")
++    try:
++        result = test_dataset_from_dataarray_preserves_dask()
++        all_passed = all_passed and result
++    except Exception as e:
++        print(f"✗ Test 1 failed with exception: {e}")
++        import traceback
++        traceback.print_exc()
++        all_passed = False
++    
++    print("\n--- Test 2: Dataset from DataArray without explicit dims ---")
++    try:
++        result = test_dataset_from_dataarray_without_tuple()
++        all_passed = all_passed and result
++    except Exception as e:
++        print(f"✗ Test 2 failed with exception: {e}")
++        import traceback
++        traceback.print_exc()
++        all_passed = False
++    
++    print("\n" + "=" * 70)
++    if all_passed:
++        print("All tests PASSED!")
++        sys.exit(0)
++    else:
++        print("Some tests FAILED!")
++        sys.exit(1)
+diff --git a/xarray/core/variable.py b/xarray/core/variable.py
+index 64c1895d..d63c0ec2 100644
+--- a/xarray/core/variable.py
++++ b/xarray/core/variable.py
+@@ -218,7 +218,18 @@ def as_compatible_data(data, fastpath=False):
+         data = np.timedelta64(getattr(data, "value", data), "ns")
+ 
+     # we don't want nested self-described arrays
+-    data = getattr(data, "values", data)
++    # DataArray must be checked before the generic getattr below to avoid
++    # triggering computation of dask arrays via .values
++    from .dataarray import DataArray
++
++    if isinstance(data, DataArray):
++        data = data.variable._data
++        # If the underlying data is already a supported array type (e.g., dask),
++        # return it directly without further processing
++        if isinstance(data, NON_NUMPY_SUPPORTED_ARRAY_TYPES):
++            return _maybe_wrap_data(data)
++    else:
++        data = getattr(data, "values", data)
+ 
+     if isinstance(data, np.ma.MaskedArray):
+         mask = np.ma.getmaskarray(data)

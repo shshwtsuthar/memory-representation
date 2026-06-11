@@ -1,0 +1,118 @@
+diff --git a/lib/matplotlib/tests/test_widgets.py b/lib/matplotlib/tests/test_widgets.py
+index a19770e3b0..dafa8af607 100644
+--- a/lib/matplotlib/tests/test_widgets.py
++++ b/lib/matplotlib/tests/test_widgets.py
+@@ -1120,6 +1120,32 @@ def test_range_slider(orientation):
+     assert_allclose(slider.val, [0.1, 0.34])
+ 
+ 
++@pytest.mark.parametrize("orientation", ["horizontal", "vertical"])
++def test_range_slider_set_val_moves_handles(orientation):
++    """Test that RangeSlider.set_val moves the handle markers."""
++    fig, ax = plt.subplots()
++    slider = widgets.RangeSlider(
++        ax=ax, label="", valmin=0.0, valmax=1.0, orientation=orientation,
++        valinit=[0.1, 0.34]
++    )
++    # Check initial handle positions
++    if orientation == "horizontal":
++        assert_allclose(slider._handles[0].get_xdata(), [0.1])
++        assert_allclose(slider._handles[1].get_xdata(), [0.34])
++    else:
++        assert_allclose(slider._handles[0].get_ydata(), [0.1])
++        assert_allclose(slider._handles[1].get_ydata(), [0.34])
++
++    # Call set_val and verify handles move
++    slider.set_val((0.2, 0.6))
++    if orientation == "horizontal":
++        assert_allclose(slider._handles[0].get_xdata(), [0.2])
++        assert_allclose(slider._handles[1].get_xdata(), [0.6])
++    else:
++        assert_allclose(slider._handles[0].get_ydata(), [0.2])
++        assert_allclose(slider._handles[1].get_ydata(), [0.6])
++
++
+ def check_polygon_selector(event_sequence, expected_result, selections_count,
+                            **kwargs):
+     """
+diff --git a/lib/matplotlib/widgets.py b/lib/matplotlib/widgets.py
+index da5b40a5ef..5416279ab7 100644
+--- a/lib/matplotlib/widgets.py
++++ b/lib/matplotlib/widgets.py
+@@ -904,12 +904,16 @@ class RangeSlider(SliderBase):
+             xy[2] = .75, val[1]
+             xy[3] = .75, val[0]
+             xy[4] = .25, val[0]
++            self._handles[0].set_ydata([val[0]])
++            self._handles[1].set_ydata([val[1]])
+         else:
+             xy[0] = val[0], .25
+             xy[1] = val[0], .75
+             xy[2] = val[1], .75
+             xy[3] = val[1], .25
+             xy[4] = val[0], .25
++            self._handles[0].set_xdata([val[0]])
++            self._handles[1].set_xdata([val[1]])
+         self.poly.xy = xy
+         self.valtext.set_text(self._format(val))
+         if self.drawon:
+diff --git a/test_rangeslider_set_val.py b/test_rangeslider_set_val.py
+new file mode 100644
+index 0000000000..ea81e74c3f
+--- /dev/null
++++ b/test_rangeslider_set_val.py
+@@ -0,0 +1,54 @@
++"""Test that RangeSlider.set_val moves the handles."""
++import matplotlib
++matplotlib.use('Agg')
++import matplotlib.pyplot as plt
++from matplotlib.widgets import RangeSlider
++import numpy as np
++
++fig, ax = plt.subplots()
++fig.subplots_adjust(bottom=0.25)
++slider_ax = fig.add_axes([0.1, 0.1, 0.8, 0.025])
++
++# Create slider with initial values
++slider = RangeSlider(slider_ax, 'Test', 0.0, 10.0, valinit=[2.0, 8.0])
++
++# Check initial handle positions
++print(f"Initial slider val: {slider.val}")
++print(f"Initial handle 0 xdata: {slider._handles[0].get_xdata()}")
++print(f"Initial handle 1 xdata: {slider._handles[1].get_xdata()}")
++
++# Call set_val
++slider.set_val([4.0, 6.0])
++
++# Check handle positions after set_val
++print(f"After set_val slider val: {slider.val}")
++print(f"After set_val handle 0 xdata: {slider._handles[0].get_xdata()}")
++print(f"After set_val handle 1 xdata: {slider._handles[1].get_xdata()}")
++
++# Verify handles moved
++assert slider._handles[0].get_xdata()[0] == 4.0, f"Handle 0 xdata should be 4.0, got {slider._handles[0].get_xdata()[0]}"
++assert slider._handles[1].get_xdata()[0] == 6.0, f"Handle 1 xdata should be 6.0, got {slider._handles[1].get_xdata()[0]}"
++
++print("Horizontal test passed!")
++
++# Test vertical slider
++fig2, ax2 = plt.subplots()
++fig2.subplots_adjust(left=0.25)
++slider_ax2 = fig2.add_axes([0.1, 0.1, 0.025, 0.8])
++slider2 = RangeSlider(slider_ax2, 'Test', 0.0, 10.0, valinit=[2.0, 8.0], orientation='vertical')
++
++print(f"\nVertical initial slider val: {slider2.val}")
++print(f"Vertical initial handle 0 ydata: {slider2._handles[0].get_ydata()}")
++print(f"Vertical initial handle 1 ydata: {slider2._handles[1].get_ydata()}")
++
++slider2.set_val([4.0, 6.0])
++
++print(f"Vertical after set_val slider val: {slider2.val}")
++print(f"Vertical after set_val handle 0 ydata: {slider2._handles[0].get_ydata()}")
++print(f"Vertical after set_val handle 1 ydata: {slider2._handles[1].get_ydata()}")
++
++assert slider2._handles[0].get_ydata()[0] == 4.0, f"Handle 0 ydata should be 4.0, got {slider2._handles[0].get_ydata()[0]}"
++assert slider2._handles[1].get_ydata()[0] == 6.0, f"Handle 1 ydata should be 6.0, got {slider2._handles[1].get_ydata()[0]}"
++
++print("Vertical test passed!")
++print("\nAll tests passed!")

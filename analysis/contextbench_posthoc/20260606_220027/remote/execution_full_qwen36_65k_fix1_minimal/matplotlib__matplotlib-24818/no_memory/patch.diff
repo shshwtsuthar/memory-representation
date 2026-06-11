@@ -1,0 +1,47 @@
+diff --git a/lib/matplotlib/cbook.py b/lib/matplotlib/cbook.py
+index 483039e337..5d75bca12e 100644
+--- a/lib/matplotlib/cbook.py
++++ b/lib/matplotlib/cbook.py
+@@ -1657,7 +1657,10 @@ def _safe_first_finite(obj, *, skip_nonfinite=True):
+         raise RuntimeError("matplotlib does not "
+                            "support generators as input")
+     else:
+-        return next(val for val in obj if safe_isfinite(val))
++        try:
++            return next(val for val in obj if safe_isfinite(val))
++        except StopIteration:
++            return None
+ 
+ 
+ def sanitize_sequence(data):
+diff --git a/lib/matplotlib/tests/test_axes.py b/lib/matplotlib/tests/test_axes.py
+index 49bdc98abc..0a015d8145 100644
+--- a/lib/matplotlib/tests/test_axes.py
++++ b/lib/matplotlib/tests/test_axes.py
+@@ -7,6 +7,7 @@ import inspect
+ import io
+ from itertools import product
+ import platform
++import warnings
+ from types import SimpleNamespace
+ 
+ import dateutil.tz
+@@ -3993,6 +3994,18 @@ def test_errorbar_nan(fig_test, fig_ref):
+     ax.errorbar([4], [3], [6], fmt="C0")
+ 
+ 
++def test_errorbar_all_nan_err():
++    """Test that errorbar does not crash when yerr/xerr contains only NaN values."""
++    fig, ax = plt.subplots()
++    # This should not raise StopIteration
++    with warnings.catch_warnings():
++        warnings.filterwarnings("ignore", "All-NaN", RuntimeWarning)
++        ax.errorbar([0], [0], [np.nan])
++        ax.errorbar([0], [0], xerr=[np.nan])
++        ax.errorbar([0], [0], yerr=[np.nan], xerr=[np.nan])
++    plt.close(fig)
++
++
+ @image_comparison(['hist_stacked_stepfilled', 'hist_stacked_stepfilled'])
+ def test_hist_stacked_stepfilled():
+     # make some data

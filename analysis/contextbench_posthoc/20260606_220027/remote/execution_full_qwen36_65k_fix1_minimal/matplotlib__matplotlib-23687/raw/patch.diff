@@ -1,0 +1,158 @@
+diff --git a/test_bug_repro.py b/test_bug_repro.py
+new file mode 100644
+index 0000000000..0da437d3f0
+--- /dev/null
++++ b/test_bug_repro.py
+@@ -0,0 +1,76 @@
++"""Reproduce the bug: barplot does not show anything when x or bottom start and end with NaN."""
++import numpy as np
++import matplotlib
++matplotlib.use('Agg')  # Non-interactive backend
++import matplotlib.pyplot as plt
++
++# Test 1: x has NaN at extremities
++print("Test 1: x has NaN at extremities")
++barx = np.arange(3, dtype=float)
++barheights = np.array([0.5, 1.5, 2.0])
++barstarts = np.array([0.77] * 3)
++
++barx[[0, 2]] = np.NaN
++
++fig, ax = plt.subplots()
++bars = ax.bar(barx, barheights, bottom=barstarts)
++# Count how many bars have non-NaN width and height
++valid_bars = 0
++for bar in bars:
++    rect = bar.get_window_extent(fig.canvas.get_renderer())
++    if not np.isnan(rect.width) and not np.isnan(rect.height):
++        valid_bars += 1
++print(f"  Valid bars: {valid_bars}")
++print(f"  Expected: 1 (only middle bar)")
++plt.close()
++
++# Test 2: bottom has NaN at extremities
++print("\nTest 2: bottom has NaN at extremities")
++barx2 = np.arange(3, dtype=float)
++barheights2 = np.array([0.5, 1.5, 2.0])
++barstarts2 = np.array([0.77] * 3)
++barstarts2[[0, 2]] = np.NaN
++
++fig, ax = plt.subplots()
++bars = ax.bar(barx2, barheights2, bottom=barstarts2)
++valid_bars = 0
++for bar in bars:
++    rect = bar.get_window_extent(fig.canvas.get_renderer())
++    if not np.isnan(rect.width) and not np.isnan(rect.height):
++        valid_bars += 1
++print(f"  Valid bars: {valid_bars}")
++print(f"  Expected: 1 (only middle bar)")
++plt.close()
++
++# Test 3: barh with left having NaN at extremities
++print("\nTest 3: barh with left having NaN at extremities")
++barx3 = np.arange(3, dtype=float)
++barwidths3 = np.array([0.5, 1.5, 2.0])
++barlefts3 = np.array([0.77] * 3)
++barx3[[0, 2]] = np.NaN
++
++fig, ax = plt.subplots()
++bars = ax.barh(barx3, barwidths3, left=barlefts3)
++valid_bars = 0
++for bar in bars:
++    rect = bar.get_window_extent(fig.canvas.get_renderer())
++    if not np.isnan(rect.width) and not np.isnan(rect.height):
++        valid_bars += 1
++print(f"  Valid bars: {valid_bars}")
++print(f"  Expected: 1 (only middle bar)")
++plt.close()
++
++# Test 4: NaN only in heights (should work)
++print("\nTest 4: NaN only in heights (should work)")
++fig, ax = plt.subplots()
++bars = ax.bar(np.arange(3), np.array([np.NaN, 1, np.NaN]), bottom=np.array([0.2, 0.3, 0.4]))
++valid_bars = 0
++for bar in bars:
++    rect = bar.get_window_extent(fig.canvas.get_renderer())
++    if not np.isnan(rect.width) and not np.isnan(rect.height):
++        valid_bars += 1
++print(f"  Valid bars: {valid_bars}")
++print(f"  Expected: 1 (only middle bar)")
++plt.close()
++
++print("\n=== Done ===")
+diff --git a/test_nan_bar_bug.py b/test_nan_bar_bug.py
+new file mode 100644
+index 0000000000..2254002c20
+--- /dev/null
++++ b/test_nan_bar_bug.py
+@@ -0,0 +1,70 @@
++#!/usr/bin/env python
++"""Test for bar plot NaN bug."""
++import numpy as np
++import matplotlib
++matplotlib.use('Agg')
++import matplotlib.pyplot as plt
++
++def test_bar_with_nan_at_extremities():
++    """Test that bars are shown when x or bottom have NaN at extremities."""
++    # Test case from the bug report
++    barx = np.arange(3, dtype=float)
++    barheights = np.array([0.5, 1.5, 2.0])
++    barstarts = np.array([0.77]*3)
++    
++    barx[[0, 2]] = np.NaN
++    
++    fig, ax = plt.subplots()
++    bars = ax.bar(barx, barheights, bottom=barstarts)
++    
++    # Check that bars were created
++    assert len(bars) == 1, f"Expected 1 BarContainer, got {len(bars)}"
++    assert len(bars[0].get_children()) > 0, "Expected bars to be created"
++    
++    # Get the rectangles
++    rects = [c for c in bars[0].get_children() if isinstance(c, matplotlib.patches.Rectangle)]
++    print(f"Number of rectangles: {len(rects)}")
++    
++    # The middle bar should have finite width
++    # First and last bars should have NaN width (not displayed)
++    for i, rect in enumerate(rects):
++        x = rect.get_x()
++        w = rect.get_width()
++        print(f"Bar {i}: x={x}, w={w}")
++    
++    plt.close(fig)
++    print("Test passed!")
++
++def test_barh_with_nan_at_extremities():
++    """Test that horizontal bars are shown when y or left have NaN at extremities."""
++    barx = np.arange(3, dtype=float)
++    barheights = np.array([0.5, 1.5, 2.0])
++    barstarts = np.array([0.77]*3)
++    
++    barx[[0, 2]] = np.NaN
++    
++    fig, ax = plt.subplots()
++    bars = ax.barh(barx, barheights, left=barstarts)
++    
++    # Check that bars were created
++    assert len(bars) == 1, f"Expected 1 BarContainer, got {len(bars)}"
++    
++    plt.close(fig)
++    print("barh test passed!")
++
++def test_bar_with_nan_heights():
++    """Test that bars are shown when only heights have NaN."""
++    fig, ax = plt.subplots()
++    bars = ax.bar(np.arange(3), np.array([np.NaN, 1, np.NaN]), bottom=np.array([0.2, 0.3, 0.4]))
++    
++    # Check that bars were created
++    assert len(bars) == 1, f"Expected 1 BarContainer, got {len(bars)}"
++    
++    plt.close(fig)
++    print("NaN heights test passed!")
++
++if __name__ == '__main__':
++    test_bar_with_nan_at_extremities()
++    test_barh_with_nan_at_extremities()
++    test_bar_with_nan_heights()
++    print("\n=== All tests completed ===")

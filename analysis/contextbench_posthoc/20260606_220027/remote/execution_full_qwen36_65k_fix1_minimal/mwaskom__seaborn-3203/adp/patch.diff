@@ -1,0 +1,218 @@
+diff --git a/seaborn/_core/exceptions.py b/seaborn/_core/exceptions.py
+new file mode 100644
+index 00000000..d036edc4
+--- /dev/null
++++ b/seaborn/_core/exceptions.py
+@@ -0,0 +1,52 @@
++"""Custom exceptions for the seaborn.objects interface."""
++
++
++class PlotSpecError(Exception):
++    """
++    Exception class for errors related to plot specification.
++
++    This exception is raised to provide additional context when errors occur
++    during plot compilation, particularly when bad user inputs or seaborn
++    edge cases cannot be trivially detected until later.
++
++    The exception can be constructed with context about what operation was
++    being performed and which variable was being processed using the
++    `_during` class method.
++
++    Examples
++    --------
++
++    Constructing an exception with context:
++
++    >>> raise PlotSpecError._during("Scale setup", "color")
++    PlotSpecError: Scale setup failed for the `color` variable.
++    See the traceback above for more information.
++
++    """
++    def __init__(self, message: str = ""):
++        self.message = message
++        super().__init__(message)
++
++    @classmethod
++    def _during(cls, operation: str, variable: str) -> "PlotSpecError":
++        """
++        Create a PlotSpecError with context about an ongoing operation.
++
++        Parameters
++        ----------
++        operation : str
++            The operation that was being performed when the error occurred.
++        variable : str
++            The plot variable that was being processed when the error occurred.
++
++        Returns
++        -------
++        PlotSpecError
++            An exception with context about the operation and variable.
++
++        """
++        msg = (
++            f"{operation} failed for the `{variable}` variable. "
++            "See the traceback above for more information."
++        )
++        return cls(msg)
+diff --git a/seaborn/_core/plot.py b/seaborn/_core/plot.py
+index 64f59cb2..1359905a 100644
+--- a/seaborn/_core/plot.py
++++ b/seaborn/_core/plot.py
+@@ -37,6 +37,7 @@ from seaborn._core.typing import (
+     Default,
+ )
+ from seaborn._core.rules import categorical_order
++from seaborn._core.exceptions import PlotSpecError
+ from seaborn._compat import set_scale_obj, set_layout_engine
+ from seaborn.rcmod import axes_style, plotting_context
+ from seaborn.palettes import color_palette
+@@ -1249,7 +1250,10 @@ class Plotter:
+             if scale is None:
+                 self._scales[var] = Scale._identity()
+             else:
+-                self._scales[var] = scale._setup(var_df[var], prop)
++                try:
++                    self._scales[var] = scale._setup(var_df[var], prop)
++                except Exception as err:
++                    raise PlotSpecError._during("Scale setup", var) from err
+ 
+             # Everything below here applies only to coordinate variables
+             # We additionally skip it when we're working with a value
+diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py
+index 6c9ecbc9..c7e7b448 100644
+--- a/seaborn/_core/scales.py
++++ b/seaborn/_core/scales.py
+@@ -36,6 +36,7 @@ from pandas import Series
+ 
+ from seaborn._core.rules import categorical_order
+ from seaborn._core.typing import Default, default
++from seaborn._core.exceptions import PlotSpecError
+ 
+ from typing import TYPE_CHECKING
+ if TYPE_CHECKING:
+@@ -119,9 +120,12 @@ class Scale:
+         else:
+             trans_data = data
+ 
+-        for func in self._pipeline:
+-            if func is not None:
+-                trans_data = func(trans_data)
++        try:
++            for func in self._pipeline:
++                if func is not None:
++                    trans_data = func(trans_data)
++        except Exception as err:
++            raise PlotSpecError._during("Scaling", data.name) from err
+ 
+         if scalar_data:
+             return trans_data[0]
+diff --git a/seaborn/_core/subplots.py b/seaborn/_core/subplots.py
+index 83b8e136..e725598b 100644
+--- a/seaborn/_core/subplots.py
++++ b/seaborn/_core/subplots.py
+@@ -12,6 +12,8 @@ if TYPE_CHECKING:  # TODO move to seaborn._core.typing?
+     from seaborn._core.plot import FacetSpec, PairSpec
+     from matplotlib.figure import SubFigure
+ 
++from seaborn._core.exceptions import PlotSpecError
++
+ 
+ class Subplots:
+     """
+@@ -73,7 +75,7 @@ class Subplots:
+                 err = f"Cannot wrap the {multi_dim} while faceting the {wrap_dim}."
+ 
+         if err is not None:
+-            raise RuntimeError(err)  # TODO what err class? Define PlotSpecError?
++            raise PlotSpecError(err)
+ 
+     def _determine_grid_dimensions(
+         self, facet_spec: FacetSpec, pair_spec: PairSpec
+diff --git a/tests/_core/test_plot.py b/tests/_core/test_plot.py
+index 50673962..a7defa9c 100644
+--- a/tests/_core/test_plot.py
++++ b/tests/_core/test_plot.py
+@@ -21,6 +21,7 @@ from seaborn._core.moves import Move, Shift, Dodge
+ from seaborn._stats.aggregation import Agg
+ from seaborn._marks.base import Mark
+ from seaborn._stats.base import Stat
++from seaborn._core.exceptions import PlotSpecError
+ from seaborn.external.version import Version
+ 
+ assert_vector_equal = functools.partial(
+@@ -1517,7 +1518,7 @@ class TestPairInterface:
+         facet_dim, pair_axis = variables
+         p = Plot(long_df).facet(**{facet_dim[:3]: "a"}).pair(**{pair_axis: ["x", "y"]})
+         expected = f"Cannot facet the {facet_dim} while pairing on `{pair_axis}`."
+-        with pytest.raises(RuntimeError, match=expected):
++        with pytest.raises(PlotSpecError, match=expected):
+             p.plot()
+ 
+     @pytest.mark.parametrize("variables", [("columns", "y"), ("rows", "x")])
+@@ -1530,7 +1531,7 @@ class TestPairInterface:
+             .pair(**{pair_axis: ["x", "y"]})
+         )
+         expected = f"Cannot wrap the {facet_dim} while pairing on `{pair_axis}``."
+-        with pytest.raises(RuntimeError, match=expected):
++        with pytest.raises(PlotSpecError, match=expected):
+             p.plot()
+ 
+     def test_axis_sharing(self, long_df):
+diff --git a/tests/_core/test_subplots.py b/tests/_core/test_subplots.py
+index c9e2e340..8df9ec4d 100644
+--- a/tests/_core/test_subplots.py
++++ b/tests/_core/test_subplots.py
+@@ -4,6 +4,7 @@ import numpy as np
+ import pytest
+ 
+ from seaborn._core.subplots import Subplots
++from seaborn._core.exceptions import PlotSpecError
+ 
+ 
+ class TestSpecificationChecks:
+@@ -12,14 +13,14 @@ class TestSpecificationChecks:
+ 
+         err = "Cannot wrap facets when specifying both `col` and `row`."
+         facet_spec = {"wrap": 3, "variables": {"col": "a", "row": "b"}}
+-        with pytest.raises(RuntimeError, match=err):
++        with pytest.raises(PlotSpecError, match=err):
+             Subplots({}, facet_spec, {})
+ 
+     def test_cross_xy_pairing_and_wrap(self):
+ 
+         err = "Cannot wrap subplots when pairing on both `x` and `y`."
+         pair_spec = {"wrap": 3, "structure": {"x": ["a", "b"], "y": ["y", "z"]}}
+-        with pytest.raises(RuntimeError, match=err):
++        with pytest.raises(PlotSpecError, match=err):
+             Subplots({}, {}, pair_spec)
+ 
+     def test_col_facets_and_x_pairing(self):
+@@ -27,7 +28,7 @@ class TestSpecificationChecks:
+         err = "Cannot facet the columns while pairing on `x`."
+         facet_spec = {"variables": {"col": "a"}}
+         pair_spec = {"structure": {"x": ["x", "y"]}}
+-        with pytest.raises(RuntimeError, match=err):
++        with pytest.raises(PlotSpecError, match=err):
+             Subplots({}, facet_spec, pair_spec)
+ 
+     def test_wrapped_columns_and_y_pairing(self):
+@@ -35,7 +36,7 @@ class TestSpecificationChecks:
+         err = "Cannot wrap the columns while pairing on `y`."
+         facet_spec = {"variables": {"col": "a"}, "wrap": 2}
+         pair_spec = {"structure": {"y": ["x", "y"]}}
+-        with pytest.raises(RuntimeError, match=err):
++        with pytest.raises(PlotSpecError, match=err):
+             Subplots({}, facet_spec, pair_spec)
+ 
+     def test_wrapped_x_pairing_and_facetd_rows(self):
+@@ -43,7 +44,7 @@ class TestSpecificationChecks:
+         err = "Cannot wrap the columns while faceting the rows."
+         facet_spec = {"variables": {"row": "a"}}
+         pair_spec = {"structure": {"x": ["x", "y"]}, "wrap": 2}
+-        with pytest.raises(RuntimeError, match=err):
++        with pytest.raises(PlotSpecError, match=err):
+             Subplots({}, facet_spec, pair_spec)
+ 
+ 

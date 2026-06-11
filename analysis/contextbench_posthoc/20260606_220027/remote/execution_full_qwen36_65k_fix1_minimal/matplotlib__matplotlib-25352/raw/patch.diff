@@ -1,0 +1,105 @@
+diff --git a/lib/matplotlib/cbook.py b/lib/matplotlib/cbook.py
+index 1a64331e20..f69db60ba9 100644
+--- a/lib/matplotlib/cbook.py
++++ b/lib/matplotlib/cbook.py
+@@ -786,61 +786,57 @@ class Grouper:
+     """
+ 
+     def __init__(self, init=()):
+-        self._mapping = {weakref.ref(x): [weakref.ref(x)] for x in init}
++        self._mapping = weakref.WeakKeyDictionary(
++            {x: weakref.WeakSet([x]) for x in init}
++        )
+ 
+     def __getstate__(self):
+         return {
+             **vars(self),
+             # Convert weak refs to strong ones.
+-            "_mapping": {k(): [v() for v in vs] for k, vs in self._mapping.items()},
++            "_mapping": {k: list(v) for k, v in self._mapping.items()},
+         }
+ 
+     def __setstate__(self, state):
+         vars(self).update(state)
+         # Convert strong refs to weak ones.
+-        self._mapping = {weakref.ref(k): [*map(weakref.ref, vs)]
+-                         for k, vs in self._mapping.items()}
++        self._mapping = weakref.WeakKeyDictionary(
++            {k: weakref.WeakSet(v) for k, v in self._mapping.items()}
++        )
+ 
+     def __contains__(self, item):
+-        return weakref.ref(item) in self._mapping
+-
+-    def clean(self):
+-        """Clean dead weak references from the dictionary."""
+-        mapping = self._mapping
+-        to_drop = [key for key in mapping if key() is None]
+-        for key in to_drop:
+-            val = mapping.pop(key)
+-            val.remove(key)
++        return item in self._mapping
+ 
+     def join(self, a, *args):
+         """
+         Join given arguments into the same set.  Accepts one or more arguments.
+         """
+         mapping = self._mapping
+-        set_a = mapping.setdefault(weakref.ref(a), [weakref.ref(a)])
++        if a not in mapping:
++            mapping[a] = weakref.WeakSet([a])
++        set_a = mapping[a]
+ 
+         for arg in args:
+-            set_b = mapping.get(weakref.ref(arg), [weakref.ref(arg)])
++            if arg not in mapping:
++                mapping[arg] = weakref.WeakSet([arg])
++            set_b = mapping[arg]
+             if set_b is not set_a:
+                 if len(set_b) > len(set_a):
+                     set_a, set_b = set_b, set_a
+-                set_a.extend(set_b)
++                set_a.update(set_b)
+                 for elem in set_b:
+                     mapping[elem] = set_a
+ 
+-        self.clean()
+-
+     def joined(self, a, b):
+         """Return whether *a* and *b* are members of the same set."""
+-        self.clean()
+-        return (self._mapping.get(weakref.ref(a), object())
+-                is self._mapping.get(weakref.ref(b)))
++        mapping_a = self._mapping.get(a)
++        mapping_b = self._mapping.get(b)
++        return mapping_a is not None and mapping_a is mapping_b
+ 
+     def remove(self, a):
+-        self.clean()
+-        set_a = self._mapping.pop(weakref.ref(a), None)
++        set_a = self._mapping.pop(a, None)
+         if set_a:
+-            set_a.remove(weakref.ref(a))
++            set_a.discard(a)
+ 
+     def __iter__(self):
+         """
+@@ -848,16 +844,13 @@ class Grouper:
+ 
+         The iterator is invalid if interleaved with calls to join().
+         """
+-        self.clean()
+         unique_groups = {id(group): group for group in self._mapping.values()}
+         for group in unique_groups.values():
+-            yield [x() for x in group]
++            yield list(group)
+ 
+     def get_siblings(self, a):
+         """Return all of the items joined with *a*, including itself."""
+-        self.clean()
+-        siblings = self._mapping.get(weakref.ref(a), [weakref.ref(a)])
+-        return [x() for x in siblings]
++        return list(self._mapping.get(a, weakref.WeakSet([a])))
+ 
+ 
+ class GrouperView:

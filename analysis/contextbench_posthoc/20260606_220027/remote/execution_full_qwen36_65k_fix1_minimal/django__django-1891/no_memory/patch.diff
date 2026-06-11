@@ -1,0 +1,52 @@
+diff --git a/django/db/models/query.py b/django/db/models/query.py
+index 2c2b5d0883..93a7404fba 100644
+--- a/django/db/models/query.py
++++ b/django/db/models/query.py
+@@ -980,7 +980,14 @@ class QuerySet:
+             clone.query.add_q(filter_obj)
+             return clone
+         else:
+-            return self._filter_or_exclude(False, args=(), kwargs=filter_obj)
++            # Copy filter_obj to avoid modifying the original dictionary.
++            filter_obj = filter_obj.copy()
++            # Handle 'distinct' as a special key in the filter dictionary.
++            distinct = filter_obj.pop('distinct', False)
++            clone = self._filter_or_exclude(False, args=(), kwargs=filter_obj)
++            if distinct:
++                clone = clone.distinct()
++            return clone
+ 
+     def _combinator_query(self, combinator, *other_qs, all=False):
+         # Clone the query to inherit the select list and everything
+diff --git a/tests/model_forms/tests.py b/tests/model_forms/tests.py
+index 9e900e35f4..712afee6b8 100644
+--- a/tests/model_forms/tests.py
++++ b/tests/model_forms/tests.py
+@@ -2829,6 +2829,27 @@ class LimitChoicesToTests(TestCase):
+             StumpJokeForm()
+             self.assertEqual(today_callable_dict.call_count, 3)
+ 
++    def test_limit_choices_to_with_distinct(self):
++        """
++        limit_choices_to can use 'distinct' to avoid duplicate entries when
++        filtering through a ManyToMany relationship (#29660).
++        """
++        from django.forms import ModelChoiceField
++        from django.forms.models import apply_limit_choices_to_to_formfield
++
++        # Verify distinct is applied to the queryset
++        field = ModelChoiceField(
++            queryset=Character.objects.all(),
++            limit_choices_to={
++                'username__in': ['Test'],
++                'distinct': True,
++            },
++        )
++        # Apply limit_choices_to (as done by fields_for_model/ModelForm)
++        apply_limit_choices_to_to_formfield(field)
++        # The queryset should have distinct applied
++        self.assertTrue(field.queryset.query.distinct)
++
+ 
+ class FormFieldCallbackTests(SimpleTestCase):
+ 

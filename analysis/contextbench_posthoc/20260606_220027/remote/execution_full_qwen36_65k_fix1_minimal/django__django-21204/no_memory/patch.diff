@@ -1,0 +1,87 @@
+diff --git a/tests/queries/test_defer_only_load.py b/tests/queries/test_defer_only_load.py
+new file mode 100644
+index 0000000000..5d8ee50935
+--- /dev/null
++++ b/tests/queries/test_defer_only_load.py
+@@ -0,0 +1,81 @@
++"""Test for the defer() bug with self-referential foreign keys."""
++from django.test import TestCase
++from tests.queries.models import Tag, NamedCategory
++
++
++class DeferOnlyLoadBugTest(TestCase):
++    @classmethod
++    def setUpTestData(cls):
++        cls.cat1 = NamedCategory.objects.create(name="cat1")
++        cls.cat2 = NamedCategory.objects.create(name="cat2")
++        # Create a chain: tag -> parent -> parent's parent
++        cls.tag3 = Tag.objects.create(name="tag3", category=cls.cat2)
++        cls.tag2 = Tag.objects.create(name="tag2", parent=cls.tag3, category=cls.cat1)
++        cls.tag1 = Tag.objects.create(name="tag1", parent=cls.tag2)
++
++    def test_defer_with_self_referential_select_related(self):
++        """
++        Test that defer() works correctly with self-referential select_related().
++        
++        When we do:
++            Tag.objects.select_related('parent', 'parent__parent').defer(
++                'parent__name', 'parent__parent__category'
++            )
++        
++        The expected behavior is:
++        - Base Tag (tag1): ALL columns loaded (no defer)
++        - Parent Tag (tag2): category loaded, name deferred
++        - Parent's parent Tag (tag3): name loaded, category deferred
++        
++        The bug is that only_load is keyed by model class instead of alias,
++        so all three Tag table instances get the same deferred fields.
++        """
++        qs = Tag.objects.select_related(
++            'parent', 'parent__parent'
++        ).defer(
++            'parent__name', 'parent__parent__category'
++        )
++        
++        # Get the query
++        query = qs.query
++        print("\ndeferred_loading:", query.deferred_loading)
++        print("alias_map:", query.alias_map)
++        print("table_map:", query.table_map)
++        
++        # Check the only_load dictionary
++        compiler = qs.get_compiler(using='default')
++        only_load = compiler.deferred_to_columns()
++        print("\nonly_load (deferred columns):")
++        for k, v in only_load.items():
++            print(f"  {k}: {v}")
++        
++        # Execute the query
++        results = list(qs)
++        print("\n--- Results ---")
++        for tag in results:
++            print(f"Tag: {tag.name}")
++            print(f"  Deferred fields: {tag.get_deferred_fields()}")
++            if tag.parent:
++                print(f"  Parent: {tag.parent.name}")
++                print(f"  Parent deferred fields: {tag.parent.get_deferred_fields()}")
++                if tag.parent.parent:
++                    print(f"  Parent parent: {tag.parent.parent.name}")
++                    print(f"  Parent parent deferred fields: {tag.parent.parent.get_deferred_fields()}")
++        
++        # The bug: all three Tag instances have 'name' deferred
++        # Expected: only tag2 (parent) should have 'name' deferred
++        # and tag3 (parent's parent) should have 'category' deferred
++        tag1_result = results[0]  # tag1
++        tag2_result = tag1_result.parent  # tag2
++        tag3_result = tag2_result.parent  # tag3
++        
++        # tag1 should have no deferred fields
++        self.assertEqual(tag1_result.get_deferred_fields(), set())
++        
++        # tag2 (parent) should have 'name' deferred
++        self.assertIn('name', tag2_result.get_deferred_fields())
++        self.assertNotIn('category', tag2_result.get_deferred_fields())
++        
++        # tag3 (parent's parent) should have 'category' deferred
++        self.assertNotIn('name', tag3_result.get_deferred_fields())
++        self.assertIn('category', tag3_result.get_deferred_fields())

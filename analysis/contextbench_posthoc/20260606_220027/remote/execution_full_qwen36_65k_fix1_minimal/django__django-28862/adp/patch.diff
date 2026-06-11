@@ -1,0 +1,203 @@
+diff --git a/django/db/migrations/operations/fields.py b/django/db/migrations/operations/fields.py
+index 402dae2829..1ef9df0a52 100644
+--- a/django/db/migrations/operations/fields.py
++++ b/django/db/migrations/operations/fields.py
+@@ -186,12 +186,6 @@ class RemoveField(FieldOperation):
+     def describe(self):
+         return "Remove field %s from %s" % (self.name, self.model_name)
+ 
+-    def reduce(self, operation, app_label=None):
+-        from .models import DeleteModel
+-        if isinstance(operation, DeleteModel) and operation.name_lower == self.model_name_lower:
+-            return [operation]
+-        return super().reduce(operation, app_label=app_label)
+-
+ 
+ class AlterField(FieldOperation):
+     """
+diff --git a/django/db/migrations/operations/models.py b/django/db/migrations/operations/models.py
+index ad436cf611..b665a963ef 100644
+--- a/django/db/migrations/operations/models.py
++++ b/django/db/migrations/operations/models.py
+@@ -449,10 +449,17 @@ class ModelOptionOperation(ModelOperation):
+ 
+ class FieldRelatedOptionOperation(ModelOptionOperation):
+     def reduce(self, operation, app_label=None):
+-        if (isinstance(operation, FieldOperation) and
+-                self.name_lower == operation.model_name_lower and
+-                not self.references_field(operation.model_name, operation.name)):
+-            return [operation, self]
++        if isinstance(operation, FieldOperation) and self.name_lower == operation.model_name_lower:
++            if isinstance(operation, RemoveField):
++                # Field is being removed. Always swap the order so that the
++                # constraint is updated first, regardless of whether the field
++                # is in the new constraint. This is because the alter operation
++                # will try to remove the old constraints that may reference the
++                # field being removed.
++                return [self, operation]
++            elif not self.references_field(operation.model_name, operation.name):
++                # Field is not part of the constraint, keep the order.
++                return [operation, self]
+         return super().reduce(operation, app_label=app_label)
+ 
+ 
+diff --git a/test_issue_reproduce.py b/test_issue_reproduce.py
+new file mode 100644
+index 0000000000..0f7cb191f7
+--- /dev/null
++++ b/test_issue_reproduce.py
+@@ -0,0 +1,135 @@
++"""
++Test to reproduce the issue:
++Removing a field from index_together/unique_together and from the model 
++generates a migration that crashes.
++"""
++import os
++import sys
++
++# Setup Django
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'test_sqlite')
++sys.path.insert(0, '/testbed')
++sys.path.insert(0, '/testbed/tests')
++
++import django
++django.setup()
++
++from django.db import connection, models, migrations
++from django.test import TransactionTestCase
++from django.db.migrations.state import ProjectState, ModelState
++
++
++class TestRemoveFieldFromTogether(TransactionTestCase):
++    """Test that removing a field from index_together/unique_together and the model works."""
++    
++    available_apps = []
++    
++    def test_remove_field_from_index_together(self):
++        """
++        Removing a field from index_together and from the model should not crash.
++        
++        Regression test for django__django-28862
++        """
++        # Set up initial state with a model that has index_together
++        project_state = ProjectState()
++        initial_model = ModelState(
++            'test_app',
++            'TestModel',
++            [
++                ('id', models.AutoField(primary_key=True)),
++                ('field1', models.CharField(max_length=100)),
++                ('field2', models.CharField(max_length=100)),
++            ],
++            {'index_together': {('field1', 'field2')}},
++            (),
++            [],
++        )
++        project_state.add_model(initial_model)
++        
++        # Create the table first
++        with connection.schema_editor() as editor:
++            editor.create_model(initial_model.concrete_model)
++        
++        # Create target state with the field removed and index_together updated
++        new_state = project_state.clone()
++        
++        # Apply RemoveField operation
++        operation1 = migrations.RemoveField('TestModel', 'field2')
++        operation1.state_forwards('test_app', new_state)
++        
++        # Apply AlterIndexTogether operation (empty)
++        operation2 = migrations.AlterIndexTogether('TestModel', [])
++        operation2.state_forwards('test_app', new_state)
++        
++        # Now test the database alteration
++        with connection.schema_editor() as editor:
++            # First apply RemoveField database changes
++            operation1.database_forwards('test_app', editor, project_state, new_state)
++            # Then apply AlterIndexTogether database changes - this is where it crashes
++            operation2.database_forwards('test_app', editor, project_state, new_state)
++        
++        self.assertTrue(True)  # If we get here, the test passed
++    
++    def test_remove_field_from_unique_together(self):
++        """
++        Removing a field from unique_together and from the model should not crash.
++        
++        Regression test for django__django-28862
++        """
++        # Set up initial state with a model that has unique_together
++        project_state = ProjectState()
++        initial_model = ModelState(
++            'test_app',
++            'TestModel',
++            [
++                ('id', models.AutoField(primary_key=True)),
++                ('field1', models.CharField(max_length=100)),
++                ('field2', models.CharField(max_length=100)),
++            ],
++            {'unique_together': {('field1', 'field2')}},
++            (),
++            [],
++        )
++        project_state.add_model(initial_model)
++        
++        # Create the table first
++        with connection.schema_editor() as editor:
++            editor.create_model(initial_model.concrete_model)
++        
++        # Create target state with the field removed and unique_together updated
++        new_state = project_state.clone()
++        
++        # Apply RemoveField operation
++        operation1 = migrations.RemoveField('TestModel', 'field2')
++        operation1.state_forwards('test_app', new_state)
++        
++        # Apply AlterUniqueTogether operation (empty)
++        operation2 = migrations.AlterUniqueTogether('TestModel', [])
++        operation2.state_forwards('test_app', new_state)
++        
++        # Now test the database alteration
++        with connection.schema_editor() as editor:
++            # First apply RemoveField database changes
++            operation1.database_forwards('test_app', editor, project_state, new_state)
++            # Then apply AlterUniqueTogether database changes - this is where it crashes
++            operation2.database_forwards('test_app', editor, project_state, new_state)
++        
++        self.assertTrue(True)  # If we get here, the test passed
++
++
++if __name__ == '__main__':
++    import unittest
++    
++    # Run the tests
++    suite = unittest.TestLoader().loadTestsFromTestCase(TestRemoveFieldFromTogether)
++    runner = unittest.TextTestRunner(verbosity=2)
++    result = runner.run(suite)
++    
++    if result.wasSuccessful():
++        print("\n" + "=" * 60)
++        print("ALL TESTS PASSED!")
++        print("=" * 60)
++    else:
++        print("\n" + "=" * 60)
++        print("SOME TESTS FAILED!")
++        print("=" * 60)
+diff --git a/tests/migrations/test_autodetector.py b/tests/migrations/test_autodetector.py
+index e3ce3a129a..b181b084be 100644
+--- a/tests/migrations/test_autodetector.py
++++ b/tests/migrations/test_autodetector.py
+@@ -1529,10 +1529,10 @@ class AutodetectorTests(TestCase):
+         )
+         # Right number/type of migrations?
+         self.assertNumberMigrations(changes, "otherapp", 1)
+-        self.assertOperationTypes(changes, "otherapp", 0, ["RemoveField", "AlterUniqueTogether", "AlterIndexTogether"])
+-        self.assertOperationAttributes(changes, "otherapp", 0, 0, model_name="book", name="newfield")
+-        self.assertOperationAttributes(changes, "otherapp", 0, 1, name="book", unique_together={("author", "title")})
+-        self.assertOperationAttributes(changes, "otherapp", 0, 2, name="book", index_together={("author", "title")})
++        self.assertOperationTypes(changes, "otherapp", 0, ["AlterUniqueTogether", "AlterIndexTogether", "RemoveField"])
++        self.assertOperationAttributes(changes, "otherapp", 0, 0, name="book", unique_together={("author", "title")})
++        self.assertOperationAttributes(changes, "otherapp", 0, 1, name="book", index_together={("author", "title")})
++        self.assertOperationAttributes(changes, "otherapp", 0, 2, model_name="book", name="newfield")
+ 
+     def test_rename_field_and_foo_together(self):
+         """

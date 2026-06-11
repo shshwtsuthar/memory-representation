@@ -1,0 +1,49 @@
+diff --git a/django/urls/resolvers.py b/django/urls/resolvers.py
+index 0912a82f14..14da2f9cad 100644
+--- a/django/urls/resolvers.py
++++ b/django/urls/resolvers.py
+@@ -435,7 +435,7 @@ class URLResolver:
+                 ).format(status_code=status_code, path=path)
+                 messages.append(Error(msg, hint=str(e), id='urls.E008'))
+                 continue
+-            signature = inspect.signature(handler)
++            signature = inspect.signature(handler, follow_wrapped=False)
+             args = [None] * num_parameters
+             try:
+                 signature.bind(*args)
+diff --git a/tests/check_framework/test_urls.py b/tests/check_framework/test_urls.py
+index f0c257bc77..be784086bf 100644
+--- a/tests/check_framework/test_urls.py
++++ b/tests/check_framework/test_urls.py
+@@ -209,6 +209,11 @@ class CheckCustomErrorHandlersTests(SimpleTestCase):
+         result = check_url_config(None)
+         self.assertEqual(result, [])
+ 
++    @override_settings(ROOT_URLCONF='check_framework.urls.class_based_error_handlers')
++    def test_class_based_handlers(self):
++        result = check_url_config(None)
++        self.assertEqual(result, [])
++
+ 
+ class CheckURLSettingsTests(SimpleTestCase):
+ 
+diff --git a/tests/check_framework/urls/class_based_error_handlers.py b/tests/check_framework/urls/class_based_error_handlers.py
+new file mode 100644
+index 0000000000..04f850f7c2
+--- /dev/null
++++ b/tests/check_framework/urls/class_based_error_handlers.py
+@@ -0,0 +1,14 @@
++from django.views.generic import View
++
++urlpatterns = []
++
++
++class ErrorHandler(View):
++    def dispatch(self, request, *args, **kwargs):
++        return super().dispatch(request, *args, **kwargs)
++
++
++handler400 = ErrorHandler.as_view()
++handler403 = ErrorHandler.as_view()
++handler404 = ErrorHandler.as_view()
++handler500 = ErrorHandler.as_view()

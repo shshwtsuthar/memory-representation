@@ -1,0 +1,53 @@
+diff --git a/sphinx/util/inspect.py b/sphinx/util/inspect.py
+index 7c9adb0bf..b788a78db 100644
+--- a/sphinx/util/inspect.py
++++ b/sphinx/util/inspect.py
+@@ -501,6 +501,33 @@ class DefaultValue:
+         return self.value
+ 
+ 
++def _setup_type_aliases(type_aliases: Dict) -> Dict:
++    """Setup type_aliases for get_type_hints().
++    
++    This function converts dotted names in type_aliases (like 'struct.Struct')
++    into a proper namespace structure that typing.get_type_hints() can use.
++    
++    For example, {'struct.Struct': SomeClass} is converted to:
++    {'struct': <module-like object with Struct attribute>}
++    """
++    localns = {}
++    for alias, target in type_aliases.items():
++        if '.' in alias:
++            # Handle dotted names like 'struct.Struct'
++            module_name, _, attr_name = alias.partition('.')
++            if module_name not in localns:
++                # Create a simple namespace object for the module
++                class Namespace:
++                    pass
++                localns[module_name] = Namespace()
++            # Set the attribute on the module namespace
++            setattr(localns[module_name], attr_name, target)
++        else:
++            # Simple name, just add directly
++            localns[alias] = target
++    return localns
++
++
+ def _should_unwrap(subject: Callable) -> bool:
+     """Check the function should be unwrapped on getting signature."""
+     __globals__ = getglobals(subject)
+@@ -549,7 +576,13 @@ def signature(subject: Callable, bound_method: bool = False, follow_wrapped: boo
+ 
+     try:
+         # Resolve annotations using ``get_type_hints()`` and type_aliases.
+-        annotations = typing.get_type_hints(subject, None, type_aliases)
++        if type_aliases:
++            # type_aliases might contain dotted names like 'struct.Struct'
++            # that need to be converted into a proper namespace for get_type_hints
++            localns = _setup_type_aliases(type_aliases)
++        else:
++            localns = None
++        annotations = typing.get_type_hints(subject, None, localns)
+         for i, param in enumerate(parameters):
+             if param.name in annotations:
+                 parameters[i] = param.replace(annotation=annotations[param.name])

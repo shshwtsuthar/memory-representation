@@ -1,0 +1,38 @@
+diff --git a/sympy/sets/sets.py b/sympy/sets/sets.py
+index be1900fc54..7964e439f9 100644
+--- a/sympy/sets/sets.py
++++ b/sympy/sets/sets.py
+@@ -1405,8 +1405,11 @@ def _handle_finite_sets(args):
+                         other.append(
+                             v - FiniteSet(
+                             *contained, evaluate=False))
+-                    else:
+-                        pass  # for coverage
++                    elif len([x for x in v if x.has(Symbol)]) > len(symbolic_s_list):
++                        # v has additional symbolic elements not in s
++                        # so elements of s that are not in contained
++                        # might be equal to these additional symbolic elements
++                        other.append(v - FiniteSet(*contained, evaluate=False))
+ 
+             other_sets = Intersection(*other)
+             if not other_sets:
+diff --git a/sympy/sets/tests/test_sets.py b/sympy/sets/tests/test_sets.py
+index 331f210a6b..d2e9fc0818 100644
+--- a/sympy/sets/tests/test_sets.py
++++ b/sympy/sets/tests/test_sets.py
+@@ -1161,10 +1161,14 @@ def test_finite_set_intersection():
+     assert Intersection._handle_finite_sets([FiniteSet(-oo, x), FiniteSet(0, x)]) == FiniteSet(x)
+ 
+     assert Intersection._handle_finite_sets([FiniteSet(-oo, x), FiniteSet(x)]) == FiniteSet(x)
++    # Intersection of FiniteSet(1, 2, x) and FiniteSet(2, 3, x, y) should be:
++    # - 2 and x are definitely in the intersection
++    # - 1 is in the intersection only if 1 == y
++    # So the result should be Union({2, x}, Intersection({1}, {2, 3, y}))
+     assert Intersection._handle_finite_sets([FiniteSet(2, 3, x, y), FiniteSet(1, 2, x)]) == \
+         Intersection._handle_finite_sets([FiniteSet(1, 2, x), FiniteSet(2, 3, x, y)]) == \
+         Intersection(FiniteSet(1, 2, x), FiniteSet(2, 3, x, y)) == \
+-        FiniteSet(1, 2, x)
++        Union(FiniteSet(2, x), Intersection(FiniteSet(1), FiniteSet(2, 3, y)))
+ 
+ 
+ def test_union_intersection_constructor():

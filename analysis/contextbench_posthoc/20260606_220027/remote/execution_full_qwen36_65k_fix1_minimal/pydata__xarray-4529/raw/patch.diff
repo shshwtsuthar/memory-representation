@@ -1,0 +1,28 @@
+diff --git a/xarray/core/variable.py b/xarray/core/variable.py
+index 64c1895d..305ab0af 100644
+--- a/xarray/core/variable.py
++++ b/xarray/core/variable.py
+@@ -197,6 +197,8 @@ def as_compatible_data(data, fastpath=False):
+ 
+     Finally, wrap it up with an adapter if necessary.
+     """
++    from .dataarray import DataArray
++
+     if fastpath and getattr(data, "ndim", 0) > 0:
+         # can't use fastpath (yet) for scalars
+         return _maybe_wrap_data(data)
+@@ -218,7 +220,13 @@ def as_compatible_data(data, fastpath=False):
+         data = np.timedelta64(getattr(data, "value", data), "ns")
+ 
+     # we don't want nested self-described arrays
+-    data = getattr(data, "values", data)
++    # However, for DataArray we need to get the underlying data without
++    # triggering computation of dask arrays. Using .variable.data instead
++    # of .values preserves dask arrays.
++    if isinstance(data, DataArray):
++        data = data.variable.data
++    else:
++        data = getattr(data, "values", data)
+ 
+     if isinstance(data, np.ma.MaskedArray):
+         mask = np.ma.getmaskarray(data)

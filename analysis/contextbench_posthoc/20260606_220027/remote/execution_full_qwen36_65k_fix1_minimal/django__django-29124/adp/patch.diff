@@ -1,0 +1,127 @@
+diff --git a/test_issue_repro.py b/test_issue_repro.py
+new file mode 100644
+index 0000000000..d02a93e666
+--- /dev/null
++++ b/test_issue_repro.py
+@@ -0,0 +1,121 @@
++"""
++Reproduce issue #29124: Generated migration orders RemoveField and 
++AlterUniqueTogether incorrectly, causing FieldDoesNotExist.
++
++When removing a field and also removing an entry from unique_together that
++contains that field, the migration should order AlterUniqueTogether BEFORE
++RemoveField.
++"""
++import os
++import sys
++import django
++from django.conf import settings
++
++# Configure Django settings
++if not settings.configured:
++    settings.configure(
++        DEBUG=True,
++        DATABASES={
++            'default': {
++                'ENGINE': 'django.db.backends.sqlite3',
++                'NAME': ':memory:',
++            }
++        },
++        INSTALLED_APPS=[
++            'django.contrib.contenttypes',
++            'django.contrib.auth',
++        ],
++        USE_TZ=True,
++    )
++    django.setup()
++
++from django.db import models, migrations
++from django.db.migrations.state import ModelState, ProjectState
++from django.db.migrations.autodetector import MigrationAutodetector
++
++# Define model states
++# Original model: has fields repository, revision, foo with unique_together on both
++# New model: has fields repository, revision (foo removed), unique_together only on (repository, revision)
++
++original_push = ModelState('testapp', 'Push', [
++    ('id', models.AutoField(primary_key=True)),
++    ('repository', models.CharField(max_length=255)),
++    ('revision', models.CharField(max_length=255)),
++    ('foo', models.CharField(max_length=255)),
++], {
++    'unique_together': {
++        ('repository', 'revision'),
++        ('repository', 'revision', 'foo'),
++    },
++})
++
++new_push = ModelState('testapp', 'Push', [
++    ('id', models.AutoField(primary_key=True)),
++    ('repository', models.CharField(max_length=255)),
++    ('revision', models.CharField(max_length=255)),
++], {
++    'unique_together': {
++        ('repository', 'revision'),
++    },
++})
++
++# Create project states
++from_state = ProjectState()
++from_state.models = (
++    ('testapp', 'Push', original_push),
++)
++
++to_state = ProjectState()
++to_state.models = (
++    ('testapp', 'Push', new_push),
++)
++
++# Detect changes
++detector = MigrationAutodetector(from_state, to_state)
++changes = detector.changes(graph=None)
++
++print("=== Changes detected ===")
++for app_label, migrations in changes.items():
++    for migration in migrations:
++        print(f"\nMigration: {app_label}.{migration.name}")
++        print(f"Operations ({len(migration.operations)}):")
++        for i, op in enumerate(migration.operations):
++            print(f"  {i}. {op.__class__.__name__}: ", end="")
++            if hasattr(op, 'name'):
++                print(f"name={op.name}", end="")
++            if hasattr(op, 'name_lower'):
++                print(f", model_name={op.model_name_lower}", end="")
++            if hasattr(op, 'name_lower'):
++                print(f", name={op.name}", end="")
++            if hasattr(op, 'unique_together'):
++                print(f", unique_together={op.unique_together}", end="")
++            if hasattr(op, 'field_name'):
++                print(f", field_name={op.field_name}", end="")
++            if hasattr(op, 'name') and hasattr(op, 'model_name'):
++                print(f", model={op.model_name}, name={op.name}", end="")
++            print()
++
++# Check the order
++if 'testapp' in changes and changes['testapp']:
++    migration = changes['testapp'][0]
++    op_types = [op.__class__.__name__ for op in migration.operations]
++    print(f"\n=== Operation order: {op_types} ===")
++    
++    # Find positions of RemoveField and AlterUniqueTogether
++    remove_field_idx = None
++    alter_unique_idx = None
++    for i, op in enumerate(migration.operations):
++        if op.__class__.__name__ == 'RemoveField':
++            remove_field_idx = i
++        if op.__class__.__name__ == 'AlterUniqueTogether':
++            alter_unique_idx = i
++    
++    if remove_field_idx is not None and alter_unique_idx is not None:
++        if remove_field_idx < alter_unique_idx:
++            print("BUG: RemoveField comes BEFORE AlterUniqueTogether!")
++            print("This will cause FieldDoesNotExist when the migration is applied.")
++            print("Expected: AlterUniqueTogether should come BEFORE RemoveField")
++            sys.exit(1)
++        else:
++            print("OK: AlterUniqueTogether comes BEFORE RemoveField")
++            sys.exit(0)

@@ -1,0 +1,205 @@
+diff --git a/sympy/sets/sets.py b/sympy/sets/sets.py
+index 175312287e..2d86eed7b1 100644
+--- a/sympy/sets/sets.py
++++ b/sympy/sets/sets.py
+@@ -55,7 +55,7 @@ class Set(Basic):
+     is_ProductSet = False
+     is_Union = False
+     is_Intersection = None
+-    is_EmptySet = None
++    is_empty = None
+     is_UniversalSet = None
+     is_Complement = None
+     is_ComplexRegion = False
+@@ -1011,6 +1011,37 @@ def is_right_unbounded(self):
+         """Return ``True`` if the right endpoint is positive infinity. """
+         return self.right is S.Infinity or self.right == Float("+inf")
+ 
++    @property
++    def is_empty(self):
++        """
++        Return ``True`` if the interval is empty, ``False`` if it is not empty,
++        and ``None`` if the emptiness cannot be determined.
++
++        An interval is empty if its start point is greater than its end point,
++        or if the start point equals the end point and at least one of the
++        endpoints is open.
++        """
++        # If start > end, the interval is empty
++        if (self.end < self.start) == True:
++            return True
++        # If start - end is negative, the interval is empty
++        if (self.end - self.start).is_negative:
++            return True
++        # If start == end and at least one endpoint is open, the interval is empty
++        if self.start == self.end and (self.left_open or self.right_open):
++            return True
++        # If start == end == Infinity or start == end == -Infinity, the interval is empty
++        if self.start == self.end and self.start in (S.Infinity, S.NegativeInfinity):
++            return True
++        # If start == end, the interval is not empty (closed interval)
++        if self.start == self.end:
++            return False
++        # If we can determine that start < end, the interval is not empty
++        if (self.end > self.start) == True:
++            return False
++        # Otherwise, the emptiness cannot be determined
++        return None
++
+     def _eval_Eq(self, other):
+         if not isinstance(other, Interval):
+             if isinstance(other, FiniteSet):
+@@ -1219,6 +1250,24 @@ def roundrobin(*iterables):
+         else:
+             raise TypeError("Not all constituent sets are iterable")
+ 
++    @property
++    def is_empty(self):
++        """
++        Return ``True`` if the union is empty, ``False`` if it is not empty,
++        and ``None`` if the emptiness cannot be determined.
++
++        A union is empty if and only if all of its constituent sets are empty.
++        """
++        # If any set is not empty, the union is not empty
++        for s in self.args:
++            if s.is_empty is False:
++                return False
++            # If we can't determine if a set is empty, we can't determine if the union is empty
++            if s.is_empty is None:
++                return None
++        # All sets are empty, so the union is empty
++        return True
++
+ 
+ class Intersection(Set, LatticeOp):
+     """
+@@ -1282,6 +1331,24 @@ def args(self):
+     def is_iterable(self):
+         return any(arg.is_iterable for arg in self.args)
+ 
++    @property
++    def is_empty(self):
++        """
++        Return ``True`` if the intersection is empty, ``False`` if it is not empty,
++        and ``None`` if the emptiness cannot be determined.
++
++        An intersection is empty if any of its constituent sets is empty.
++        """
++        # If any set is empty, the intersection is empty
++        for s in self.args:
++            if s.is_empty is True:
++                return True
++            # If we can't determine if a set is empty, we can't determine if the intersection is empty
++            if s.is_empty is None:
++                return None
++        # None of the sets are empty, so we can't determine if the intersection is empty
++        return None
++
+     @property
+     def _inf(self):
+         raise NotImplementedError()
+@@ -1466,7 +1533,7 @@ class EmptySet(with_metaclass(Singleton, Set)):
+ 
+     .. [1] https://en.wikipedia.org/wiki/Empty_set
+     """
+-    is_EmptySet = True
++    is_empty = True
+     is_FiniteSet = True
+ 
+     @property
+@@ -1686,6 +1753,13 @@ def _sup(self):
+     def measure(self):
+         return 0
+ 
++    @property
++    def is_empty(self):
++        """
++        Return ``True`` if the finite set is empty, ``False`` if it is not empty.
++        """
++        return len(self.args) == 0
++
+     def __len__(self):
+         return len(self.args)
+ 
+diff --git a/sympy/sets/tests/test_sets.py b/sympy/sets/tests/test_sets.py
+index 4cd6760417..ccc7945b8c 100644
+--- a/sympy/sets/tests/test_sets.py
++++ b/sympy/sets/tests/test_sets.py
+@@ -1139,6 +1139,76 @@ def test_Union_contains():
+         Interval.open(-oo, 0), Interval.open(0, oo))
+ 
+ 
++def test_is_empty():
++    # EmptySet
++    assert S.EmptySet.is_empty is True
++
++    # Interval
++    assert Interval(0, 1).is_empty is False
++    assert Interval(1, 0).is_empty is True
++    assert Interval(oo, -oo).is_empty is True
++    assert Interval(oo, oo).is_empty is True
++    assert Interval(-oo, -oo).is_empty is True
++    assert Interval(1, 1).is_empty is False  # evaluates to FiniteSet(1)
++    assert Interval(1, 1, True, False).is_empty is True
++    assert Interval(1, 1, True, True).is_empty is True
++    assert Interval(-oo, oo).is_empty is False
++
++    # Interval with symbolic endpoints
++    a = Symbol('a', real=True)
++    b = Symbol('b', real=True)
++    assert Interval(a, b).is_empty is None
++
++    # FiniteSet
++    assert FiniteSet(1, 2, 3).is_empty is False
++    assert FiniteSet().is_empty is True
++
++    # Union
++    assert Union(Interval(0, 1), Interval(2, 3)).is_empty is False
++    assert Union(S.EmptySet, S.EmptySet).is_empty is True
++    assert Union(S.EmptySet, Interval(0, 1)).is_empty is False
++
++    # Intersection
++    assert Intersection(Interval(0, 2), Interval(1, 3)).is_empty is False
++    assert Intersection(Interval(0, 1), Interval(2, 3)).is_empty is True
++    assert Intersection(S.EmptySet, Interval(0, 1)).is_empty is True
++
++
++def test_is_empty():
++    # EmptySet
++    assert S.EmptySet.is_empty is True
++
++    # Interval
++    assert Interval(0, 1).is_empty is False
++    assert Interval(1, 0).is_empty is True
++    assert Interval(oo, -oo).is_empty is True
++    assert Interval(oo, oo).is_empty is True
++    assert Interval(-oo, -oo).is_empty is True
++    assert Interval(1, 1).is_empty is False  # evaluates to FiniteSet(1)
++    assert Interval(1, 1, True, False).is_empty is True
++    assert Interval(1, 1, True, True).is_empty is True
++    assert Interval(-oo, oo).is_empty is False
++
++    # Interval with symbolic endpoints
++    a = Symbol('a', real=True)
++    b = Symbol('b', real=True)
++    assert Interval(a, b).is_empty is None
++
++    # FiniteSet
++    assert FiniteSet(1, 2, 3).is_empty is False
++    assert FiniteSet().is_empty is True
++
++    # Union
++    assert Union(Interval(0, 1), Interval(2, 3)).is_empty is False
++    assert Union(S.EmptySet, S.EmptySet).is_empty is True
++    assert Union(S.EmptySet, Interval(0, 1)).is_empty is False
++
++    # Intersection
++    assert Intersection(Interval(0, 2), Interval(1, 3)).is_empty is False
++    assert Intersection(Interval(0, 1), Interval(2, 3)).is_empty is True
++    assert Intersection(S.EmptySet, Interval(0, 1)).is_empty is True
++
++
+ @XFAIL
+ def test_issue_16878b():
+     # in intersection_sets for (ImageSet, Set) there is no code

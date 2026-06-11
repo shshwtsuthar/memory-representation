@@ -1,0 +1,66 @@
+diff --git a/sympy/printing/pretty/pretty.py b/sympy/printing/pretty/pretty.py
+index e818a8317..4e5eb0d0f 100644
+--- a/sympy/printing/pretty/pretty.py
++++ b/sympy/printing/pretty/pretty.py
+@@ -2324,6 +2324,35 @@ def _print_AssignmentBase(self, e):
+         pform = prettyForm(*stringPict.next(l, op, r))
+         return pform
+ 
++    def _print_IndexedBase(self, expr):
++        return self._print(expr.label)
++
++    def _print_Indexed(self, expr):
++        base = self._print(expr.base)
++        if expr.indices:
++            # Print each index and join with commas
++            idx_pforms = [self._print(i) for i in expr.indices]
++            # Join prettyForms with comma separators
++            if len(idx_pforms) == 1:
++                indices = idx_pforms[0]
++            else:
++                # Join with comma separators
++                parts = []
++                for pf in idx_pforms:
++                    parts.append(pf)
++                    parts.append(prettyForm(','))
++                parts.pop()  # Remove trailing comma
++                indices = prettyForm(*stringPict.next(*parts))
++            
++            # Create underscore line, 2 chars wider than the base
++            underscore = hobj('_', max(base.width(), indices.width()) + 2)
++            underscore_pform = prettyForm(underscore)
++            # Stack: base above underscore above indices
++            pform = prettyForm(*base.above(underscore_pform))
++            pform = prettyForm(*pform.above(indices))
++            return pform
++        return base
++
+ 
+ def pretty(expr, **settings):
+     """Returns a string containing the prettified form of expr.
+diff --git a/test_trace.py b/test_trace.py
+new file mode 100644
+index 000000000..f1d6bccbe
+--- /dev/null
++++ b/test_trace.py
+@@ -0,0 +1,20 @@
++from sympy import symbols, Indexed
++from sympy.printing.pretty.pretty import pretty as pretty_func
++
++x1 = symbols('x1')
++i = symbols('i')
++expr = Indexed(x1, i)
++
++# Let's trace what happens
++import sympy.printing.pretty.pretty as pp
++orig_doprint = pp.PrettyPrinter.doprint
++
++def traced_doprint(self, expr):
++    print('doprint called with:', type(expr), expr)
++    return orig_doprint(self, expr)
++
++pp.PrettyPrinter.doprint = traced_doprint
++
++result = pretty_func(expr)
++print('Result:')
++print(result)

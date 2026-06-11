@@ -1,0 +1,105 @@
+diff --git a/sympy/assumptions/refine.py b/sympy/assumptions/refine.py
+index 3f39790962..3fbe751119 100644
+--- a/sympy/assumptions/refine.py
++++ b/sympy/assumptions/refine.py
+@@ -395,6 +395,92 @@ def refine_matrixelement(expr, assumptions):
+             return expr
+         return MatrixElement(matrix, j, i)
+ 
++
++def refine_Piecewise(expr, assumptions):
++    """
++    Handler for Piecewise.
++
++    Examples
++    ========
++
++    >>> from sympy import Piecewise, Q, refine
++    >>> from sympy.abc import x
++    >>> refine(Piecewise((1, x < 0), (0, True)), Q.positive(x))
++    0
++    >>> refine(Piecewise((1, x < 0), (0, True)), Q.negative(x))
++    1
++    >>> refine(Piecewise((x, x > 0), (1, True)), Q.positive(x))
++    x
++    """
++    from sympy.core.logic import fuzzy_not
++    from sympy.functions.elementary.piecewise import Piecewise
++    from sympy.core.relational import (StrictLessThan, StrictGreaterThan,
++                                       LessThan, GreaterThan, Eq, Ne)
++
++    def _to_predicate(cond):
++        """Convert a relational expression to a predicate if possible."""
++        if isinstance(cond, StrictLessThan):
++            return Q.negative(cond.lhs - cond.rhs)
++        elif isinstance(cond, StrictGreaterThan):
++            return Q.positive(cond.lhs - cond.rhs)
++        elif isinstance(cond, LessThan):
++            return Q.nonpositive(cond.lhs - cond.rhs)
++        elif isinstance(cond, GreaterThan):
++            return Q.nonnegative(cond.lhs - cond.rhs)
++        elif isinstance(cond, Eq):
++            return Q.eq(cond.lhs, cond.rhs)
++        elif isinstance(cond, Ne):
++            return Q.ne(cond.lhs, cond.rhs)
++        return None
++
++    new_exprs_conds = []
++    all_false = True  # Track if all previous conditions were False
++    for expr_i, cond_i in expr.args:
++        # Try to determine the truth value of the condition
++        cond_ask = ask(cond_i, assumptions)
++        if cond_ask is True:
++            if all_false:
++                # All previous conditions were False, so this is the one
++                return refine(expr_i, assumptions)
++            else:
++                # Some previous condition was unknown, keep this branch
++                new_exprs_conds.append((expr_i, cond_i))
++                all_false = False
++        elif cond_ask is False or fuzzy_not(cond_ask):
++            # Condition is definitely false, skip this branch
++            continue
++        else:
++            # Try to convert the condition to a predicate and ask again
++            pred = _to_predicate(cond_i)
++            if pred is not None:
++                pred_ask = ask(pred, assumptions)
++                if pred_ask is True:
++                    if all_false:
++                        return refine(expr_i, assumptions)
++                    else:
++                        new_exprs_conds.append((expr_i, cond_i))
++                        all_false = False
++                    continue
++                elif pred_ask is False or fuzzy_not(pred_ask):
++                    continue
++
++            # Cannot determine truth value, keep the branch
++            new_exprs_conds.append((expr_i, cond_i))
++            all_false = False
++
++    # Reconstruct the Piecewise with remaining branches
++    if len(new_exprs_conds) == 0:
++        # All branches eliminated - shouldn't happen for valid Piecewise
++        return S.NaN
++    elif len(new_exprs_conds) == 1 and new_exprs_conds[0][1] is S.true:
++        return refine(new_exprs_conds[0][0], assumptions)
++    else:
++        new_pw = Piecewise(*new_exprs_conds)
++        if new_pw == expr:
++            return None
++        return refine(new_pw, assumptions)
++
++
+ handlers_dict = {
+     'Abs': refine_abs,
+     'Pow': refine_Pow,
+@@ -403,5 +489,6 @@ def refine_matrixelement(expr, assumptions):
+     'im': refine_im,
+     'arg': refine_arg,
+     'sign': refine_sign,
+-    'MatrixElement': refine_matrixelement
++    'MatrixElement': refine_matrixelement,
++    'Piecewise': refine_Piecewise
+ }  # type: Dict[str, Callable[[Expr, Boolean], Expr]]

@@ -1,0 +1,42 @@
+diff --git a/django/db/models/query_utils.py b/django/db/models/query_utils.py
+index c2623f099f..7b3a1037ad 100644
+--- a/django/db/models/query_utils.py
++++ b/django/db/models/query_utils.py
+@@ -5,7 +5,6 @@ Factored out from django.db.models.query to avoid making the main module very
+ large and/or so that they can be used by other modules without getting into
+ circular import difficulties.
+ """
+-import copy
+ import functools
+ import inspect
+ from collections import namedtuple
+@@ -46,10 +45,10 @@ class Q(tree.Node):
+ 
+         # If the other Q() is empty, ignore it and just use `self`.
+         if not other:
+-            return copy.deepcopy(self)
++            return self
+         # Or if this Q is empty, ignore it and just use `other`.
+         elif not self:
+-            return copy.deepcopy(other)
++            return other
+ 
+         obj = type(self)()
+         obj.connector = conn
+diff --git a/tests/queries/test_q.py b/tests/queries/test_q.py
+index 9adff07ef2..03888f2ee8 100644
+--- a/tests/queries/test_q.py
++++ b/tests/queries/test_q.py
+@@ -103,3 +103,12 @@ class QTests(SimpleTestCase):
+         q = q1 & q2
+         path, args, kwargs = q.deconstruct()
+         self.assertEqual(Q(*args, **kwargs), q)
++
++    def test_combine_with_unpickleable_value(self):
++        # dict_keys is an example of an unpickleable type that should still
++        # work with Q objects.
++        q = Q(x__in={}.keys())
++        self.assertEqual(Q() | q, q)
++        self.assertEqual(q | Q(), q)
++        self.assertEqual(Q() & q, q)
++        self.assertEqual(q & Q(), q)

@@ -1,0 +1,93 @@
+diff --git a/test_recursive_onetoone.py b/test_recursive_onetoone.py
+new file mode 100644
+index 0000000000..f65970ef4f
+--- /dev/null
++++ b/test_recursive_onetoone.py
+@@ -0,0 +1,87 @@
++#!/usr/bin/env python
++import os
++import sys
++import django
++
++# Configure Django settings
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tests.settings')
++sys.path.insert(0, '/testbed')
++
++# Setup Django
++from django.conf import settings
++if not settings.configured:
++    settings.configure(
++        DEBUG=True,
++        DATABASES={
++            'default': {
++                'ENGINE': 'django.db.backends.sqlite3',
++                'NAME': ':memory:',
++            }
++        },
++        INSTALLED_APPS=[
++            'django.contrib.contenttypes',
++            'django.contrib.auth',
++        ],
++        USE_TZ=True,
++    )
++
++django.setup()
++
++from django.db import models, connection
++from django.core.exceptions import FieldError
++
++# Create test model
++class Example(models.Model):
++    name = models.CharField(max_length=32)
++    source = models.OneToOneField(
++        'self', related_name='destination', on_delete=models.CASCADE
++    )
++    
++    class Meta:
++        app_label = 'test'
++
++# Create the table
++with connection.schema_editor() as schema_editor:
++    schema_editor.create_model(Example)
++
++# Try to reproduce the issue
++print("Testing recursive OneToOneField with select_related() and only()...")
++print("=" * 70)
++
++try:
++    qs = Example.objects.select_related(
++        'source',
++        'destination',
++    ).only(
++        'name',
++        'source__name',
++        'destination__name',
++    ).all()
++    print('Query succeeded (unexpected)')
++    print('SQL:', qs.query)
++except FieldError as e:
++    print(f'FieldError: {e}')
++    import traceback
++    traceback.print_exc()
++except Exception as e:
++    print(f'{type(e).__name__}: {e}')
++    import traceback
++    traceback.print_exc()
++
++print()
++print("Testing with only 'source' (should work)...")
++try:
++    qs = Example.objects.select_related("source").only("name", "source__name").all()
++    print('Query succeeded')
++    print('SQL:', qs.query)
++except Exception as e:
++    print(f'{type(e).__name__}: {e}')
++
++print()
++print("Testing with only 'destination' (should work)...")
++try:
++    qs = Example.objects.select_related("destination").only("name", "destination__name").all()
++    print('Query succeeded')
++    print('SQL:', qs.query)
++except Exception as e:
++    print(f'{type(e).__name__}: {e}')

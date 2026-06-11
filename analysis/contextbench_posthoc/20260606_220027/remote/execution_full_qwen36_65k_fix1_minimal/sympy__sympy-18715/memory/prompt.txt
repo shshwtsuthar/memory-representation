@@ -1,0 +1,328 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: memory
+
+The following is deterministic extractive memory from an officially related prior issue.
+
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 31913e46-d9a8-4f3e-8a66-9bf1627665e8
+- repo: sympy/sympy
+- instance_id: sympy__sympy-23117
+- base_commit: c5cef2499d6eed024b0db5c792d6ec7c53baa470
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+sympy.Array([]) fails, while sympy.Matrix([]) works
+SymPy 1.4 does not allow to construct empty Array (see code below). Is this the intended behavior?
+
+```
+>>> import sympy
+KeyboardInterrupt
+>>> import sympy
+>>> from sympy import Array
+>>> sympy.__version__
+'1.4'
+>>> a = Array([])
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/Users/hcui7/miniconda3/envs/a/lib/python3.7/site-packages/sympy/tensor/array/dense_ndim_array.py", line 130, in __new__
+    return cls._new(iterable, shape, **kwargs)
+  File "/Users/hcui7/miniconda3/envs/a/lib/python3.7/site-packages/sympy/tensor/array/dense_ndim_array.py", line 136, in _new
+    shape, flat_list = cls._handle_ndarray_creation_inputs(iterable, shape, **kwargs)
+  File "/Users/hcui7/miniconda3/envs/a/lib/python3.7/site-packages/sympy/tensor/array/ndim_array.py", line 142, in _handle_ndarray_creation_inputs
+    iterable, shape = cls._scan_iterable_shape(iterable)
+  File "/Users/hcui7/miniconda3/envs/a/lib/python3.7/site-packages/sympy/tensor/array/ndim_array.py", line 127, in _scan_iterable_shape
+    return f(iterable)
+  File "/Users/hcui7/miniconda3/envs/a/lib/python3.7/site-packages/sympy/tensor/array/ndim_array.py", line 120, in f
+    elems, shapes = zip(*[f(i) for i in pointer])
+ValueError: not enough values to unpack (expected 2, got 0)
+```
+
+@czgdp1807
+
+FILES INSPECTED
+---------------
+- sympy/tensor/array/ndim_array.py [Read: 3]
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='**/ndim_array.py'
+- [5] Glob glob='testbed/**/ndim_array.py'
+- [23] Glob glob='testbed/sympy/tensor/array/tests/test*.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] ls -la testbed 2>/dev/null || echo "testbed directory not found"
+- [other/reproduction] cd testbed && python3 -c "from sympy import Array; a = Array([]); print('Success:', a)"
+- [other/reproduction] cd testbed && python3 -c "from sympy import Matrix; m = Matrix([]); print('Matrix([]) works:', m, 'shape:', m.shape)"
+- [other/reproduction] cd testbed && python3 -c "from sympy import Array; a = Array([]); print('Success! Array([]):', a); print('Shape:', a.shape); print('Length:', len(a))"
+- [test] python3 testbed/sympy/testing/runtests.py -c "from sympy import Array; a = Array([]); print('Success! Array([]):', a); print('Shape:', a.shape); print('Length:', len(a))"
+- [test] python3 test_issue.py
+- [test] python3 ./swebench_9_15/test_issue.py
+- [test] python3 -m pytest sympy/tensor/array/tests/test_ndim_array.py -v
+- [test] python3 -m pytest sympy/tensor/array/tests/test_immutable_ndim_array.py -v
+- [test] python3 -m pytest sympy/tensor/array/tests/test_mutable_ndim_array.py -v
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- Traceback (most recent call last):
+- ValueError: not enough values to unpack (expected 2, got 0)
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Diagnostic Output after action #3]
+  testbed directory not found
+- [Glob Result after action #5]
+  ./swebench_9_15/testbed/sympy/tensor/array/ndim_array.py
+- [Read Result after action #7]
+       1→from sympy.core.basic import Basic
+       2→from sympy.core.containers import (Dict, Tuple)
+       3→from sympy.core.expr import Expr
+       4→from sympy.core.kind import Kind, NumberKind, UndefinedKind
+       5→from sympy.core.numbers import Integer
+       6→from sympy.core.singleton import S
+       7→from sympy.core.sympify import sympify
+       8→from sympy.external.gmpy import SYMPY_INTS
+       9→from sympy.printing.defaults import Printable
+      10→
+      11→import itertools
+      12→from collections.abc import Iterable
+      13→
+      14→
+      15→class ArrayKind(Kind):
+      16→    """
+      17→    Kind for N-dimensional array in SymPy.
+      18→
+      19→    This kind represents the multidimensional array that algebraic
+      20→    operations are defined. Basic class for this kind is ``NDimArray``,
+      21→    but any expression representing the array can have this.
+      22→
+      23→    Parameters
+      24→    ==========
+      25→
+      26→    element_kind : Kind
+      27→        Kind of the element. Default is :obj:NumberKind `<sympy.core.kind.NumberKind>`,
+      28→        which means that the array contains only numbers.
+      29→
+      30→    Examples
+      31→    ========
+      32→
+      33→    Any instance of array cla
+  [... truncated ...]
+- [Read Result after action #9]
+     192→    def _scan_iterable_shape(cls, iterable):
+     193→        def f(pointer):
+     194→            if not isinstance(pointer, Iterable):
+     195→                return [pointer], ()
+     196→
+     197→            result = []
+     198→            elems, shapes = zip(*[f(i) for i in pointer])
+     199→            if len(set(shapes)) != 1:
+     200→                raise ValueError("could not determine shape unambiguously")
+     201→            for i in elems:
+     202→                result.extend(i)
+     203→            return result, (len(shapes),)+shapes[0]
+     204→
+     205→        return f(iterable)
+     206→
+     207→    @classmethod
+     208→    def _handle_ndarray_creation_inputs(cls, iterable=None, shape=None, **kwargs):
+     209→        from sympy.matrices.matrices import MatrixBase
+     210→        from sympy.tensor.array import SparseNDimArray
+     211→
+
+- [Test Output after action #17]
+  Exit code 2
+  python3: can't open file 'testbed/sympy/testing/runtests.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #19]
+  Exit code 2
+  python3: can't open file 'test_issue.py': [Errno 2] No such file or directory
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Test Output after action #21]
+  Testing empty Array creation...
+  ✓ Success! Array([]): []
+    Shape: (0,)
+    Length: 0
+
+  Testing empty Matrix for comparison...
+  ✓ Success! Matrix([]): Matrix(0, 0, [])
+    Shape: (0, 0)
+
+  Testing other Array cases...
+  ✓ Array([1]): [1] shape: (1,)
+  ✓ Array([[1, 2], [3, 4]]): [[1, 2], [3, 4]] shape: (2, 2)
+  ✓ Array([[]]): [[]] shape: (1, 0)
+
+  ✓ All tests passed!
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+- [Glob Result after action #23]
+  ./swebench_9_15/testbed/sympy/tensor/array/tests/test_ndim_array_conversions.py
+  ./swebench_9_15/testbed/sympy/tensor/array/tests/test_array_comprehension.py
+  ./swebench_9_15/testbed/sympy/tensor/array/tests/test_array_derivatives.py
+  ./swebench_9_15/testbed/sympy/tensor/array/tests/test_arrayop.py
+  ./swebench_9_15/testbed/sympy/tensor/array/tests/test_immutable_ndim_array.py
+  ./swebench_9_15/testbed/sympy/tensor/array/tests/test_mutable_ndim_array.py
+  ./swebench_9_15/testbed/sympy/tensor/array/tests/test_ndim_array.py
+- [Test Output after action #25]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 3 items
+
+  sympy/tensor/array/tests/test_ndim_array.py::test_array_negative_indices PASSED [ 33%]
+  sympy/tensor/array/tests/test_ndim_array.py::test_issue_18361 PASSED     [ 66%]
+  sympy/tensor/array/tests/test_ndim_array.py::test_issue_20222 PASSED     [100%]
+
+  ============================== 3 passed in 0.53s ===============================
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    At
+  [... truncated ...]
+- [Test Output after action #27]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 19 items
+
+  sympy/tensor/array/tests/test_immutable_ndim_array.py::test_ndim_array_initiation PASSED [  5%]
+  sympy/tensor/array/tests/test_immutable_ndim_array.py::test_reshape PASSED [ 10%]
+  sympy/tensor/array/tests/test_immutable_ndim_array.py::test_getitem PASSED [ 15%]
+  sympy/tensor/array/tests/test_immutable_ndim_array.py::test_iterator PASSED [ 21%]
+  sympy/tensor/array/tests/test_immutable_ndim_array.py::test_sparse PASSED [ 26%]
+  sympy/tensor/array/tests/test_immutable_ndim_array.py::test_calculation PASSED [ 31%]
+  sympy/tensor/array/tests/test_immutable_ndim_array.py::test_ndim_array_converting PASSED [ 36%]
+  sympy/tensor/array/tests/test_immutable_ndim_array.py::test
+  [... truncated ...]
+- [Test Output after action #29]
+  ============================= test session starts ==============================
+  platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+  cachedir: .pytest_cache
+  hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+  architecture: 64-bit
+  cache:        yes
+  ground types: gmpy 2.0.8
+
+  rootdir: ./swebench_9_15/testbed
+  configfile: pytest.ini
+  plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+  collecting ... collected 15 items
+
+  sympy/tensor/array/tests/test_mutable_ndim_array.py::test_ndim_array_initiation PASSED [  6%]
+  sympy/tensor/array/tests/test_mutable_ndim_array.py::test_sympify PASSED [ 13%]
+  sympy/tensor/array/tests/test_mutable_ndim_array.py::test_reshape PASSED [ 20%]
+  sympy/tensor/array/tests/test_mutable_ndim_array.py::test_iterator PASSED [ 26%]
+  sympy/tensor/array/tests/test_mutable_ndim_array.py::test_getitem PASSED [ 33%]
+  sympy/tensor/array/tests/test_mutable_ndim_array.py::test_sparse PASSED  [ 40%]
+  sympy/tensor/array/tests/test_mutable_ndim_array.py::test_calculation PASSED [ 46%]
+  sympy/tensor/array/tests/test_mutable_ndim_array.py::test_ndim_array_converting PASSED
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/tensor/array/ndim_array.py
+  Tool: Edit action #15
+  old_text_sha256: 76e0a70bc8eb08530c15e5c788c0fd621189ce134ba2a195c97bb4398ffd2161
+  new_text_sha256: 5f79cd5e347e40e1266a8e4732fed0ba229c1466bdf6734529627e7132e85dcb
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: sympy/sympy
+Base commit: c5cef2499d6eed024b0db5c792d6ec7c53baa470
+Instance ID: sympy__sympy-18715
+
+CURRENT_ISSUE
+Cannot modify MutableDenseNDimArray
+Hello,
+
+My understanding is that you should be able to modify the values in a MutableDenseNDimArray, however, since the update to version 1.5, I have not been able to do so.
+
+Minimal working example:
+
+`import sympy`
+`p = sympy.MutableDenseNDimArray.zeros(3)`
+`p[0] = 5`
+
+The above code gives the following error: "ValueError: Only a tuple index is accepted"
+
+I've tried searching for information on this error, but I can't find anything. The above code works in version 1.4.
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

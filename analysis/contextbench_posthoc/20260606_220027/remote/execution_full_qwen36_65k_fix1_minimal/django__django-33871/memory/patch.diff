@@ -1,0 +1,255 @@
+diff --git a/django/forms/boundfield.py b/django/forms/boundfield.py
+index 9f2ae59ab4..27ed9e350d 100644
+--- a/django/forms/boundfield.py
++++ b/django/forms/boundfield.py
+@@ -96,9 +96,13 @@ class BoundField:
+             attrs.setdefault(
+                 "id", self.html_initial_id if only_initial else self.auto_id
+             )
++        if only_initial:
++            value = self.field.prepare_value(self.initial)
++        else:
++            value = self.value()
+         return widget.render(
+             name=self.html_initial_name if only_initial else self.html_name,
+-            value=self.value(),
++            value=value,
+             attrs=attrs,
+             renderer=self.form.renderer,
+         )
+diff --git a/test_jsonfield_issue.py b/test_jsonfield_issue.py
+new file mode 100644
+index 0000000000..a01c0bbb5a
+--- /dev/null
++++ b/test_jsonfield_issue.py
+@@ -0,0 +1,181 @@
++"""
++Test to reproduce the JSONField with default not being detected as changed
++when invalidated in inlines.
++"""
++import os
++import sys
++import django
++
++# Setup Django
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'test_sqlite')
++sys.path.insert(0, '/testbed/tests')
++
++from django.conf import settings
++if not settings.configured:
++    settings.configure(
++        DATABASES={
++            'default': {
++                'ENGINE': 'django.db.backends.sqlite3',
++            },
++        },
++        INSTALLED_APPS=[
++            'django.contrib.contenttypes',
++            'django.contrib.auth',
++        ],
++        SECRET_KEY='test-secret-key',
++        DEFAULT_AUTO_FIELD='django.db.models.AutoField',
++    )
++
++django.setup()
++
++from django.db import models
++from django import forms
++from django.core.exceptions import ValidationError
++
++
++# Models
++class Question(models.Model):
++    title = models.CharField(max_length=100)
++    
++    class Meta:
++        app_label = 'test_app'
++
++
++class Answer(models.Model):
++    question = models.ForeignKey(Question, on_delete=models.CASCADE)
++    text = models.CharField(max_length=100)
++    data = models.JSONField(default=dict)
++    
++    class Meta:
++        app_label = 'test_app'
++
++
++# Forms
++class AnswerForm(forms.ModelForm):
++    class Meta:
++        model = Answer
++        fields = ['text', 'data']
++    
++    def clean(self):
++        # Simulate validation error
++        raise ValidationError("Validation error")
++
++
++class AnswerInlineFormSet(forms.models.inlineformset_factory(
++    Question, Answer,
++    form=AnswerForm,
++    extra=1,
++)):
++    pass
++
++
++def test_jsonfield_show_hidden_initial():
++    """Test that JSONField with callable default sets show_hidden_initial."""
++    # Create the form
++    form = AnswerForm()
++    
++    # Check if show_hidden_initial is set
++    print(f"data field show_hidden_initial: {form.fields['data'].show_hidden_initial}")
++    print(f"data field initial: {form.fields['data'].initial}")
++    
++    # The issue is that show_hidden_initial should be True when default is callable
++    assert form.fields['data'].show_hidden_initial, (
++        "show_hidden_initial should be True for JSONField with callable default"
++    )
++    print("✓ show_hidden_initial is True")
++
++
++def test_jsonfield_has_changed():
++    """Test that JSONField correctly detects no change when data matches initial."""
++    # Create an unbound form first to get the initial value
++    form = AnswerForm()
++    
++    # Prepare data that matches the initial value
++    initial_data = form.fields['data'].initial()  # {}
++    print(f"Initial data: {initial_data}")
++    
++    # Create bound form with data matching initial
++    bound_data = {
++        'text': 'test',
++        'data': '{}',  # Same as initial
++        'initial-data': '{}',  # Hidden initial field
++    }
++    bound_form = AnswerForm(data=bound_data)
++    
++    print(f"Bound form is_valid: {bound_form.is_valid()}")
++    print(f"Bound form has_changed: {bound_form.has_changed()}")
++    
++    # The form should not have changed since data matches initial
++    # But without show_hidden_initial, it will incorrectly report as changed
++    if bound_form.has_changed():
++        print("✗ Form incorrectly reports as changed (bug reproduced!)")
++        # Check if it's because of the data field
++        for field_name, field in bound_form.fields.items():
++            if field_name in bound_form.data:
++                bf = bound_form[field_name]
++                print(f"  {field_name}: has_changed={bf._has_changed()}, show_hidden_initial={field.show_hidden_initial}")
++    else:
++        print("✓ Form correctly reports as not changed")
++
++
++def test_inline_formset():
++    """Test the inline formset scenario from the issue."""
++    # Create parent object
++    question = Question.objects.create(title='Test Question')
++    
++    # Create inline formset
++    InlineFormSet = forms.models.inlineformset_factory(
++        Question, Answer,
++        form=AnswerForm,
++        extra=1,
++    )
++    
++    # First submission with validation error
++    formset_data = {
++        'form-TOTAL_FORMS': '1',
++        'form-INITIAL_FORMS': '0',
++        'form-MIN_NUM_FORMS': '0',
++        'form-MAX_NUM_FORMS': '1000',
++        'form-0-text': 'test',
++        'form-0-data': '{}',
++        'form-0-initial-data': '{}',
++    }
++    
++    formset = InlineFormSet(formset_data, instance=question)
++    print(f"\nInline formset is_valid: {formset.is_valid()}")
++    if not formset.is_valid():
++        print(f"Inline formset errors: {formset.errors}")
++    
++    # Second submission without changes (should still have validation error)
++    formset2 = InlineFormSet(formset_data, instance=question)
++    print(f"\nSecond submission is_valid: {formset2.is_valid()}")
++    print(f"Second submission has_changed: {formset2.has_changed()}")
++    
++    # Check individual form
++    if formset2.forms:
++        f = formset2.forms[0]
++        print(f"Individual form has_changed: {f.has_changed()}")
++        for field_name in ['text', 'data']:
++            if field_name in f.fields:
++                bf = f[field_name]
++                print(f"  {field_name}: has_changed={bf._has_changed()}, show_hidden_initial={f.fields[field_name].show_hidden_initial}")
++
++
++if __name__ == '__main__':
++    print("=" * 60)
++    print("Test 1: show_hidden_initial for JSONField")
++    print("=" * 60)
++    try:
++        test_jsonfield_show_hidden_initial()
++    except AssertionError as e:
++        print(f"FAILED: {e}")
++    
++    print("\n" + "=" * 60)
++    print("Test 2: has_changed for JSONField")
++    print("=" * 60)
++    test_jsonfield_has_changed()
++    
++    print("\n" + "=" * 60)
++    print("Test 3: Inline formset scenario")
++    print("=" * 60)
++    test_inline_formset()
+diff --git a/tests/model_forms/tests.py b/tests/model_forms/tests.py
+index 8268032e3c..c06d200d8a 100644
+--- a/tests/model_forms/tests.py
++++ b/tests/model_forms/tests.py
+@@ -3096,6 +3096,44 @@ class OtherModelFormTests(TestCase):
+         bound_form = PublicationDefaultsForm(empty_data)
+         self.assertFalse(bound_form.has_changed())
+ 
++    def test_callable_field_default_jsonfield(self):
++        """
++        Test that JSONField with callable default is correctly detected as
++        changed when the form is re-rendered after a validation error.
++        """
++        class ArticleWithJSON(Article):
++            data = models.JSONField(default=dict)
++
++            class Meta:
++                app_label = "model_forms"
++
++        class ArticleWithJSONForm(forms.ModelForm):
++            class Meta:
++                model = ArticleWithJSON
++                fields = ["headline", "data"]
++
++        # Test unbound form
++        form = ArticleWithJSONForm()
++        html = str(form["data"])
++        self.assertIn("initial-data", html)
++        self.assertIn("{}", html)
++
++        # Test bound form with different data
++        bound_data = {"headline": "test", "data": '{"key": "changed"}'}
++        form = ArticleWithJSONForm(bound_data)
++        self.assertTrue(form.has_changed())
++
++        # Test bound form with same data as initial
++        # Provide initial data for all fields to ensure has_changed() returns False
++        bound_data = {
++            "headline": "",
++            "data": "{}",
++            "initial-headline": "",
++            "initial-data": "{}",
++        }
++        form = ArticleWithJSONForm(bound_data)
++        self.assertFalse(form.has_changed())
++
+ 
+ class ModelFormCustomErrorTests(SimpleTestCase):
+     def test_custom_error_messages(self):

@@ -1,0 +1,64 @@
+diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py
+index 7b7ddc8..fed153f 100644
+--- a/seaborn/_stats/regression.py
++++ b/seaborn/_stats/regression.py
+@@ -23,6 +23,12 @@ class PolyFit(Stat):
+ 
+         x = data["x"]
+         y = data["y"]
++
++        # Remove missing data
++        mask = x.notna() & y.notna()
++        x = x[mask]
++        y = y[mask]
++
+         if x.nunique() <= self.order:
+             # TODO warn?
+             xx = yy = []
+diff --git a/tests/_stats/test_regression.py b/tests/_stats/test_regression.py
+index 7facf75..f64a288 100644
+--- a/tests/_stats/test_regression.py
++++ b/tests/_stats/test_regression.py
+@@ -50,3 +50,42 @@ class TestPolyFit:
+             grid = np.linspace(part["x"].min(), part["x"].max(), gridsize)
+             assert_array_equal(part["x"], grid)
+             assert part["y"].diff().diff().dropna().abs().gt(0).all()
++
++    def test_with_none_values(self):
++        # Test that PolyFit handles None values in data (issue #3091)
++        df = pd.DataFrame(dict(
++            x=[1, 2, 3, None, 4, 5, 6, 7, 8, 9],
++            y=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
++            group=[1] * 10,
++        ))
++        groupby = GroupBy(["group"])
++        res = PolyFit()(df, groupby, "x", {})
++
++        assert len(res) == 100  # gridsize
++        assert not res["y"].isna().any()
++
++    def test_with_nan_values(self):
++        # Test that PolyFit handles NaN values in data
++        df = pd.DataFrame(dict(
++            x=[1, 2, 3, np.nan, 4, 5, 6, 7, 8, 9],
++            y=[1, 2, 3, 4, np.nan, 6, 7, 8, 9, 10],
++            group=[1] * 10,
++        ))
++        groupby = GroupBy(["group"])
++        res = PolyFit()(df, groupby, "x", {})
++
++        assert len(res) == 100  # gridsize
++        assert not res["y"].isna().any()
++
++    def test_with_both_none_and_nan(self):
++        # Test that PolyFit handles both None and NaN values
++        df = pd.DataFrame(dict(
++            x=[1, 2, None, 4, np.nan, 6, 7, 8, 9, 10],
++            y=[1, np.nan, 3, 4, 5, 6, 7, 8, 9, 10],
++            group=[1] * 10,
++        ))
++        groupby = GroupBy(["group"])
++        res = PolyFit()(df, groupby, "x", {})
++
++        assert len(res) == 100  # gridsize
++        assert not res["y"].isna().any()

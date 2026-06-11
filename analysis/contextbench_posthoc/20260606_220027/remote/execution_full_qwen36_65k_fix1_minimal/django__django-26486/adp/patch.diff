@@ -1,0 +1,170 @@
+diff --git a/check_rels.py b/check_rels.py
+new file mode 100644
+index 0000000000..868441f665
+--- /dev/null
++++ b/check_rels.py
+@@ -0,0 +1,30 @@
++#!/usr/bin/env python
++import os
++import sys
++
++sys.path.insert(0, '/testbed')
++os.environ['DJANGO_SETTINGS_MODULE'] = 'tests.settings'
++
++import django
++from django.conf import settings
++
++if not settings.configured:
++    settings.configure(
++        DATABASES={'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}},
++        INSTALLED_APPS=['django.contrib.contenttypes', 'django.contrib.auth', 'tests.select_related_onetoone'],
++        DEFAULT_AUTO_FIELD='django.db.models.AutoField',
++    )
++
++django.setup()
++
++from tests.select_related_onetoone.models import Parent2, Child4
++
++# Check if Child4's parent2_ptr is in Parent2's related_objects
++print('Parent2._meta.related_objects:')
++for rel in Parent2._meta.related_objects:
++    print('  ', rel, '- model:', rel.model if hasattr(rel, 'model') else 'N/A')
++
++print()
++print('Parent2._meta.get_all_related_objects():')
++for rel in Parent2._meta.get_all_related_objects():
++    print('  ', rel, '- model:', rel.model if hasattr(rel, 'model') else 'N/A')
+diff --git a/django/db/models/sql/query.py b/django/db/models/sql/query.py
+index 6946c273c7..32a24d121f 100644
+--- a/django/db/models/sql/query.py
++++ b/django/db/models/sql/query.py
+@@ -629,6 +629,10 @@ class Query(object):
+                 # (if it's not a reverse relation) to the things we select.
+                 if not is_reverse_o2o(source):
+                     must_include[old_model].add(source)
++                else:
++                    # For reverse O2O relations, we need to add the FK field
++                    # from the related model to must_include so it gets loaded.
++                    add_to_dict(must_include, cur_model, source.field)
+                 add_to_dict(must_include, cur_model, opts.pk)
+             field = opts.get_field(parts[-1])
+             is_reverse_object = field.auto_created and not field.concrete
+diff --git a/test_issue.py b/test_issue.py
+new file mode 100644
+index 0000000000..419c4e301d
+--- /dev/null
++++ b/test_issue.py
+@@ -0,0 +1,113 @@
++#!/usr/bin/env python
++import os
++import sys
++
++# Add testbed to path
++sys.path.insert(0, '/testbed')
++
++# Use the test runner's configuration
++os.environ['TMPDIR'] = '/tmp'
++
++import django
++from django.conf import settings
++
++if not settings.configured:
++    settings.configure(
++        DATABASES={
++            'default': {
++                'ENGINE': 'django.db.backends.sqlite3',
++                'NAME': ':memory:',
++            },
++            'other': {
++                'ENGINE': 'django.db.backends.sqlite3',
++                'NAME': ':memory:',
++            }
++        },
++        INSTALLED_APPS=[
++            'django.contrib.contenttypes',
++            'django.contrib.auth',
++            'tests.select_related_onetoone',
++        ],
++        DEFAULT_AUTO_FIELD='django.db.models.AutoField',
++    )
++
++django.setup()
++
++from django.core.management import call_command
++call_command('migrate', '--run-syncdb', verbosity=0)
++
++from tests.select_related_onetoone.models import Parent2, Child4
++
++# Create test data
++c = Child4(name1='n1', name2='n2', value=1, value4=4)
++c.save()
++
++print("Testing test_inheritance_deferred...")
++print("=" * 60)
++
++# Try to reproduce the error
++try:
++    qs = Parent2.objects.select_related('child1').only('id2', 'child1__value')
++    print('QuerySet created successfully')
++    print('deferred_loading:', qs.query.deferred_loading)
++    print('select_related:', qs.query.select_related)
++    loaded_field_names = qs.query.get_loaded_field_names()
++    print('loaded_field_names:', loaded_field_names)
++    
++    # Debug: Check reverse relations on Parent2
++    print('\nReverse relations on Parent2:')
++    for rel in Parent2._meta.related_objects:
++        if rel.field.unique and not rel.field.many_to_many:
++            print('  Related object:', rel)
++            print('    Field name:', rel.field.name)
++            print('    Field attname:', rel.field.attname)
++            print('    Related query name:', rel.field.related_query_name())
++            print('    Related model:', rel.related_model)
++            if rel.related_model in loaded_field_names:
++                print('    Loaded fields for related model:', loaded_field_names[rel.related_model])
++    
++    p = qs.get(name2='n2')
++    print('Success! Got p.id2 =', p.id2)
++    print('p.child1.value =', p.child1.value)
++except Exception as e:
++    print('Error: %s: %s' % (type(e).__name__, e))
++    import traceback
++    traceback.print_exc()
++
++print("\n" + "=" * 60)
++print("Testing test_inheritance_deferred2...")
++print("=" * 60)
++
++# Try to reproduce the second error
++try:
++    c2 = Child4(name1='n1', name2='n2', value=1, value4=4)
++    c2.save()
++    
++    qs = Parent2.objects.select_related('child1', 'child4').only(
++        'id2', 'child1__value', 'child1__child4__value4')
++    print('QuerySet created successfully')
++    print('deferred_loading:', qs.query.deferred_loading)
++    print('select_related:', qs.query.select_related)
++    loaded_field_names = qs.query.get_loaded_field_names()
++    print('loaded_field_names:', loaded_field_names)
++    
++    # Debug: Check reverse relations on Parent2
++    print('\nReverse relations on Parent2:')
++    for rel in Parent2._meta.related_objects:
++        if rel.field.unique and not rel.field.many_to_many:
++            print('  Related object:', rel)
++            print('    Field name:', rel.field.name)
++            print('    Field attname:', rel.field.attname)
++            print('    Related query name:', rel.field.related_query_name())
++            print('    Related model:', rel.related_model)
++            if rel.related_model in loaded_field_names:
++                print('    Loaded fields for related model:', loaded_field_names[rel.related_model])
++    
++    p = qs.get(name2='n2')
++    print('Success! Got p.id2 =', p.id2)
++    print('p.child1.value =', p.child1.value)
++    print('p.child1.child4.value4 =', p.child1.child4.value4)
++except Exception as e:
++    print('Error: %s: %s' % (type(e).__name__, e))
++    import traceback
++    traceback.print_exc()

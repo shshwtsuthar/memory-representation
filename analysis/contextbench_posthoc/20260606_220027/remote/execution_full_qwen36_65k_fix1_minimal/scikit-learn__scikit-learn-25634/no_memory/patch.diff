@@ -1,0 +1,51 @@
+diff --git a/sklearn/utils/multiclass.py b/sklearn/utils/multiclass.py
+index 5eaef2fde..decbdc136 100644
+--- a/sklearn/utils/multiclass.py
++++ b/sklearn/utils/multiclass.py
+@@ -295,6 +295,12 @@ def type_of_target(y, input_name=""):
+     if sparse_pandas:
+         raise ValueError("y cannot be class 'SparseSeries' or 'SparseArray'")
+ 
++    # Handle pandas nullable dtypes (Int64, Float64, boolean) that would
++    # otherwise be converted to object dtype and fail type detection
++    if hasattr(y, "dtype") and hasattr(y.dtype, "numpy_dtype"):
++        # pandas nullable dtypes have a numpy_dtype attribute
++        y = np.asarray(y, dtype=y.dtype.numpy_dtype)
++
+     if is_multilabel(y):
+         return "multilabel-indicator"
+ 
+diff --git a/sklearn/utils/tests/test_multiclass.py b/sklearn/utils/tests/test_multiclass.py
+index cf5858d0f..b3f253d39 100644
+--- a/sklearn/utils/tests/test_multiclass.py
++++ b/sklearn/utils/tests/test_multiclass.py
+@@ -346,6 +346,29 @@ def test_type_of_target_pandas_sparse():
+         type_of_target(y)
+ 
+ 
++def test_type_of_target_pandas_nullable_dtypes():
++    """Test that nullable pandas dtypes are handled correctly in type_of_target."""
++    pd = pytest.importorskip("pandas")
++
++    # Test that nullable dtypes are correctly identified as their non-nullable
++    # equivalents (Int64 -> binary/multiclass, Float64 -> continuous/binary, etc.)
++    for dtype, expected_type in [
++        ("Int64", "binary"),  # contains 0 and 1
++        ("Float64", "binary"),  # contains 0.0 and 1.0
++        ("boolean", "binary"),  # contains True and False
++    ]:
++        y = pd.Series([1, 0, 0, 1, 0, 1], dtype=dtype)
++        assert type_of_target(y) == expected_type
++
++    # Test unique_labels with nullable dtypes mixed with regular dtypes
++    for dtype in ["Int64", "Float64", "boolean"]:
++        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
++        y_predicted = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
++        # Should not raise ValueError about mix type
++        result = unique_labels(y_true, y_predicted)
++        assert len(result) > 0
++
++
+ def test_class_distribution():
+     y = np.array(
+         [

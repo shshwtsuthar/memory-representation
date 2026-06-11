@@ -1,0 +1,94 @@
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index 9ce46e3f73..64ade18ab7 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -2,6 +2,7 @@ import collections.abc
+ import copy
+ import datetime
+ import decimal
++import enum
+ import operator
+ import uuid
+ import warnings
+@@ -56,6 +57,29 @@ class NOT_PROVIDED:
+ BLANK_CHOICE_DASH = [("", "---------")]
+ 
+ 
++class EnumChoices:
++    """
++    Wrapper class to make an Enum class behave as an iterable of (value, name) tuples.
++    
++    This allows using Enum classes directly as choices in model fields.
++    """
++    def __init__(self, enum_class):
++        self.enum_class = enum_class
++    
++    def __iter__(self):
++        for member in self.enum_class:
++            yield (member.value, member.name)
++    
++    def __bool__(self):
++        return bool(list(self.enum_class))
++    
++    def __len__(self):
++        return len(list(self.enum_class))
++    
++    def __repr__(self):
++        return f'<{self.__class__.__name__}: {self.enum_class.__name__}>'
++
++
+ def _load_field(app_label, model_name, field_name):
+     return apps.get_model(app_label, model_name)._meta.get_field(field_name)
+ 
+@@ -155,6 +179,9 @@ class Field(RegisterLookupMixin):
+         self.unique_for_year = unique_for_year
+         if isinstance(choices, collections.abc.Iterator):
+             choices = list(choices)
++        # Convert Enum classes to EnumChoices wrapper
++        if isinstance(choices, type) and issubclass(choices, enum.Enum):
++            choices = EnumChoices(choices)
+         self.choices = choices
+         self.help_text = help_text
+         self.db_index = db_index
+@@ -601,6 +628,9 @@ class Field(RegisterLookupMixin):
+             return
+ 
+         if self.choices is not None and value not in self.empty_values:
++            # If value is an Enum member, use its value for comparison
++            if isinstance(value, enum.Enum):
++                value = value.value
+             for option_key, option_value in self.choices:
+                 if isinstance(option_value, (list, tuple)):
+                     # This is an optgroup, so look inside the group for
+diff --git a/django/forms/fields.py b/django/forms/fields.py
+index a977256525..18b052cd82 100644
+--- a/django/forms/fields.py
++++ b/django/forms/fields.py
+@@ -4,6 +4,7 @@ Field classes.
+ 
+ import copy
+ import datetime
++import enum
+ import math
+ import operator
+ import os
+@@ -764,6 +765,9 @@ class ChoiceField(Field):
+ 
+     def __init__(self, *, choices=(), **kwargs):
+         super().__init__(**kwargs)
++        # Convert Enum classes to list of (value, name) tuples
++        if isinstance(choices, type) and issubclass(choices, enum.Enum):
++            choices = [(member.value, member.name) for member in choices]
+         self.choices = choices
+ 
+     def __deepcopy__(self, memo):
+@@ -805,6 +809,9 @@ class ChoiceField(Field):
+ 
+     def valid_value(self, value):
+         """Check to see if the provided value is a valid choice."""
++        # If value is an Enum member, use its value for comparison
++        if isinstance(value, enum.Enum):
++            value = value.value
+         text_value = str(value)
+         for k, v in self.choices:
+             if isinstance(v, (list, tuple)):

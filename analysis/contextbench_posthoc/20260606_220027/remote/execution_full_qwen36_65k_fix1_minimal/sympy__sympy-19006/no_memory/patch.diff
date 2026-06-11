@@ -1,0 +1,66 @@
+diff --git a/sympy/core/sympify.py b/sympy/core/sympify.py
+index e04b8112d1..3beab04e8f 100644
+--- a/sympy/core/sympify.py
++++ b/sympy/core/sympify.py
+@@ -384,6 +384,16 @@ def sympify(a, locals=None, convert_xor=True, strict=False, rational=False,
+     # As a last chance, we try to take "a"'s normal form via unicode()
+     # and try to parse it. If it fails, then we have no luck and
+     # return an exception
++    #
++    # Deprecation: automatically converting custom objects with __str__
++    # or __repr__ to strings and parsing them is deprecated.
++    from sympy.utilities.exceptions import SymPyDeprecationWarning
++    if not isinstance(a, str):
++        SymPyDeprecationWarning(
++            feature="sympifying custom objects with __str__ or __repr__",
++            useinstead="define a _sympy_ method or use strict=True",
++            issue=19006,
++            deprecated_since_version="1.6").warn()
+     try:
+         from .compatibility import unicode
+         a = unicode(a)
+diff --git a/sympy/core/tests/test_sympify.py b/sympy/core/tests/test_sympify.py
+index 57a8c4d0f1..dee798fa2d 100644
+--- a/sympy/core/tests/test_sympify.py
++++ b/sympy/core/tests/test_sympify.py
+@@ -6,7 +6,7 @@
+     CantSympify)
+ from sympy.core.decorators import _sympifyit
+ from sympy.external import import_module
+-from sympy.testing.pytest import raises, XFAIL, skip
++from sympy.testing.pytest import raises, XFAIL, skip, warns_deprecated_sympy
+ from sympy.utilities.decorator import conserve_mpmath_dps
+ from sympy.geometry import Point, Line
+ from sympy.functions.combinatorial.factorials import factorial, factorial2
+@@ -506,6 +506,31 @@ def test_kernS():
+     assert one != 1 and one.expand() == 1
+ 
+ 
++def test_sympify_custom_object_deprecation():
++    # Issue 19006: sympifying custom objects with __str__ or __repr__
++    # should emit a deprecation warning
++    class C:
++        def __repr__(self):
++            return '2'  # valid sympy expression
++
++    c = C()
++    with warns_deprecated_sympy():
++        result = sympify(c)
++    assert result == Integer(2)
++
++    # Objects with _sympy_ method should NOT trigger the warning
++    class D:
++        def _sympy_(self):
++            return Symbol('z')
++
++    d = D()
++    # Should not raise a deprecation warning
++    from sympy.testing.pytest import ignore_warnings
++    with ignore_warnings(Exception):
++        result = sympify(d)
++    assert result == Symbol('z')
++
++
+ def test_issue_6540_6552():
+     assert S('[[1/3,2], (2/5,)]') == [[Rational(1, 3), 2], (Rational(2, 5),)]
+     assert S('[[2/6,2], (2/4,)]') == [[Rational(1, 3), 2], (S.Half,)]

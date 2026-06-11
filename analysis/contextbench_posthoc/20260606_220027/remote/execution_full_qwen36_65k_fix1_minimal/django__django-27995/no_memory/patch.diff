@@ -1,0 +1,248 @@
+diff --git a/django/db/models/query.py b/django/db/models/query.py
+index a62947d9d0..a1a6b89be4 100644
+--- a/django/db/models/query.py
++++ b/django/db/models/query.py
+@@ -363,6 +363,7 @@ class QuerySet:
+         If args is present the expression is passed as a kwarg using
+         the Aggregate object's default alias.
+         """
++        self._check_combinator()
+         if self.query.distinct_fields:
+             raise NotImplementedError("aggregate() + distinct(fields) not implemented.")
+         self._validate_values_are_expressions((*args, *kwargs.values()), method_name='aggregate')
+@@ -428,6 +429,7 @@ class QuerySet:
+         Create a new object with the given kwargs, saving it to the database
+         and returning the created object.
+         """
++        self._check_combinator()
+         obj = self.model(**kwargs)
+         self._for_write = True
+         obj.save(force_insert=True, using=self.db)
+@@ -542,6 +544,7 @@ class QuerySet:
+         Return a tuple of (object, created), where created is a boolean
+         specifying whether an object was created.
+         """
++        self._check_combinator()
+         # The get() needs to be targeted at the write database in order
+         # to avoid potential transaction consistency problems.
+         self._for_write = True
+@@ -558,6 +561,7 @@ class QuerySet:
+         Return a tuple (object, created), where created is a boolean
+         specifying whether an object was created.
+         """
++        self._check_combinator()
+         defaults = defaults or {}
+         self._for_write = True
+         with transaction.atomic(using=self.db):
+@@ -689,6 +693,7 @@ class QuerySet:
+ 
+     def delete(self):
+         """Delete the records in the current QuerySet."""
++        self._check_combinator()
+         assert self.query.can_filter(), \
+             "Cannot use 'limit' or 'offset' with delete."
+ 
+@@ -731,6 +736,7 @@ class QuerySet:
+         Update all elements in the current QuerySet, setting all the given
+         fields to the appropriate values.
+         """
++        self._check_combinator()
+         assert self.query.can_filter(), \
+             "Cannot update a query once a slice has been taken."
+         self._for_write = True
+@@ -890,6 +896,7 @@ class QuerySet:
+         Return a new QuerySet instance with the args ANDed to the existing
+         set.
+         """
++        self._check_combinator()
+         return self._filter_or_exclude(False, *args, **kwargs)
+ 
+     def exclude(self, *args, **kwargs):
+@@ -897,9 +904,11 @@ class QuerySet:
+         Return a new QuerySet instance with NOT (args) ANDed to the existing
+         set.
+         """
++        self._check_combinator()
+         return self._filter_or_exclude(True, *args, **kwargs)
+ 
+     def _filter_or_exclude(self, negate, *args, **kwargs):
++        self._check_combinator()
+         if args or kwargs:
+             assert self.query.can_filter(), \
+                 "Cannot filter a query once a slice has been taken."
+@@ -921,6 +930,7 @@ class QuerySet:
+         This exists to support framework features such as 'limit_choices_to',
+         and usually it will be more natural to use other methods.
+         """
++        self._check_combinator()
+         if isinstance(filter_obj, Q):
+             clone = self._chain()
+             clone.query.add_q(filter_obj)
+@@ -939,6 +949,14 @@ class QuerySet:
+         clone.query.combinator_all = all
+         return clone
+ 
++    def _check_combinator(self):
++        if self.query.combinator:
++            raise NotSupportedError(
++                'Calling non-QuerySet methods after union(), intersection(), or '
++                'difference() is not supported. Only slicing and ordering are '
++                'allowed on the resulting QuerySet.'
++            )
++
+     def union(self, *other_qs, all=False):
+         # If the query is an EmptyQuerySet, combine all nonempty querysets.
+         if isinstance(self, EmptyQuerySet):
+@@ -1025,6 +1043,7 @@ class QuerySet:
+         Return a query set in which the returned objects have been annotated
+         with extra data or aggregations.
+         """
++        self._check_combinator()
+         self._validate_values_are_expressions(args + tuple(kwargs.values()), method_name='annotate')
+         annotations = {}
+         for arg in args:
+@@ -1079,6 +1098,7 @@ class QuerySet:
+         """
+         Return a new QuerySet instance that will select only distinct results.
+         """
++        self._check_combinator()
+         assert self.query.can_filter(), \
+             "Cannot create distinct fields once a slice has been taken."
+         obj = self._chain()
+@@ -1088,6 +1108,7 @@ class QuerySet:
+     def extra(self, select=None, where=None, params=None, tables=None,
+               order_by=None, select_params=None):
+         """Add extra SQL fragments to the query."""
++        self._check_combinator()
+         assert self.query.can_filter(), \
+             "Cannot change a query once a slice has been taken"
+         clone = self._chain()
+@@ -1096,6 +1117,7 @@ class QuerySet:
+ 
+     def reverse(self):
+         """Reverse the ordering of the QuerySet."""
++        self._check_combinator()
+         if not self.query.can_filter():
+             raise TypeError('Cannot reverse a query once a slice has been taken.')
+         clone = self._chain()
+@@ -1109,6 +1131,7 @@ class QuerySet:
+         The only exception to this is if None is passed in as the only
+         parameter, in which case removal all deferrals.
+         """
++        self._check_combinator()
+         if self._fields is not None:
+             raise TypeError("Cannot call defer() after .values() or .values_list()")
+         clone = self._chain()
+@@ -1124,6 +1147,7 @@ class QuerySet:
+         method and that are not already specified as deferred are loaded
+         immediately when the queryset is evaluated.
+         """
++        self._check_combinator()
+         if self._fields is not None:
+             raise TypeError("Cannot call only() after .values() or .values_list()")
+         if fields == (None,):
+diff --git a/tests/queries/test_qs_combinators.py b/tests/queries/test_qs_combinators.py
+index e7cfbfb0d1..fdd1c427b4 100644
+--- a/tests/queries/test_qs_combinators.py
++++ b/tests/queries/test_qs_combinators.py
+@@ -1,4 +1,4 @@
+-from django.db.models import Exists, F, IntegerField, OuterRef, Value
++from django.db.models import Exists, F, IntegerField, OuterRef, Sum, Value
+ from django.db.utils import DatabaseError, NotSupportedError
+ from django.test import TestCase, skipIfDBFeature, skipUnlessDBFeature
+ 
+@@ -258,3 +258,94 @@ class QuerySetSetOperationTests(TestCase):
+         numbers = list(range(10))
+         self.assertNumbersEqual(union.order_by('num'), numbers)
+         self.assertNumbersEqual(union.order_by('other_num'), reversed(numbers))
++
++    @skipUnlessDBFeature('supports_select_union')
++    def test_union_not_supported_methods(self):
++        qs1 = Number.objects.filter(num__lte=1)
++        qs2 = Number.objects.filter(num__gte=8)
++        union_qs = qs1.union(qs2)
++        msg = (
++            "Calling non-QuerySet methods after union(), intersection(), or "
++            "difference() is not supported. Only slicing and ordering are "
++            "allowed on the resulting QuerySet."
++        )
++        # Test methods that should raise NotSupportedError
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            union_qs.create(num=100)
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            union_qs.update(num=100)
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            union_qs.delete()
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            union_qs.filter(num__gte=5)
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            union_qs.exclude(num__gte=5)
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            union_qs.aggregate(num_sum=Sum('num'))
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            union_qs.annotate(total=Sum('num'))
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            union_qs.distinct()
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            union_qs.defer('num')
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            union_qs.only('num')
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            union_qs.reverse()
++
++    @skipUnlessDBFeature('supports_select_intersection')
++    def test_intersection_not_supported_methods(self):
++        qs1 = Number.objects.filter(num__lte=5)
++        qs2 = Number.objects.filter(num__gte=5)
++        intersection_qs = qs1.intersection(qs2)
++        msg = (
++            "Calling non-QuerySet methods after union(), intersection(), or "
++            "difference() is not supported. Only slicing and ordering are "
++            "allowed on the resulting QuerySet."
++        )
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            intersection_qs.get()
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            intersection_qs.filter(num=5)
++
++    @skipUnlessDBFeature('supports_select_difference')
++    def test_difference_not_supported_methods(self):
++        qs1 = Number.objects.filter(num__lte=5)
++        qs2 = Number.objects.filter(num__lte=4)
++        difference_qs = qs1.difference(qs2)
++        msg = (
++            "Calling non-QuerySet methods after union(), intersection(), or "
++            "difference() is not supported. Only slicing and ordering are "
++            "allowed on the resulting QuerySet."
++        )
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            difference_qs.get()
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            difference_qs.filter(num=5)
++
++    def test_slicing_and_ordering_allowed_after_union(self):
++        """Verify that slicing and ordering are still allowed."""
++        qs1 = Number.objects.filter(num__lte=1)
++        qs2 = Number.objects.filter(num__gte=8)
++        union_qs = qs1.union(qs2)
++        # Slicing should work
++        self.assertEqual(len(list(union_qs[:2])), 2)
++        # Ordering should work
++        self.assertNumbersEqual(union_qs.order_by('-num'), [9, 8, 1, 0])
++        # Chaining slicing and ordering should work
++        self.assertNumbersEqual(union_qs.order_by('num')[:2], [0, 1])
++
++    @skipUnlessDBFeature('supports_select_union')
++    def test_complex_filter_not_supported(self):
++        """Test that complex_filter() is also not supported after union()."""
++        from django.db.models import Q
++        qs1 = Number.objects.filter(num__lte=1)
++        qs2 = Number.objects.filter(num__gte=8)
++        union_qs = qs1.union(qs2)
++        msg = (
++            "Calling non-QuerySet methods after union(), intersection(), or "
++            "difference() is not supported. Only slicing and ordering are "
++            "allowed on the resulting QuerySet."
++        )
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            union_qs.complex_filter(Q(num__gte=5))

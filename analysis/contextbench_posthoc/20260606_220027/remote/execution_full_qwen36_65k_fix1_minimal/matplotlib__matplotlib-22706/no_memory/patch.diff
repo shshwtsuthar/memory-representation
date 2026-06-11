@@ -1,0 +1,201 @@
+diff --git a/=61 b/=61
+new file mode 100644
+index 0000000000..56c0057db8
+--- /dev/null
++++ b/=61
+@@ -0,0 +1 @@
++Requirement already satisfied: setuptools in /opt/conda/envs/testbed/lib/python3.8/site-packages (59.8.0)
+diff --git a/lib/matplotlib/tests/test_widgets.py b/lib/matplotlib/tests/test_widgets.py
+index a19770e3b0..610b66c047 100644
+--- a/lib/matplotlib/tests/test_widgets.py
++++ b/lib/matplotlib/tests/test_widgets.py
+@@ -1120,6 +1120,36 @@ def test_range_slider(orientation):
+     assert_allclose(slider.val, [0.1, 0.34])
+ 
+ 
++@pytest.mark.parametrize("orientation", ["horizontal", "vertical"])
++def test_range_slider_set_val_handles(orientation):
++    """Test that RangeSlider.set_val updates the handle positions."""
++    fig, ax = plt.subplots()
++
++    slider = widgets.RangeSlider(
++        ax=ax, label="", valmin=0.0, valmax=1.0, orientation=orientation,
++        valinit=[0.1, 0.34]
++    )
++
++    # Check initial handle positions
++    if orientation == "horizontal":
++        assert_allclose(slider._handles[0].get_xdata(), [0.1])
++        assert_allclose(slider._handles[1].get_xdata(), [0.34])
++    else:
++        assert_allclose(slider._handles[0].get_ydata(), [0.1])
++        assert_allclose(slider._handles[1].get_ydata(), [0.34])
++
++    # Call set_val and verify handles are updated
++    slider.set_val((0.2, 0.6))
++    assert_allclose(slider.val, (0.2, 0.6))
++
++    if orientation == "horizontal":
++        assert_allclose(slider._handles[0].get_xdata(), [0.2])
++        assert_allclose(slider._handles[1].get_xdata(), [0.6])
++    else:
++        assert_allclose(slider._handles[0].get_ydata(), [0.2])
++        assert_allclose(slider._handles[1].get_ydata(), [0.6])
++
++
+ def check_polygon_selector(event_sequence, expected_result, selections_count,
+                            **kwargs):
+     """
+diff --git a/lib/matplotlib/widgets.py b/lib/matplotlib/widgets.py
+index da5b40a5ef..5416279ab7 100644
+--- a/lib/matplotlib/widgets.py
++++ b/lib/matplotlib/widgets.py
+@@ -904,12 +904,16 @@ class RangeSlider(SliderBase):
+             xy[2] = .75, val[1]
+             xy[3] = .75, val[0]
+             xy[4] = .25, val[0]
++            self._handles[0].set_ydata([val[0]])
++            self._handles[1].set_ydata([val[1]])
+         else:
+             xy[0] = val[0], .25
+             xy[1] = val[0], .75
+             xy[2] = val[1], .75
+             xy[3] = val[1], .25
+             xy[4] = val[0], .25
++            self._handles[0].set_xdata([val[0]])
++            self._handles[1].set_xdata([val[1]])
+         self.poly.xy = xy
+         self.valtext.set_text(self._format(val))
+         if self.drawon:
+diff --git a/test_rangeslider_fix.py b/test_rangeslider_fix.py
+new file mode 100644
+index 0000000000..0668d1f590
+--- /dev/null
++++ b/test_rangeslider_fix.py
+@@ -0,0 +1,126 @@
++"""Test that RangeSlider.set_val properly updates the slider handles."""
++import numpy as np
++import matplotlib
++matplotlib.use('Agg')  # Non-interactive backend
++import matplotlib.pyplot as plt
++from matplotlib.widgets import RangeSlider
++
++
++def test_horizontal_set_val():
++    """Test that set_val updates handles for horizontal slider."""
++    fig, ax = plt.subplots(figsize=(10, 5))
++    fig.subplots_adjust(bottom=0.25)
++    
++    slider_ax = fig.add_axes([0.20, 0.1, 0.60, 0.03])
++    slider = RangeSlider(slider_ax, "Threshold", 0.0, 10.0, valinit=[2.0, 8.0])
++    
++    # Check initial handle positions
++    assert slider._handles[0].get_xdata()[0] == 2.0, f"Expected 2.0, got {slider._handles[0].get_xdata()[0]}"
++    assert slider._handles[1].get_xdata()[0] == 8.0, f"Expected 8.0, got {slider._handles[1].get_xdata()[0]}"
++    
++    # Call set_val
++    slider.set_val([0.0, 5.0])
++    
++    # Check that handles moved
++    assert slider._handles[0].get_xdata()[0] == 0.0, f"Expected 0.0, got {slider._handles[0].get_xdata()[0]}"
++    assert slider._handles[1].get_xdata()[0] == 5.0, f"Expected 5.0, got {slider._handles[1].get_xdata()[0]}"
++    
++    # Check that poly also moved
++    assert slider.poly.xy[0][0] == 0.0
++    assert slider.poly.xy[2][0] == 5.0
++    
++    # Check that val is updated
++    assert slider.val[0] == 0.0
++    assert slider.val[1] == 5.0
++    
++    plt.close(fig)
++    print("test_horizontal_set_val PASSED")
++
++
++def test_vertical_set_val():
++    """Test that set_val updates handles for vertical slider."""
++    fig, ax = plt.subplots(figsize=(5, 10))
++    fig.subplots_adjust(left=0.25)
++    
++    slider_ax = fig.add_axes([0.1, 0.20, 0.03, 0.60])
++    slider = RangeSlider(slider_ax, "Threshold", 0.0, 10.0, valinit=[2.0, 8.0], 
++                         orientation='vertical')
++    
++    # Check initial handle positions
++    assert slider._handles[0].get_ydata()[0] == 2.0, f"Expected 2.0, got {slider._handles[0].get_ydata()[0]}"
++    assert slider._handles[1].get_ydata()[0] == 8.0, f"Expected 8.0, got {slider._handles[1].get_ydata()[0]}"
++    
++    # Call set_val
++    slider.set_val([1.0, 6.0])
++    
++    # Check that handles moved
++    assert slider._handles[0].get_ydata()[0] == 1.0, f"Expected 1.0, got {slider._handles[0].get_ydata()[0]}"
++    assert slider._handles[1].get_ydata()[0] == 6.0, f"Expected 6.0, got {slider._handles[1].get_ydata()[0]}"
++    
++    # Check that poly also moved
++    assert slider.poly.xy[0][1] == 1.0
++    assert slider.poly.xy[2][1] == 6.0
++    
++    # Check that val is updated
++    assert slider.val[0] == 1.0
++    assert slider.val[1] == 6.0
++    
++    plt.close(fig)
++    print("test_vertical_set_val PASSED")
++
++
++def test_set_val_with_callback():
++    """Test that set_val triggers callbacks."""
++    fig, ax = plt.subplots()
++    fig.subplots_adjust(bottom=0.25)
++    
++    slider_ax = fig.add_axes([0.20, 0.1, 0.60, 0.03])
++    slider = RangeSlider(slider_ax, "Threshold", 0.0, 10.0, valinit=[2.0, 8.0])
++    
++    callback_called = [False]
++    callback_val = [None]
++    
++    def on_changed(val):
++        callback_called[0] = True
++        callback_val[0] = val
++    
++    slider.on_changed(on_changed)
++    slider.set_val([1.0, 9.0])
++    
++    assert callback_called[0], "Callback was not called"
++    assert callback_val[0][0] == 1.0
++    assert callback_val[0][1] == 9.0
++    
++    plt.close(fig)
++    print("test_set_val_with_callback PASSED")
++
++
++def test_set_val_clips_to_bounds():
++    """Test that set_val clips values to slider bounds."""
++    fig, ax = plt.subplots()
++    fig.subplots_adjust(bottom=0.25)
++    
++    slider_ax = fig.add_axes([0.20, 0.1, 0.60, 0.03])
++    slider = RangeSlider(slider_ax, "Threshold", 0.0, 10.0, valinit=[2.0, 8.0])
++    
++    # Try to set values outside bounds
++    slider.set_val([-5.0, 15.0])
++    
++    # Should be clipped to valmin/valmax
++    assert slider.val[0] == 0.0, f"Expected 0.0, got {slider.val[0]}"
++    assert slider.val[1] == 10.0, f"Expected 10.0, got {slider.val[1]}"
++    
++    # Handles should also be at bounds
++    assert slider._handles[0].get_xdata()[0] == 0.0
++    assert slider._handles[1].get_xdata()[0] == 10.0
++    
++    plt.close(fig)
++    print("test_set_val_clips_to_bounds PASSED")
++
++
++if __name__ == '__main__':
++    test_horizontal_set_val()
++    test_vertical_set_val()
++    test_set_val_with_callback()
++    test_set_val_clips_to_bounds()
++    print("\nAll tests PASSED!")

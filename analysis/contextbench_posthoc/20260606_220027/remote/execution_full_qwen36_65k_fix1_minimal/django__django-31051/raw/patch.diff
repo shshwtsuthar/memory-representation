@@ -1,0 +1,116 @@
+diff --git a/django/core/management/commands/dumpdata.py b/django/core/management/commands/dumpdata.py
+index 2968f74805..3dd8f3cabe 100644
+--- a/django/core/management/commands/dumpdata.py
++++ b/django/core/management/commands/dumpdata.py
+@@ -144,7 +144,16 @@ class Command(BaseCommand):
+             Collate the objects to be serialized. If count_only is True, just
+             count the number of objects to be serialized.
+             """
+-            models = serializers.sort_dependencies(app_list.items())
++            if use_natural_foreign_keys:
++                models = serializers.sort_dependencies(app_list.items(), allow_circular=True)
++            else:
++                # No need to sort when not using natural foreign keys, since
++                # numerical FKs don't have ordering constraints.
++                models = []
++                for app_config, model_list in app_list.items():
++                    if model_list is None:
++                        model_list = app_config.get_models()
++                    models.extend(model_list)
+             for model in models:
+                 if model in excluded_models:
+                     continue
+diff --git a/django/core/serializers/__init__.py b/django/core/serializers/__init__.py
+index d0e504ade3..d91053d208 100644
+--- a/django/core/serializers/__init__.py
++++ b/django/core/serializers/__init__.py
+@@ -156,12 +156,17 @@ def _load_serializers():
+     _serializers = serializers
+ 
+ 
+-def sort_dependencies(app_list):
++def sort_dependencies(app_list, allow_circular=False):
+     """Sort a list of (app_config, models) pairs into a single list of models.
+ 
+     The single list of models is sorted so that any model with a natural key
+     is serialized before a normal model, and any model with a natural key
+     dependency has it's dependencies serialized first.
++
++    If allow_circular is True, models with circular dependencies will be
++    yielded in an arbitrary order rather than raising an error. This is
++    useful when the data doesn't use natural foreign keys (e.g., dumpdata
++    without --natural-foreign, serialized test databases).
+     """
+     # Process the list of models, and get the list of dependencies
+     model_dependencies = []
+@@ -222,6 +227,11 @@ def sort_dependencies(app_list):
+             else:
+                 skipped.append((model, deps))
+         if not changed:
++            if allow_circular:
++                # Allow circular dependencies by yielding the remaining models
++                # in an arbitrary order.
++                model_list.extend(model for model, deps in skipped)
++                break
+             raise RuntimeError(
+                 "Can't resolve dependencies for %s in serialized app list." %
+                 ', '.join(
+diff --git a/tests/fixtures_regress/tests.py b/tests/fixtures_regress/tests.py
+index cc4cee3de4..217b0da3da 100644
+--- a/tests/fixtures_regress/tests.py
++++ b/tests/fixtures_regress/tests.py
+@@ -722,6 +722,54 @@ class NaturalKeyFixtureTests(TestCase):
+             [Person, Book, ExternalDependency]
+         )
+ 
++    def test_dependency_sorting_tight_circular_allow_circular(self):
++        """
++        sort_dependencies() with allow_circular=True should not raise an
++        exception for circular dependencies.
++        """
++        sorted_deps = serializers.sort_dependencies(
++            [('fixtures_regress', [Person, Circle2, Circle1, Store, Book])],
++            allow_circular=True,
++        )
++        # All models should be present in the result
++        self.assertEqual(set(sorted_deps), {Person, Circle1, Circle2, Store, Book})
++
++    def test_dependency_sorting_self_referential_allow_circular(self):
++        """
++        sort_dependencies() with allow_circular=True should not raise an
++        exception for self-referential dependencies.
++        """
++        sorted_deps = serializers.sort_dependencies(
++            [('fixtures_regress', [Book, Circle3])],
++            allow_circular=True,
++        )
++        self.assertEqual(set(sorted_deps), {Book, Circle3})
++
++    def test_dependency_sorting_long_circular_allow_circular(self):
++        """
++        sort_dependencies() with allow_circular=True should not raise an
++        exception for long circular dependencies.
++        """
++        sorted_deps = serializers.sort_dependencies(
++            [('fixtures_regress', [Person, Circle2, Circle1, Circle3, Store, Book])],
++            allow_circular=True,
++        )
++        self.assertEqual(
++            set(sorted_deps),
++            {Person, Circle1, Circle2, Circle3, Store, Book}
++        )
++
++    def test_dependency_sorting_m2m_simple_circular_allow_circular(self):
++        """
++        sort_dependencies() with allow_circular=True should not raise an
++        exception for circular M2M dependencies.
++        """
++        sorted_deps = serializers.sort_dependencies(
++            [('fixtures_regress', [M2MSimpleCircularA, M2MSimpleCircularB])],
++            allow_circular=True,
++        )
++        self.assertEqual(set(sorted_deps), {M2MSimpleCircularA, M2MSimpleCircularB})
++
+     def test_normal_pk(self):
+         """
+         Normal primary keys work on a model with natural key capabilities.

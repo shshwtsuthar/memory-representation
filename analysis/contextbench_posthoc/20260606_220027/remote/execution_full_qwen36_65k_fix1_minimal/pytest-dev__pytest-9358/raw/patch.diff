@@ -1,0 +1,68 @@
+diff --git a/src/_pytest/tmpdir.py b/src/_pytest/tmpdir.py
+index 29c7e19d7..504df3093 100644
+--- a/src/_pytest/tmpdir.py
++++ b/src/_pytest/tmpdir.py
+@@ -149,14 +149,22 @@ class TempdirFactory:
+ 
+ 
+ def get_user() -> Optional[str]:
+-    """Return the current user name, or None if getuser() does not work
+-    in the current environment (see #1010)."""
++    """Return the current user name (username) as a string, or None if
++    getuser() does not work in the current environment (see #1010).
++
++    The username is sanitized to replace any characters that are illegal
++    in file system paths (e.g., backslashes in Windows domain usernames)
++    with underscores to ensure the username is safe for directory names.
++    """
+     import getpass
+ 
+     try:
+-        return getpass.getuser()
++        user = getpass.getuser()
+     except (ImportError, KeyError):
+         return None
++    # Replace any illegal characters (like backslashes in Windows domain usernames)
++    # with underscores to ensure the username is safe for directory names.
++    return re.sub(r"[\W]", "_", user)
+ 
+ 
+ def pytest_configure(config: Config) -> None:
+diff --git a/testing/test_tmpdir.py b/testing/test_tmpdir.py
+index d123287aa..924c052ba 100644
+--- a/testing/test_tmpdir.py
++++ b/testing/test_tmpdir.py
+@@ -246,6 +246,33 @@ def test_get_user(monkeypatch):
+     assert get_user() is None
+ 
+ 
++def test_get_user_sanitizes_illegal_characters(monkeypatch):
++    """Test that get_user() sanitizes illegal characters in usernames
++    (e.g., backslashes in Windows domain usernames like 'domain\\user').
++    """
++    import getpass
++
++    # Test with backslash (Windows domain username format)
++    monkeypatch.setattr(getpass, "getuser", lambda: "domain\\user")
++    assert get_user() == "domain_user"
++
++    # Test with forward slash
++    monkeypatch.setattr(getpass, "getuser", lambda: "user/name")
++    assert get_user() == "user_name"
++
++    # Test with multiple illegal characters
++    monkeypatch.setattr(getpass, "getuser", lambda: "user@domain#123")
++    assert get_user() == "user_domain_123"
++
++    # Test with normal username (should remain unchanged)
++    monkeypatch.setattr(getpass, "getuser", lambda: "john_doe")
++    assert get_user() == "john_doe"
++
++    # Test with spaces (should be replaced)
++    monkeypatch.setattr(getpass, "getuser", lambda: "john doe")
++    assert get_user() == "john_doe"
++
++
+ class TestNumberedDir:
+     PREFIX = "fun-"
+ 

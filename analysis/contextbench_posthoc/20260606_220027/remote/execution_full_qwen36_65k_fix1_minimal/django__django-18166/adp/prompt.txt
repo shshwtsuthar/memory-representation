@@ -1,0 +1,525 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: adp
+
+The following is a stripped ADP-rendered trajectory from an officially related prior issue.
+
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: 121a98f2-1ed6-4b71-b899-916c3c3645a0
+- repo: django/django
+- instance_id: django__django-16041
+- base_commit: 6df9398cce063874ae4d59db126d4adacb0fa8d3
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-16041
+base_commit: 6df9398cce063874ae4d59db126d4adacb0fa8d3
+problem_statement:
+Rendering empty_form crashes when empty_permitted is passed to form_kwargs
+Description
+
+Issue
+When explicitly setting form_kwargs = {'empty_permitted':True} or form_kwargs = {'empty_permitted':False} , a KeyError occurs when rendering a template that uses a formset's empty_form.
+Expected Behavior
+empty_permitted is ignored for formset.empty_form since empty_permitted is irrelevant for empty_form, as empty_form is not meant to be used to pass data and therefore does not need to be validated.
+Steps to Reproduce
+# views.py
+from django.shortcuts import render
+from .models import MyModel
+def test_view(request):
+    context = {}
+    ff = modelformset_factory(MyModel, fields = ['a_field'])
+    context['formset'] = ff(
+        queryset = MyModel.objects.none(),
+        form_kwargs = {'empty_permitted':True} # or form_kwargs = {'empty_permitted':False}
+    )
+    return render(request, 'my_app/my_model_formset.html', context)
+# urls.py
+from django.urls import path, include
+from .views import test_view
+urlpatterns = [
+    path('test', test_view)
+]
+# my_model_formset.html
+{% extends "my_app/base.html" %}
+{% block content %}
+<form id="my-form" method="post">
+ {% csrf_token %}
+ {{ formset }}
+ <input type="submit" value="Save">
+</form>
+{{ formset.empty_form }}
+{% endblock %}
+sha256: f45601dab6e134a721f366a7f7a2eed0ec5c05ea3d81034d4b85bee3fa8b1904
+truncated: false
+
+[ADP ACTION current=1 original=3: api_action Glob]
+payload:
+{
+  "pattern": "**/formsets.py"
+}
+sha256: be4a3ac305ee6eb88b1e00878d1f5b7c5afe0be7e8c4c24284b6a8b9ca659b21
+truncated: false
+
+[ADP ACTION current=2 original=5: code_action bash]
+payload:
+find ./swebench_9_15 -name "formsets.py" -type f | head -20
+sha256: b7f2c98a1642d74d4afee4bcc98196556311f1d6700e2dc92e2b801a76001da6
+truncated: false
+
+[ADP ACTION current=3 original=21: code_action bash]
+payload:
+find testbed -name "formsets.py" -type f
+sha256: cb422893aeda6b1a255940382c62f3d352001d6976aeeb496b3573ef909e77be
+truncated: false
+
+[ADP OBSERVATION current=4 original=22 source=environment]
+name: Bash:toolu_01VrPWVGUQ1WbxkdQ485PPyT
+excerpt:
+testbed/django/forms/formsets.py
+sha256: 1d0475021ce9250d20f19908da0c5f0359fc9e2ffe1a7356a667266e9c583cd2
+truncated: false
+
+[ADP ACTION current=5 original=23: api_action Read]
+path: django/forms/formsets.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/forms/formsets.py"
+}
+sha256: 213e98d11cfef3a9842de13f90eabe5924f87fcc970f5aad03c5aa9ee7121e00
+truncated: false
+
+[ADP OBSERVATION current=6 original=24 source=environment]
+name: Read:toolu_01GS8S9CafDzceYG5WQqJtR2
+excerpt:
+     1→from django.core.exceptions import ValidationError
+     2→from django.forms import Form
+     3→from django.forms.fields import BooleanField, IntegerField
+     4→from django.forms.renderers import get_default_renderer
+     5→from django.forms.utils import ErrorList, RenderableFormMixin
+     6→from django.forms.widgets import CheckboxInput, HiddenInput, NumberInput
+     7→from django.utils.functional import cached_property
+     8→from django.utils.translation import gettext_lazy as _
+     9→from django.utils.translation import ngettext_lazy
+    10→
+    11→__all__ = ("BaseFormSet", "formset_factory", "all_valid")
+    12→
+    13→# special field names
+    14→TOTAL_FORM_COUNT = "TOTAL_FORMS"
+    15→INITIAL_FORM_COUNT = "INITIAL_FORMS"
+    16→MIN_NUM_FORM_COUNT = "MIN_NUM_FORMS"
+    17→MAX_NUM_FORM_COUNT = "MAX_NUM_FORMS"
+    18→ORDERING_FIELD_NAME = "ORDER"
+    19→DELETION_FIELD_NAME = "DELETE"
+    20→
+    21→# default minimum number of forms in a formset
+    22→DEFAULT_MIN_NUM = 0
+    23→
+    24→# default maximum number of forms in a formset, to prevent memory exhaustion
+    25→DEFAULT_MAX_NUM = 1000
+    26→
+    27→
+    28→class ManagementForm(Form):
+    29→    """
+    30→    Keep track of how many form instances are displayed on the page. If adding
+    31→    new forms via JavaScript, you should increment the count field of this form
+    32→    as well.
+    33→    """
+    34→
+    35→    template_name = "django/forms/div.html"  # RemovedInDjango50Warning.
+    36→
+    37→    TOTAL_FORMS = IntegerField(widget=HiddenInput)
+    38→    INITIAL_FORMS = IntegerField(widget=HiddenInput)
+    39→    # MIN_NUM_FORM_COUNT and MAX_NUM_FORM_COUNT are output with the rest of the
+    40→    # management form, but only for the convenience of client-side code. The
+    41→    # POST value of them returned from the client is not checked.
+    42→    MIN_NUM_FORMS = IntegerField(required=False, widget=HiddenInput)
+    43→    MAX_NUM_FORMS = IntegerField(required=False, widget=HiddenInp
+sha256: a3064dc0be0b404c63211906a8fce19b81d9487e11e02e39e580cf7fa82c94f2
+truncated: true
+
+[ADP ACTION current=7 original=29: code_action bash]
+payload:
+cd testbed && python test_issue.py
+sha256: ac08036b91d13efc5a0b52e9cd0b849806f58ee14b47ab1da01582a957e3be4b
+truncated: false
+
+[ADP OBSERVATION current=8 original=30 source=environment]
+name: Bash:toolu_01MVWcf1cSdhVJ1hkhJLuBjf:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 39
+SyntaxError: Non-ASCII character '\xe2' in file test_issue.py on line 39, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+sha256: 84e3b5f522168672286187795ba4b2542207ea8c7d7183762015720b57c70f9a
+truncated: false
+
+[ADP ACTION current=9 original=37: code_action bash]
+payload:
+cd testbed && python test_issue.py
+sha256: c17de38da4544e7e8e37a2d314594f6f91708493e1dbbdaf5d9c5cd3202ec543
+truncated: false
+
+[ADP OBSERVATION current=10 original=38 source=environment]
+name: Bash:toolu_01HLR148Y5KTHLKLg614BSoY:error
+excerpt:
+Exit code 1
+  File "test_issue.py", line 41
+    print(f"FAIL Test 1 - TypeError: {e}")
+                                        ^
+SyntaxError: invalid syntax
+sha256: 2fc4dd2f4e37cc04fad6d2265c75af3e127681ee5a98ffb1586908d07a8107f0
+truncated: false
+
+[ADP ACTION current=11 original=39: code_action bash]
+payload:
+cd testbed && python --version
+sha256: bed45e8fdb2bc0bc55f0e3f5542f6f65fd4de584405256620fe570cea719db2a
+truncated: false
+
+[ADP OBSERVATION current=12 original=40 source=environment]
+name: Bash:toolu_01EiNTxW1FTjUa8HgmWJnWao
+excerpt:
+Python 2.7.3
+sha256: c6d9bd2d561b074688a302920b8e73838fd3f7b4043465431748a1e3b85691fe
+truncated: false
+
+[ADP ACTION current=13 original=47: code_action bash]
+payload:
+which python3
+sha256: 495840f370b58dce265619adfea3b2df2c2fc4e627db10cd6c22a3c07eb44342
+truncated: false
+
+[ADP OBSERVATION current=14 original=48 source=environment]
+name: Bash:toolu_011wpA2vnDxX9KBFK5hMnkoQ
+excerpt:
+/opt/anaconda3/bin/python3
+sha256: 96762580dc771c728ac9a1b8aa29a3a420bc09545a8c1a32553175fbb1f6eb2a
+truncated: false
+
+[ADP ACTION current=15 original=49: code_action bash]
+payload:
+cd testbed && python3 test_issue.py
+sha256: fd17b8c09a58c89711b95b0b41654075a07c2652035ca7ce45a7fc35cae4a4e4
+truncated: false
+
+[ADP ACTION current=16 original=51: code_action bash]
+payload:
+python3 ./swebench_9_15/testbed/test_issue.py
+sha256: 5fd2da0bc9d5e160cc6c9a7c7f9e4b1eeeb4134e038bd43a6ecdf6dcac0a5c67
+truncated: false
+
+[ADP OBSERVATION current=17 original=52 source=environment]
+name: Bash:toolu_01Mhnh1j39M1FerY6C37Bde4
+excerpt:
+Test 1: empty_permitted=True in form_kwargs
+FAIL Test 1 - TypeError: DeclarativeFieldsMetaclass object got multiple values for keyword argument 'empty_permitted'
+
+Test 2: empty_permitted=False in form_kwargs
+FAIL Test 2 - TypeError: DeclarativeFieldsMetaclass object got multiple values for keyword argument 'empty_permitted'
+
+Test 3: No empty_permitted in form_kwargs
+FAIL Test 3 - TypeError: __init__() got an unexpected keyword argument 'some_other_kwarg'
+
+Tests complete!
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 771918cb54bc2917b11045edcb15d0abfe98408e14c85ad2d9598a613535e4f7
+truncated: false
+
+[ADP ACTION current=18 original=55: api_action Edit]
+path: django/forms/formsets.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/django/forms/formsets.py",
+  "new_text_sha256": "df50313637d01b2f5bcbf149eb55b85ae180df8475d0417b6a1fd8ce1dea62c4",
+  "old_text_sha256": "158e918ee7b2a1ef1d9aa5bac754d6240968544e32701e7987340617d2785f9b"
+}
+sha256: 64e26b9d12a4a3536340b09161b8e8554c6d05f6cf2e470eefa943f1fffa2005
+truncated: false
+
+[ADP ACTION current=19 original=59: code_action bash]
+payload:
+python3 ./swebench_9_15/testbed/test_issue.py
+sha256: 281980bd5a5069decce342b9865df3b5ded4a4c49b35e7f26732f5f10a01f834
+truncated: false
+
+[ADP OBSERVATION current=20 original=60 source=environment]
+name: Bash:toolu_01CUgpKwcMG463fihGcwTbMx
+excerpt:
+Test 1: empty_permitted=True in form_kwargs
+PASS Test 1 - no crash
+
+Test 2: empty_permitted=False in form_kwargs
+PASS Test 2 - no crash
+
+Test 3: No empty_permitted in form_kwargs
+FAIL Test 3 - TypeError: __init__() got an unexpected keyword argument 'some_other_kwarg'
+
+Tests complete!
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 9dad9d9ec22f8eb2391bcf73463a6e6dae0f863ba28674edd7bc5c64be77bf6e
+truncated: false
+
+[ADP ACTION current=21 original=61: api_action Write]
+path: test_comprehensive.py
+payload:
+{
+  "content_sha256": "19523ab0902910a135b5f6fb941c5d2e59662c670d701eb38e88acbcd96125f3",
+  "file_path": "./swebench_9_15/testbed/test_comprehensive.py"
+}
+sha256: 861950991cbdd4f3afb1331f0bea2892dec0f3f6239b9f5dc5c56eec95479501
+truncated: false
+
+[ADP ACTION current=22 original=63: code_action bash]
+payload:
+python3 ./swebench_9_15/testbed/test_comprehensive.py
+sha256: a56e0da15411212d396439cee5314501b10a952ab072968b4fc0326fc5b5f50f
+truncated: false
+
+[ADP OBSERVATION current=23 original=64 source=environment]
+name: Bash:toolu_01AQQf1kE28LW2bzhtzSQHuz
+excerpt:
+Test 1: empty_permitted=True in form_kwargs
+PASS: empty_form.empty_permitted is True
+
+Test 2: empty_permitted=False in form_kwargs
+PASS: empty_form.empty_permitted is True (ignored False in form_kwargs)
+
+Test 3: No empty_permitted in form_kwargs
+PASS: empty_form.empty_permitted is True
+
+Test 4: Verify regular forms respect form_kwargs empty_permitted=False
+Regular form 0 empty_permitted: False
+Regular form 1 (extra) empty_permitted: False
+PASS: Regular forms work correctly
+
+Test 5: Can render empty_form in template context
+PASS: empty_form renders correctly
+
+All tests passed!
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+./swebench_9_15/testbed/test_comprehensive.py:69: RemovedInDjango50Warning: The "default.html" templates for forms and formsets will be removed. These were proxies to the equivalent "table.html" templates, but the new "div.html" templates will be the default from Django 5.0. Transitional renderers are provided to allow you to opt-in to the new output style now. See https://docs.djangoproject.com/en/dev/releases/4.1/ for more details
+  empty_form_html = str(formset.empty_form)
+sha256: 4e190ca5abce5b5a54902680a74c5203e6384d222d4b416e70a4d2ec6fa231f5
+truncated: false
+
+[ADP ACTION current=24 original=65: code_action bash]
+payload:
+find ./swebench_9_15/testbed -path "*/tests/*" -name "*formset*.py" | head -10
+sha256: f2c46f1d89248e322cfc51a098eeb9de86768761d6216b7782981da40dc9732e
+truncated: false
+
+[ADP OBSERVATION current=25 original=66 source=environment]
+name: Bash:toolu_01FuLTcJooL1bASuHLAbbgmu
+excerpt:
+./swebench_9_15/testbed/tests/forms_tests/tests/test_formsets.py
+sha256: a9b2077e7ff0f1732c1d2c9baf1c6942263f3e4a53d4cd84457fd59e018606e2
+truncated: false
+
+[ADP ACTION current=26 original=67: code_action bash]
+payload:
+python3 -m pytest tests/forms_tests/tests/test_formsets.py -v
+sha256: cacbebd6d27e235ceb2982c4fe7c69bd4fd63721bd9732bfa935d8676df24754
+truncated: false
+
+[ADP OBSERVATION current=27 original=68 source=environment]
+name: Bash:toolu_0185BJ5BycDzLh5WrFCnBKyW:error
+excerpt:
+Exit code 2
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+rootdir: ./swebench_9_15/testbed
+configfile: pyproject.toml
+plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+collecting ... collected 0 items / 1 error
+
+==================================== ERRORS ====================================
+__________ ERROR collecting tests/forms_tests/tests/test_formsets.py ___________
+tests/forms_tests/tests/test_formsets.py:41: in <module>
+    ChoiceFormSet = formset_factory(Choice)
+django/forms/formsets.py:572: in formset_factory
+    "renderer": renderer or get_default_renderer(),
+django/forms/renderers.py:13: in get_default_renderer
+    renderer_class = import_string(settings.FORM_RENDERER)
+django/conf/__init__.py:92: in __getattr__
+    self._setup(name)
+django/conf/__init__.py:72: in _setup
+    raise ImproperlyConfigured(
+E   django.core.exceptions.ImproperlyConfigured: Requested setting FORM_RENDERER, but settings are not configured. You must either define the environment variable DJANGO_SETTINGS_MODULE or call settings.configure() before accessing settings.
+=========================== short test summary info ============================
+ERROR tests/forms_tests/tests/test_formsets.py - django.core.exceptions.Impro...
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!
+sha256: 40d1a60658fc4504b2f273bcd9b2d989075e17a7a652e0283a5a83b562709f85
+truncated: true
+
+[ADP ACTION current=28 original=69: code_action bash]
+payload:
+python3 tests/runtests.py forms_tests.tests.test_formsets --verbosity=2
+sha256: 6fe490cb04f8a822b778922fec741a895ddbac411679c6b04c6f819fd8e52149
+truncated: false
+
+[ADP OBSERVATION current=29 original=70 source=environment]
+name: Bash:toolu_01VSnduNCACZhT3Pe7CX7fNw
+excerpt:
+Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+Importing application forms_tests
+Found 157 test(s).
+Skipping setup of unused database(s): default, other.
+System check identified no issues (0 silenced).
+Importing application forms_tests
+Importing application forms_tests
+Importing application forms_tests
+Importing application forms_tests
+Importing application forms_tests
+Importing application forms_tests
+Importing application forms_tests
+Importing application forms_tests
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(l
+sha256: acd6d1ee25d705d161bfcacb565cba55cd70073da77e8c88885a6926087042a1
+truncated: true
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: django/django
+Base commit: 19e67c6cd13d6442abb2a6eba1b7fba80dcf5457
+Instance ID: django__django-18166
+
+CURRENT_ISSUE
+Allow the formset class to contribute kwargs to form instances
+
+Description
+(last modified by
+Łukasz Rekucki
+)
+When we use a formset, each form is instantiated by the method
+BaseFormSet._construct_forms()
+, which is called from
+BaseFormSet.__init__()
+_construct_forms()
+allows for additional kwargs to be passed through to the individual form constructor, but
+BaseFormSet.__init__()
+does not provide any mechanism for kwargs to be passed through to the
+_construct_forms()
+call.
+Also, we may not be able to supply a static unchanging list of kwargs that should be supplied to each form constructor - the kwargs we want to pass may depend upon the specific instance of the form being instantiated.
+I propose the following changes:
+Add a
+form_kwargs
+argument to
+BaseFormSet.__init__()
+. This would be stored on self, and consumed in
+BaseFormSet._construct_forms()
+Add a method,
+BaseFormSet._kwargs_for_form(self, i)
+. This method would be called for each form instantiated, passing the index of the form within the formset. The return value of this method would be merged with the form_kwargs supplied in
+BaseFormSet.__init__()
+and used to instantiate the form.
+With these changes, a user could add additional constructor arguments to all forms by passing in form_kwargs to the formset constructor, and could add additional constructor arguments to specific forms by implementing _kwargs_for_form on a derived BaseFormSet class.
+(I found it strange, when
+BaseFormSet
+was written, it was clearly intended to be able to pass kwargs to the forms -
+_construct_form()
+allows for it, there just is not the plumbing to do so. I worked around this by redefining - copy/pasting - the
+_construct_forms()
+method in my derived
+BaseFormSet
+class)
+Patch doesn't have tests or doc changes, will add if this idea gets traction.
+Cheers
+Tom
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

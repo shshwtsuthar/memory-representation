@@ -1,0 +1,96 @@
+diff --git a/sympy/printing/pretty/pretty.py b/sympy/printing/pretty/pretty.py
+index e818a8317..3ea9b3b68 100644
+--- a/sympy/printing/pretty/pretty.py
++++ b/sympy/printing/pretty/pretty.py
+@@ -882,6 +882,42 @@ def _print_KroneckerProduct(self, expr):
+ 
+     _print_MatrixSymbol = _print_Symbol
+ 
++    def _print_Indexed(self, expr):
++        from sympy.core.symbol import Symbol
++        from sympy.printing.pretty.stringpict import stringPict
++
++        # Get the base label
++        base = expr.base
++        label = base.label
++
++        # Determine the base name and any existing subscript
++        if isinstance(label, Symbol) and '_' in str(label.name):
++            # Extract base name and subscript from label like 'x_1'
++            name_parts = str(label.name).split('_', 1)
++            base_name = name_parts[0]
++            base_subscript = name_parts[1]
++        else:
++            base_name = str(label.name)
++            base_subscript = None
++
++        # Print the base name
++        base_pform = prettyForm(base_name)
++
++        # Collect all subscripts: base subscript + indices
++        subscripts = []
++        if base_subscript is not None:
++            subscripts.append(base_subscript)
++        for idx in expr.indices:
++            subscripts.append(str(idx))
++
++        # Join subscripts with comma
++        subscript_str = ', '.join(subscripts)
++        subscript_pform = prettyForm(subscript_str)
++
++        # Put subscript below base
++        result = prettyForm(*base_pform.below(subscript_pform))
++        return result
++
+     def _print_FunctionMatrix(self, X):
+         D = self._print(X.lamda.expr)
+         D = prettyForm(*D.parens('[', ']'))
+diff --git a/sympy/printing/pretty/tests/test_pretty.py b/sympy/printing/pretty/tests/test_pretty.py
+index 8ee2f5dc7..25cc733fd 100644
+--- a/sympy/printing/pretty/tests/test_pretty.py
++++ b/sympy/printing/pretty/tests/test_pretty.py
+@@ -7,7 +7,8 @@
+     Segment, Subs, Sum, Symbol, Tuple, Trace, Xor, ZZ, conjugate,
+     groebner, oo, pi, symbols, ilex, grlex, Range, Contains,
+     SeqPer, SeqFormula, SeqAdd, SeqMul, fourier_series, fps, ITE,
+-    Complement, Interval, Intersection, Union, EulerGamma, GoldenRatio)
++    Complement, Interval, Intersection, Union, EulerGamma, GoldenRatio,
++    Indexed, IndexedBase)
+ from sympy.core.expr import UnevaluatedExpr
+ 
+ from sympy.functions import (Abs, Chi, Ci, Ei, KroneckerDelta,
+@@ -300,8 +301,7 @@ def test_upretty_subs_missing_in_24():
+     assert upretty( Symbol('F_x') ) == u'Fₓ'
+ 
+ 
+-@XFAIL
+-def test_missing_in_2X_issue_9047():
++def test_upretty_subscripts():
+     import warnings
+     with warnings.catch_warnings():
+         warnings.simplefilter("ignore")
+@@ -6152,3 +6152,24 @@ def test_vector_expr_pretty_printing():
+ 
+     assert upretty(Gradient(A.x+3*A.y)) == u("∇⋅(A_x + 3⋅A_y)")
+     # TODO: add support for ASCII pretty.
++
++
++def test_Indexed_printing():
++    # Test pretty printing of Indexed objects
++    # Issue: pretty printing indexed(x1, i) should show x with subscript 1,i
++    x_sub_1 = Symbol('x_1')
++    x1_base = IndexedBase(x_sub_1)
++    i = symbols('i')
++    expr = Indexed(x1_base, i)
++    assert pretty(expr) == u(" x  \n1, i")
++
++    # Test base without subscript
++    A = IndexedBase('A')
++    j = symbols('j')
++    expr2 = Indexed(A, j)
++    assert pretty(expr2) == u("A\nj")
++
++    # Test base with subscript and multiple indices
++    k = symbols('k')
++    expr3 = Indexed(x1_base, i, k)
++    assert pretty(expr3) == u("   x   \n1, i, k")

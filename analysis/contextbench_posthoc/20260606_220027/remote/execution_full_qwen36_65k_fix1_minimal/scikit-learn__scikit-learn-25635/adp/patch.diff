@@ -1,0 +1,150 @@
+diff --git a/sklearn/utils/multiclass.py b/sklearn/utils/multiclass.py
+index 5eaef2fde..17e07a54a 100644
+--- a/sklearn/utils/multiclass.py
++++ b/sklearn/utils/multiclass.py
+@@ -298,6 +298,27 @@ def type_of_target(y, input_name=""):
+     if is_multilabel(y):
+         return "multilabel-indicator"
+ 
++    # Handle pandas nullable extension dtypes (Int64, Float64, boolean, etc.)
++    # These become object dtype when converted to numpy, which causes issues
++    # with type detection. We need to convert them to proper numpy dtypes first.
++    if hasattr(y, "dtype") and hasattr(y, "to_numpy"):
++        # Check if it's a pandas Series with an extension dtype
++        try:
++            import pandas as pd
++
++            if isinstance(y, pd.Series) and pd.api.types.is_extension_array_dtype(
++                y.dtype
++            ):
++                # Convert to numpy with the appropriate dtype
++                if pd.api.types.is_integer_dtype(y.dtype):
++                    y = y.to_numpy(dtype=y.dtype.numpy_dtype)
++                elif pd.api.types.is_float_dtype(y.dtype):
++                    y = y.to_numpy(dtype=y.dtype.numpy_dtype)
++                elif pd.api.types.is_bool_dtype(y.dtype):
++                    y = y.to_numpy(dtype=bool)
++        except ImportError:
++            pass
++
+     # DeprecationWarning will be replaced by ValueError, see NEP 34
+     # https://numpy.org/neps/nep-0034-infer-dtype-is-object.html
+     # We therefore catch both deprecation (NumPy < 1.24) warning and
+diff --git a/test_issue.py b/test_issue.py
+new file mode 100644
+index 000000000..ad9018063
+--- /dev/null
++++ b/test_issue.py
+@@ -0,0 +1,41 @@
++"""Test to reproduce the nullable pandas dtypes issue in confusion_matrix."""
++import numpy as np
++import pandas as pd
++
++# Test the issue
++print("Testing nullable pandas dtypes in confusion_matrix...")
++print("=" * 60)
++
++from sklearn.metrics import confusion_matrix
++
++for dtype in ["Int64", "Float64", "boolean"]:
++    print(f"\nTesting dtype: {dtype}")
++    y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
++    y_predicted = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
++    
++    print(f"  y_true dtype: {y_true.dtype}")
++    print(f"  y_predicted dtype: {y_predicted.dtype}")
++    
++    # Convert to numpy to see what happens
++    y_true_np = np.asarray(y_true)
++    print(f"  y_true as numpy dtype: {y_true_np.dtype}")
++    
++    try:
++        result = confusion_matrix(y_true, y_predicted)
++        print(f"  ✓ SUCCESS: confusion_matrix worked!")
++        print(f"  Result:\n{result}")
++    except ValueError as e:
++        print(f"  ✗ ERROR: {e}")
++
++print("\n" + "=" * 60)
++print("Testing with regular dtypes (should work)...")
++for dtype in ["int64", "float64", "bool"]:
++    print(f"\nTesting dtype: {dtype}")
++    y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
++    y_predicted = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
++    
++    try:
++        result = confusion_matrix(y_true, y_predicted)
++        print(f"  ✓ SUCCESS: confusion_matrix worked!")
++    except ValueError as e:
++        print(f"  ✗ ERROR: {e}")
+diff --git a/test_nullable_fix.py b/test_nullable_fix.py
+new file mode 100644
+index 000000000..7fcd045da
+--- /dev/null
++++ b/test_nullable_fix.py
+@@ -0,0 +1,65 @@
++"""Test to verify nullable pandas dtypes are supported in type_of_target."""
++import sys
++import numpy as np
++
++# Add testbed to path
++sys.path.insert(0, '/testbed')
++
++# Import the function directly
++from sklearn.utils.multiclass import type_of_target
++
++print("Testing nullable pandas dtypes in type_of_target...")
++print("=" * 70)
++
++try:
++    import pandas as pd
++    HAS_PANDAS = True
++except ImportError:
++    HAS_PANDAS = False
++    print("Pandas not available, skipping tests")
++    sys.exit(0)
++
++# Test with nullable pandas dtypes
++test_cases = [
++    ("Int64", "multiclass", [1, 0, 0, 1, 0, 1, 1, 0, 1]),
++    ("Float64", "multiclass", [1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]),
++    ("boolean", "multiclass", [True, False, False, True, False, True, True, False, True]),
++    ("Int64", "binary", [1, 0]),
++    ("Float64", "binary", [1.0, 0.0]),
++    ("boolean", "binary", [True, False]),
++]
++
++all_passed = True
++
++for dtype, expected_type, data in test_cases:
++    y = pd.Series(data, dtype=dtype)
++    result = type_of_target(y)
++    status = "✓" if result == expected_type else "✗"
++    if result != expected_type:
++        all_passed = False
++    print(f"{status} dtype={dtype:10s} expected={expected_type:12s} got={result:12s}")
++
++print("\n" + "=" * 70)
++
++# Test with regular dtypes (regression test)
++print("\nTesting regular pandas dtypes (regression test)...")
++for dtype, expected_type, data in [
++    ("int64", "multiclass", [1, 0, 0, 1, 0, 1, 1, 0, 1]),
++    ("float64", "multiclass", [1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]),
++    ("bool", "multiclass", [True, False, False, True, False, True, True, False, True]),
++]:
++    y = pd.Series(data, dtype=dtype)
++    result = type_of_target(y)
++    status = "✓" if result == expected_type else "✗"
++    if result != expected_type:
++        all_passed = False
++    print(f"{status} dtype={dtype:10s} expected={expected_type:12s} got={result:12s}")
++
++print("\n" + "=" * 70)
++
++if all_passed:
++    print("✓✓✓ ALL TESTS PASSED! ✓✓✓")
++    sys.exit(0)
++else:
++    print("✗✗✗ SOME TESTS FAILED! ✗✗✗")
++    sys.exit(1)

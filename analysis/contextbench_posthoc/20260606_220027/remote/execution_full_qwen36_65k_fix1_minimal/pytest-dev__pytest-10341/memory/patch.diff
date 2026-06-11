@@ -1,0 +1,54 @@
+diff --git a/src/_pytest/pathlib.py b/src/_pytest/pathlib.py
+index e43310ef0..b121466e4 100644
+--- a/src/_pytest/pathlib.py
++++ b/src/_pytest/pathlib.py
+@@ -524,6 +524,13 @@ def import_path(
+     if mode is ImportMode.importlib:
+         module_name = module_name_from_path(path, root)
+ 
++        # Check if the module is already imported to avoid importing it twice.
++        # This is important when using --doctest-modules with --import-mode=importlib,
++        # where the same module might be imported by both test collection and doctest
++        # collection. See #10341.
++        if module_name in sys.modules:
++            return sys.modules[module_name]
++
+         for meta_importer in sys.meta_path:
+             spec = meta_importer.find_spec(module_name, [str(path.parent)])
+             if spec is not None:
+diff --git a/testing/test_pathlib.py b/testing/test_pathlib.py
+index c15a81ea1..9880fca81 100644
+--- a/testing/test_pathlib.py
++++ b/testing/test_pathlib.py
+@@ -298,13 +298,18 @@ class TestImportPath:
+         assert "_src" in sys.modules
+         assert "_src.tests" in sys.modules
+ 
+-    def test_importmode_twice_is_different_module(
++    def test_importmode_twice_is_same_module(
+         self, simple_module: Path, tmp_path: Path
+     ) -> None:
+-        """`importlib` mode always returns a new module."""
++        """`importlib` mode returns the same module if already imported.
++
++        This is important to avoid importing a module twice when using
++        --doctest-modules with --import-mode=importlib, which would cause
++        classes to have different ids (#10341).
++        """
+         module1 = import_path(simple_module, mode="importlib", root=tmp_path)
+         module2 = import_path(simple_module, mode="importlib", root=tmp_path)
+-        assert module1 is not module2
++        assert module1 is module2
+ 
+     def test_no_meta_path_found(
+         self, simple_module: Path, monkeypatch: MonkeyPatch, tmp_path: Path
+@@ -315,6 +320,9 @@ class TestImportPath:
+         assert module.foo(2) == 42  # type: ignore[attr-defined]
+ 
+         # mode='importlib' fails if no spec is found to load the module
++        # Remove the module from sys.modules to test the error path
++        del sys.modules["_src.tests.mymod"]
++
+         import importlib.util
+ 
+         monkeypatch.setattr(

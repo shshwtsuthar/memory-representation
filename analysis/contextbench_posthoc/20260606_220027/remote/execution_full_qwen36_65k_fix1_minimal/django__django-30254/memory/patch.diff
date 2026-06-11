@@ -1,0 +1,58 @@
+diff --git a/test_metaclass_attrs.py b/test_metaclass_attrs.py
+new file mode 100644
+index 0000000000..42df3e9e71
+--- /dev/null
++++ b/test_metaclass_attrs.py
+@@ -0,0 +1,52 @@
++"""
++Test that custom model metaclasses can access the attribute dict in __init__.
++
++This reproduces the issue where custom metaclasses (like Wagtail's Page model)
++cannot access attributes declared on the model class because they've been
++popped from the dict by ModelBase.__new__.
++"""
++import os
++import sys
++import django
++
++# Setup Django settings
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tests.settings')
++sys.path.insert(0, '/testbed')
++django.setup()
++
++from django.db import models
++from django.db.models.base import ModelBase
++
++
++class PageBase(ModelBase):
++    """Custom metaclass that inspects the class dict in __init__."""
++    def __init__(cls, name, bases, dct):
++        super(PageBase, cls).__init__(name, bases, dct)
++        # This is what Wagtail's Page model does - it checks for
++        # custom attributes in the class dict
++        if 'magic' in dct:
++            print("enabling magic on %s" % (name))
++            cls._meta.custom_magic = True
++        else:
++            cls._meta.custom_magic = False
++
++
++class Page(models.Model, metaclass=PageBase):
++    """Model with custom metaclass that declares a 'magic' attribute."""
++    magic = True
++    title = models.CharField(max_length=255)
++
++    class Meta:
++        app_label = 'test_app'
++
++
++def test_custom_metaclass_can_access_attrs():
++    """Test that custom metaclass __init__ can see all attrs in dct."""
++    # The 'magic' attribute should be in the dict passed to __init__
++    assert hasattr(Page._meta, 'custom_magic'), "custom_magic attribute not set"
++    assert Page._meta.custom_magic is True, "custom_magic should be True"
++    print("TEST PASSED: Custom metaclass can access attrs in __init__")
++
++
++if __name__ == '__main__':
++    test_custom_metaclass_can_access_attrs()

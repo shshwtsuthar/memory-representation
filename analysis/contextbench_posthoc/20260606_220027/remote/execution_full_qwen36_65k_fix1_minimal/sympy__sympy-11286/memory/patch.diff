@@ -1,0 +1,43 @@
+diff --git a/sympy/printing/octave.py b/sympy/printing/octave.py
+index 9fa66d4d7..02402b374 100644
+--- a/sympy/printing/octave.py
++++ b/sympy/printing/octave.py
+@@ -401,6 +401,12 @@ def _print_hankel2(self, expr):
+         return "besselh(%s, 2, %s)" % (self._print(expr.order),
+                                        self._print(expr.argument))
+ 
++    def _print_sinc(self, expr):
++        # SymPy's sinc is the unnormalized sinc: sinc(x) = sin(x)/x
++        # Octave's sinc is the normalized sinc: sinc(x) = sin(pi*x)/(pi*x)
++        # So sinc_sym(x) = sinc_octave(x/pi)
++        return "sinc(%s/pi)" % self._print(expr.args[0])
++
+ 
+     # Note: as of 2015, Octave doesn't have spherical Bessel functions
+     def _print_jn(self, expr):
+diff --git a/sympy/printing/tests/test_octave.py b/sympy/printing/tests/test_octave.py
+index 0907625a8..453d3c46a 100644
+--- a/sympy/printing/tests/test_octave.py
++++ b/sympy/printing/tests/test_octave.py
+@@ -10,6 +10,7 @@
+                                             besselk, hankel1, hankel2, airyai,
+                                             airybi, airyaiprime, airybiprime)
+ from sympy.functions.special.gamma_functions import (lowergamma, uppergamma)
++from sympy.functions.elementary.trigonometric import sinc
+ from sympy.utilities.pytest import XFAIL
+ from sympy.core.compatibility import range
+ 
+@@ -368,3 +369,13 @@ def test_specfun():
+     assert octave_code(lowergamma(n, x)) == 'gammainc(x, n, \'lower\')'
+     assert octave_code(jn(n, x)) == 'sqrt(2)*sqrt(pi)*sqrt(1./x).*besselj(n + 1/2, x)/2'
+     assert octave_code(yn(n, x)) == 'sqrt(2)*sqrt(pi)*sqrt(1./x).*bessely(n + 1/2, x)/2'
++
++
++def test_sinc():
++    # SymPy's sinc is the unnormalized sinc: sinc(x) = sin(x)/x
++    # Octave's sinc is the normalized sinc: sinc(x) = sin(pi*x)/(pi*x)
++    # So sinc_sym(x) = sinc_octave(x/pi)
++    assert octave_code(sinc(x)) == 'sinc(x/pi)'
++    assert octave_code(sinc(2*x)) == 'sinc(2*x/pi)'
++    assert octave_code(sinc(x*pi)) == 'sinc(pi*x/pi)'
++    assert octave_code(sinc(x), assign_to='s') == 's = sinc(x/pi);'

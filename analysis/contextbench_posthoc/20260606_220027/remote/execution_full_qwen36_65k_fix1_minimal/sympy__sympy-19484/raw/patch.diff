@@ -1,0 +1,67 @@
+diff --git a/sympy/functions/elementary/complexes.py b/sympy/functions/elementary/complexes.py
+index 88abe9090c..34d5325c36 100644
+--- a/sympy/functions/elementary/complexes.py
++++ b/sympy/functions/elementary/complexes.py
+@@ -483,6 +483,23 @@ def eval(cls, arg):
+         if arg.is_Mul:
+             known = []
+             unk = []
++            # Check for sign(arg)*Abs(arg) pattern that simplifies to arg
++            sign_arg = None
++            abs_arg = None
++            for t in arg.args:
++                if isinstance(t, sign):
++                    sign_arg = t.args[0]
++                elif isinstance(t, Abs):
++                    abs_arg = t.args[0]
++            if sign_arg is not None and abs_arg is not None and sign_arg == abs_arg:
++                # sign(arg)*Abs(arg) = arg for real arg
++                if sign_arg.is_extended_real:
++                    # Remove both sign and Abs factors, replace with arg
++                    new_args = [t for t in arg.args if not (isinstance(t, sign) and t.args[0] == sign_arg)
++                                and not (isinstance(t, Abs) and t.args[0] == abs_arg)]
++                    if new_args:
++                        return Mul(*new_args)*sign_arg
++                    return sign_arg
+             for t in arg.args:
+                 if t.is_Pow and t.exp.is_integer and t.exp.is_negative:
+                     bnew = cls(t.base)
+diff --git a/sympy/simplify/radsimp.py b/sympy/simplify/radsimp.py
+index 9fc899b5b0..e3a45e7471 100644
+--- a/sympy/simplify/radsimp.py
++++ b/sympy/simplify/radsimp.py
+@@ -565,18 +565,34 @@ def collect_abs(expr):
+     >>> collect_abs(abs(1/x))
+     Abs(1/x)
+     """
++    from sympy.functions.elementary.complexes import sign
+     def _abs(mul):
+       from sympy.core.mul import _mulsort
+       c, nc = mul.args_cnc()
+       a = []
+       o = []
++      sign_arg = None
+       for i in c:
+           if isinstance(i, Abs):
+               a.append(i.args[0])
+           elif isinstance(i, Pow) and isinstance(i.base, Abs) and i.exp.is_real:
+               a.append(i.base.args[0]**i.exp)
++          elif isinstance(i, sign):
++              sign_arg = i.args[0]
+           else:
+               o.append(i)
++      # Check for sign(arg)*Abs(arg) pattern that simplifies to arg
++      if sign_arg is not None and sign_arg.is_extended_real:
++          # Remove sign_arg from a if present and cancel out
++          if sign_arg in a:
++              a.remove(sign_arg)
++              o.append(sign_arg)
++              if len(a) < 2 and not any(i.exp.is_negative for i in a if isinstance(i, Pow)):
++                  # No multiple Abs to collect, just return with sign arg
++                  args = list(o)
++                  args.extend(nc)
++                  _mulsort(args)
++                  return Mul._from_args(args, is_commutative=not nc)
+       if len(a) < 2 and not any(i.exp.is_negative for i in a if isinstance(i, Pow)):
+           return mul
+       absarg = Mul(*a)

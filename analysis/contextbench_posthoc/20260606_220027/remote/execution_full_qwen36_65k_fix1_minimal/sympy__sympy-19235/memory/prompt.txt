@@ -1,0 +1,267 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: memory
+
+The following is deterministic extractive memory from an officially related prior issue.
+
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 74feb7fb-8b2b-46b6-a4f7-f09e7a1b24f4
+- repo: sympy/sympy
+- instance_id: sympy__sympy-14774
+- base_commit: 8fc63c2d71752389a44367b8ef4aba8a91af6a45
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Latex printer does not support full inverse trig function names for acsc and asec
+For example
+`latex(asin(x), inv_trig_style="full")` works as expected returning `'\\arcsin{\\left (x \\right )}'`
+But `latex(acsc(x), inv_trig_style="full")` gives `'\\operatorname{acsc}{\\left (x \\right )}'` instead of `'\\operatorname{arccsc}{\\left (x \\right )}'`
+
+A fix seems to be to change line 743 of sympy/printing/latex.py from
+`inv_trig_table = ["asin", "acos", "atan", "acot"]` to
+`inv_trig_table = ["asin", "acos", "atan", "acsc", "asec", "acot"]`
+
+FILES INSPECTED
+---------------
+- swebench_9_15/sympy/printing/latex.py [Read: 1]
+- sympy/printing/latex.py [Read: 2]
+
+SEARCH ANCHORS
+--------------
+- [2] Glob glob='**/sympy/printing/latex.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [diagnostic] find . -type d -name "testbed" 2>/dev/null | head -5
+- [test] cd testbed && python test_fix.py
+- [other/reproduction] cd testbed && python --version
+- [test] cd testbed && python test_fix.py
+- [test] python ./swebench_9_15/testbed/test_fix.py
+- [test] python3 ./swebench_9_15/testbed/test_fix.py
+- [test] python3 ./swebench_9_15/testbed/test_simple.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- ImportError: SymPy now depends on mpmath as an external library. See http://docs.sympy.org/latest/install.html#mpmath for more information.
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Read Result after action #4]
+     735→            inv_trig_style = self._settings['inv_trig_style']
+     736→            # If we are dealing with a power-style inverse trig function
+     737→            inv_trig_power_case = False
+     738→            # If it is applicable to fold the argument brackets
+     739→            can_fold_brackets = self._settings['fold_func_brackets'] and \
+     740→                len(args) == 1 and \
+     741→                not self._needs_function_brackets(expr.args[0])
+     742→
+     743→            inv_trig_table = ["asin", "acos", "atan", "acot"]
+     744→
+     745→            # If the function is an inverse trig function, handle the style
+     746→            if func in inv_trig_table:
+     747→                if inv_trig_style == "abbreviated":
+     748→                    func = func
+     749→                elif inv_trig_style == "full":
+     750→                    func = "arc" + func[1:]
+     751→                elif inv_trig_style == "power":
+     752→                    func = func[1:]
+     753→                    inv_trig_power_case = True
+     754→
+     755→                    # Can never fold brackets if we're raised to a power
+     756→                    if exp is not None:
+     757→                        c
+  [... truncated ...]
+- [Test Output after action #8]
+  Exit code 1
+    File "test_fix.py", line 14
+      print(f"asin(x): {result}")
+                               ^
+  SyntaxError: invalid syntax
+- [Test Output after action #14]
+  Exit code 1
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_fix.py", line 4, in <module>
+      from sympy import latex, asin, acos, atan, acsc, asec, acot, Symbol
+    File "./swebench_9_15/testbed/sympy/__init__.py", line 21, in <module>
+      raise ImportError("SymPy now depends on mpmath as an external library. "
+  ImportError: SymPy now depends on mpmath as an external library. See http://docs.sympy.org/latest/install.html#mpmath for more information.
+- [Test Output after action #16]
+  Testing inverse trig functions with inv_trig_style='full':
+
+  asin(x): \arcsin{\left (x \right )}
+  Expected: \arcsin{\left(x \right)}
+  Match: False
+
+  acos(x): \arccos{\left (x \right )}
+  Expected: \arccos{\left(x \right)}
+  Match: False
+
+  atan(x): \arctan{\left (x \right )}
+  Expected: \arctan{\left(x \right)}
+  Match: False
+
+  acot(x): \operatorname{arccot}{\left (x \right )}
+  Expected: \arccot{\left(x \right)}
+  Match: False
+
+  acsc(x): \operatorname{arccsc}{\left (x \right )}
+  Expected: \arccsc{\left(x \right)}
+  Match: False
+
+  asec(x): \operatorname{arcsec}{\left (x \right )}
+  Expected: \arcsec{\left(x \right)}
+  Match: False
+
+
+  Testing with inv_trig_style='abbreviated':
+  acsc(x): \operatorname{acsc}{\left (x \right )}
+
+  Testing with inv_trig_style='power':
+  acsc(x): \csc^{-1}{\left (x \right )}
+
+  Testing default (no inv_trig_style):
+  acsc(x): \operatorname{acsc}{\left (x \right )}
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+
+  [... truncated ...]
+- [Read Result after action #18]
+     764→            elif exp is not None:
+     765→                name = r'%s^{%s}' % (self._hprint_Function(func), exp)
+     766→            else:
+     767→                name = self._hprint_Function(func)
+     768→
+     769→            if can_fold_brackets:
+     770→                if func in accepted_latex_functions:
+     771→                    # Wrap argument safely to avoid parse-time conflicts
+     772→                    # with the function name itself
+     773→                    name += r" {%s}"
+     774→                else:
+     775→                    name += r"%s"
+     776→            else:
+     777→                name += r"{\left (%s \right )}"
+     778→
+     779→            if inv_trig_power_case and exp is not None:
+     780→                name += r"^{%s}" % exp
+     781→
+     782→            return name % ",".join(args)
+     783→
+
+- [Test Output after action #21]
+  latex(asin(x), inv_trig_style='full'):
+  \arcsin{\left (x \right )}
+
+  latex(acsc(x), inv_trig_style='full'):
+  \operatorname{arccsc}{\left (x \right )}
+  Should contain 'arccsc' not 'acsc': True
+
+  latex(asec(x), inv_trig_style='full'):
+  \operatorname{arcsec}{\left (x \right )}
+  Should contain 'arcsec' not 'asec': True
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Mapping, defaultdict
+  ./swebench_9_15/testbed/sympy/core/expr.py:12: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop worki
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/printing/latex.py
+  Tool: Edit action #6
+  old_text_sha256: 4cf22e8b7bbc0ddc714573eaa1c8e45e03da789e3fd936d30a9c90ea717fef94
+  new_text_sha256: 03ddea8ceffbabd1ebf5fffb0f119e916f0414a118bda5ca39112e4eb3574c7e
+- test_fix.py
+  Tool: Write action #7
+  new_text_sha256: 46d05b79e6d727400acb2cddf5744d5287effada8f94555a3ae59ea49698f59f
+- test_fix.py
+  Tool: Write action #12
+  new_text_sha256: 8d421d3701e16a7d284d4b880c5842e56752d4439659ce9263b6ce36df684c5a
+- test_simple.py
+  Tool: Write action #20
+  new_text_sha256: 77155976168ff30b4c242e4b4ddd5042d8c9929c386b62be3f14c116ccf35d7f
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: sympy/sympy
+Base commit: 226b942f0748819d5d2d723b91591fed4975961c
+Instance ID: sympy__sympy-19235
+
+CURRENT_ISSUE
+Respect `inv_trig_style` in inverse hyperbolic trig functions
+Upstreamed from the galgebra printer, which seemed to want these.
+
+<!-- Your title above should be a short description of what
+was changed. Do not include the issue number in the title. -->
+
+#### References to other Issues or PRs
+<!-- If this pull request fixes an issue, write "Fixes #NNNN" in that exact
+format, e.g. "Fixes #1234" (see
+https://tinyurl.com/auto-closing for more information). Also, please
+write a comment on that issue linking back to this pull request once it is
+open. -->
+Follows on from gh-14774
+
+#### Brief description of what is fixed or changed
+
+`latex(acosh(x), inv_trig_style="power")` now gives a result including `cosh^{-1}`.
+
+#### Other comments
+
+Upstreamed from galgebra, https://github.com/pygae/galgebra/blob/master/galgebra/printer.py#L830
+
+#### Release Notes
+
+<!-- Write the release notes for this release below. See
+https://github.com/sympy/sympy/wiki/Writing-Release-Notes for more information
+on how to write release notes. The bot will check your release notes
+automatically to see if they are formatted correctly. -->
+
+<!-- BEGIN RELEASE NOTES -->
+* printing
+  * the inverse hyperbolic functions now respect the `inv_trig_style` printer setting
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

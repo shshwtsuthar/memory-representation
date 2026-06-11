@@ -1,0 +1,212 @@
+diff --git a/sklearn/ensemble/tests/test_voting.py b/sklearn/ensemble/tests/test_voting.py
+index 0a4a9eab8..ab380c3a9 100644
+--- a/sklearn/ensemble/tests/test_voting.py
++++ b/sklearn/ensemble/tests/test_voting.py
+@@ -430,7 +430,7 @@ def test_set_estimator_none():
+     eclf2.set_params(voting='soft').fit(X, y)
+     assert_array_equal(eclf1.predict(X), eclf2.predict(X))
+     assert_array_almost_equal(eclf1.predict_proba(X), eclf2.predict_proba(X))
+-    msg = 'All estimators are None. At least one is required!'
++    msg = 'All estimators are None or \'drop\'. At least one is required!'
+     assert_raise_message(
+         ValueError, msg, eclf2.set_params(lr=None, rf=None, nb=None).fit, X, y)
+ 
+@@ -531,3 +531,107 @@ def test_none_estimator_with_weights(X, y, voter):
+     voter.fit(X, y, sample_weight=np.ones(y.shape))
+     y_pred = voter.predict(X)
+     assert y_pred.shape == y.shape
++
++
++@pytest.mark.filterwarnings('ignore: Default solver will be changed')  # 0.22
++@pytest.mark.filterwarnings('ignore: Default multi_class will')  # 0.22
++@pytest.mark.parametrize(
++    "X, y, voter",
++    [(X, y, VotingClassifier(
++        [('lr', LogisticRegression()),
++         ('rf', RandomForestClassifier(n_estimators=5))])),
++     (X_r, y_r, VotingRegressor(
++         [('lr', LinearRegression()),
++          ('rf', RandomForestRegressor(n_estimators=5))]))]
++)
++def test_drop_estimator_with_weights(X, y, voter):
++    # check that an estimator can be set to 'drop' and passing some weight
++    # regression test for
++    # https://github.com/scikit-learn/scikit-learn/issues/13771
++    voter.fit(X, y, sample_weight=np.ones(y.shape))
++    voter.set_params(lr='drop')
++    voter.fit(X, y, sample_weight=np.ones(y.shape))
++    y_pred = voter.predict(X)
++    assert y_pred.shape == y.shape
++
++
++@pytest.mark.filterwarnings('ignore: Default solver will be changed')  # 0.22
++@pytest.mark.filterwarnings('ignore: Default multi_class will')  # 0.22
++def test_drop_estimator_classification():
++    """Test that 'drop' works the same as None for VotingClassifier."""
++    clf1 = LogisticRegression(random_state=123)
++    clf2 = RandomForestClassifier(random_state=123)
++    clf3 = GaussianNB()
++    
++    # Test with None
++    eclf_none = VotingClassifier(estimators=[
++        ('lr', clf1), ('rf', clf2), ('gnb', clf3)],
++        voting='soft').fit(X, y)
++    eclf_none.set_params(lr=None)
++    eclf_none.fit(X, y)
++    
++    # Test with 'drop' - use fresh estimators to ensure same random state
++    clf1_drop = LogisticRegression(random_state=123)
++    clf2_drop = RandomForestClassifier(random_state=123)
++    clf3_drop = GaussianNB()
++    # Test with 'drop'
++    eclf_drop = VotingClassifier(estimators=[
++        ('lr', clf1_drop), ('rf', clf2_drop), ('gnb', clf3_drop)],
++        voting='soft').fit(X, y)
++    eclf_drop.set_params(lr='drop')
++    eclf_drop.fit(X, y)
++    
++    # Both should produce the same predictions
++    assert_array_equal(eclf_none.predict(X), eclf_drop.predict(X))
++    assert_array_almost_equal(eclf_none.predict_proba(X),
++                              eclf_drop.predict_proba(X))
++    
++    # Check that 'drop' estimator is not in estimators_
++    assert 'lr' not in eclf_drop.named_estimators_
++    assert 'rf' in eclf_drop.named_estimators_
++    assert 'gnb' in eclf_drop.named_estimators_
++
++
++@pytest.mark.filterwarnings('ignore: Default solver will be changed')  # 0.22
++@pytest.mark.filterwarnings('ignore: Default multi_class will')  # 0.22
++def test_drop_estimator_regression():
++    """Test that 'drop' works the same as None for VotingRegressor."""
++    clf1 = LinearRegression()
++    clf2 = RandomForestRegressor(n_estimators=5, random_state=123)
++    clf3 = RandomForestRegressor(n_estimators=5, random_state=42)
++    
++    # Test with None
++    eclf_none = VotingRegressor(estimators=[
++        ('lr', clf1), ('rf', clf2), ('rf2', clf3)]).fit(X_r, y_r)
++    eclf_none.set_params(lr=None)
++    eclf_none.fit(X_r, y_r)
++    
++    # Test with 'drop'
++    eclf_drop = VotingRegressor(estimators=[
++        ('lr', clf1), ('rf', clf2), ('rf2', clf3)]).fit(X_r, y_r)
++    eclf_drop.set_params(lr='drop')
++    eclf_drop.fit(X_r, y_r)
++    
++    # Both should produce the same predictions
++    assert_array_equal(eclf_none.predict(X_r), eclf_drop.predict(X_r))
++    
++    # Check that 'drop' estimator is not in named_estimators_
++    assert 'lr' not in eclf_drop.named_estimators_
++    assert 'rf' in eclf_drop.named_estimators_
++    assert 'rf2' in eclf_drop.named_estimators_
++
++
++@pytest.mark.filterwarnings('ignore: Default solver will be changed')  # 0.22
++@pytest.mark.filterwarnings('ignore: Default multi_class will')  # 0.22
++def test_all_drop_estimator():
++    """Test that error is raised when all estimators are 'drop'."""
++    clf1 = LogisticRegression(random_state=123)
++    clf2 = RandomForestClassifier(random_state=123)
++    
++    eclf = VotingClassifier(estimators=[
++        ('lr', clf1), ('rf', clf2)],
++        voting='soft')
++    eclf.set_params(lr='drop', rf='drop')
++    
++    with pytest.raises(ValueError, match="All estimators are None or 'drop'"):
++        eclf.fit(X, y)
+diff --git a/sklearn/ensemble/voting.py b/sklearn/ensemble/voting.py
+index d8e14b152..a2784af21 100644
+--- a/sklearn/ensemble/voting.py
++++ b/sklearn/ensemble/voting.py
+@@ -54,7 +54,8 @@ class _BaseVoting(_BaseComposition, TransformerMixin):
+         if self.weights is None:
+             return None
+         return [w for est, w in zip(self.estimators,
+-                                    self.weights) if est[1] is not None]
++                                    self.weights) if est[1] is not None
++                and est[1] != 'drop']
+ 
+     def _predict(self, X):
+         """Collect results from clf.predict calls. """
+@@ -78,7 +79,7 @@ class _BaseVoting(_BaseComposition, TransformerMixin):
+ 
+         if sample_weight is not None:
+             for name, step in self.estimators:
+-                if step is None:
++                if step is None or step == 'drop':
+                     continue
+                 if not has_fit_parameter(step, 'sample_weight'):
+                     raise ValueError('Underlying estimator \'%s\' does not'
+@@ -87,19 +88,22 @@ class _BaseVoting(_BaseComposition, TransformerMixin):
+         names, clfs = zip(*self.estimators)
+         self._validate_names(names)
+ 
+-        n_isnone = np.sum([clf is None for _, clf in self.estimators])
++        n_isnone = np.sum([clf is None or clf == 'drop' for _, clf in self.estimators])
+         if n_isnone == len(self.estimators):
+-            raise ValueError('All estimators are None. At least one is '
++            raise ValueError("All estimators are None or 'drop'. At least one is "
+                              'required!')
+ 
+         self.estimators_ = Parallel(n_jobs=self.n_jobs)(
+                 delayed(_parallel_fit_estimator)(clone(clf), X, y,
+                                                  sample_weight=sample_weight)
+-                for clf in clfs if clf is not None)
++                for clf in clfs if clf is not None and clf != 'drop')
+ 
+         self.named_estimators_ = Bunch()
+-        for k, e in zip(self.estimators, self.estimators_):
+-            self.named_estimators_[k[0]] = e
++        estimators_idx = 0
++        for name, clf in self.estimators:
++            if clf is not None and clf != 'drop':
++                self.named_estimators_[name] = self.estimators_[estimators_idx]
++                estimators_idx += 1
+         return self
+ 
+     def set_params(self, **params):
+@@ -149,8 +153,8 @@ class VotingClassifier(_BaseVoting, ClassifierMixin):
+     estimators : list of (string, estimator) tuples
+         Invoking the ``fit`` method on the ``VotingClassifier`` will fit clones
+         of those original estimators that will be stored in the class attribute
+-        ``self.estimators_``. An estimator can be set to `None` using
+-        ``set_params``.
++        ``self.estimators_``. An estimator can be set to `None` or `'drop'`
++        using ``set_params``.
+ 
+     voting : str, {'hard', 'soft'} (default='hard')
+         If 'hard', uses predicted class labels for majority rule voting.
+@@ -180,7 +184,7 @@ class VotingClassifier(_BaseVoting, ClassifierMixin):
+     ----------
+     estimators_ : list of classifiers
+         The collection of fitted sub-estimators as defined in ``estimators``
+-        that are not `None`.
++        that are not `None` or `'drop'`.
+ 
+     named_estimators_ : Bunch object, a dictionary with attribute access
+         Attribute to access any fitted sub-estimators by name.
+@@ -383,8 +387,8 @@ class VotingRegressor(_BaseVoting, RegressorMixin):
+     estimators : list of (string, estimator) tuples
+         Invoking the ``fit`` method on the ``VotingRegressor`` will fit
+         clones of those original estimators that will be stored in the class
+-        attribute ``self.estimators_``. An estimator can be set to `None`
+-        using ``set_params``.
++        attribute ``self.estimators_``. An estimator can be set to `None` or
++        `'drop'` using ``set_params``.
+ 
+     weights : array-like, shape (n_regressors,), optional (default=`None`)
+         Sequence of weights (`float` or `int`) to weight the occurrences of
+@@ -400,7 +404,7 @@ class VotingRegressor(_BaseVoting, RegressorMixin):
+     ----------
+     estimators_ : list of regressors
+         The collection of fitted sub-estimators as defined in ``estimators``
+-        that are not `None`.
++        that are not `None` or `'drop'`.
+ 
+     named_estimators_ : Bunch object, a dictionary with attribute access
+         Attribute to access any fitted sub-estimators by name.

@@ -1,0 +1,60 @@
+diff --git a/sympy/core/mul.py b/sympy/core/mul.py
+index d4af08fa73..c32fd8844f 100644
+--- a/sympy/core/mul.py
++++ b/sympy/core/mul.py
+@@ -627,6 +627,31 @@ def _handle_for_oo(c_part, coeff_sign):
+         if coeff is not S.One:
+             c_part.insert(0, coeff)
+ 
++        # simplify sign(arg)*Abs(arg) to arg
++        from sympy.functions.elementary.complexes import sign, Abs
++        result = []
++        remaining = list(c_part)
++        while remaining:
++            found = False
++            for i in range(len(remaining)):
++                for j in range(i + 1, len(remaining)):
++                    a, b = remaining[i], remaining[j]
++                    if (isinstance(a, sign) and isinstance(b, Abs) and
++                            a.args[0] == b.args[0]) or \
++                       (isinstance(b, sign) and isinstance(a, Abs) and
++                            b.args[0] == a.args[0]):
++                        result.append(a.args[0])
++                        remaining = [remaining[k] for k in range(len(remaining))
++                                     if k != i and k != j]
++                        found = True
++                        break
++                if found:
++                    break
++            if not found:
++                result.append(remaining[0])
++                remaining = remaining[1:]
++        c_part = result
++
+         # we are done
+         if (global_parameters.distribute and not nc_part and len(c_part) == 2 and
+                 c_part[0].is_Number and c_part[0].is_finite and c_part[1].is_Add):
+diff --git a/sympy/functions/elementary/tests/test_complexes.py b/sympy/functions/elementary/tests/test_complexes.py
+index 78031aac93..92aa0c07c3 100644
+--- a/sympy/functions/elementary/tests/test_complexes.py
++++ b/sympy/functions/elementary/tests/test_complexes.py
+@@ -319,6 +319,19 @@ def test_sign():
+     d = p - q
+     assert sign(d).func is sign or sign(d) == 0
+ 
++    # sign(x)*Abs(x) should simplify to x (issue sympy__sympy-19484)
++    x = Symbol('x', real=True)
++    assert sign(x)*Abs(x) == x
++    assert Abs(x)*sign(x) == x
++    # also for complex x
++    y = Symbol('y')
++    assert sign(y)*Abs(y) == y
++    assert Abs(y)*sign(y) == y
++    # and for specific values
++    assert sign(5)*Abs(5) == 5
++    assert sign(-3)*Abs(-3) == -3
++    assert sign(0)*Abs(0) == 0
++
+ 
+ def test_as_real_imag():
+     n = pi**1000

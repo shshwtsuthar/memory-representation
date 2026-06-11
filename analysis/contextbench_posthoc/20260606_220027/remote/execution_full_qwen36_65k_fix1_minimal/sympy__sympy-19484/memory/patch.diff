@@ -1,0 +1,75 @@
+diff --git a/sympy/simplify/radsimp.py b/sympy/simplify/radsimp.py
+index 9fc899b5b0..82a029f6cc 100644
+--- a/sympy/simplify/radsimp.py
++++ b/sympy/simplify/radsimp.py
+@@ -565,18 +565,46 @@ def collect_abs(expr):
+     >>> collect_abs(abs(1/x))
+     Abs(1/x)
+     """
++    from sympy.functions.elementary.complexes import sign
+     def _abs(mul):
+       from sympy.core.mul import _mulsort
+       c, nc = mul.args_cnc()
+       a = []
+       o = []
++      sign_arg = None  # track if we have sign(x)
+       for i in c:
+           if isinstance(i, Abs):
+               a.append(i.args[0])
++          elif isinstance(i, sign):
++              sign_arg = i.args[0]
++              o.append(i)
+           elif isinstance(i, Pow) and isinstance(i.base, Abs) and i.exp.is_real:
+               a.append(i.base.args[0]**i.exp)
+           else:
+               o.append(i)
++      # Handle sign(x)*Abs(x) -> x for real x
++      if sign_arg is not None and len(a) == 1:
++          # Check if sign_arg matches the Abs argument
++          if a[0] == sign_arg:
++              # sign(x)*Abs(x) = x only for real x
++              # Check if the argument is real
++              if sign_arg.is_real is not True:
++                  return mul
++              # sign(x)*Abs(x) = x for real x
++              # Remove the sign and Abs, keep the argument
++              # Also handle the case where there's a coefficient
++              coeff = S.One
++              for i in o:
++                  if isinstance(i, sign):
++                      continue  # skip the sign we're removing
++                  coeff *= i
++              if coeff == S.One:
++                  result = a[0]
++              else:
++                  result = Mul(a[0], coeff)
++              if nc:
++                  result = Mul(result, *nc)
++              return result
+       if len(a) < 2 and not any(i.exp.is_negative for i in a if isinstance(i, Pow)):
+           return mul
+       absarg = Mul(*a)
+diff --git a/sympy/simplify/tests/test_radsimp.py b/sympy/simplify/tests/test_radsimp.py
+index 9c3577bc9c..a592bada0c 100644
+--- a/sympy/simplify/tests/test_radsimp.py
++++ b/sympy/simplify/tests/test_radsimp.py
+@@ -456,6 +456,19 @@ def test_collect_abs():
+     p = Symbol('p', positive=True)
+     assert collect_abs(p/abs(1-p)).is_commutative is True
+ 
++    # sign(x)*Abs(x) -> x for real x (issue sympy__sympy-19484)
++    from sympy import sign
++    x_real = Symbol('x', real=True)
++    assert collect_abs(sign(x_real)*Abs(x_real)) == x_real
++    assert collect_abs(Abs(x_real)*sign(x_real)) == x_real
++    assert collect_abs(2*sign(x_real)*Abs(x_real)) == 2*x_real
++    assert collect_abs(-2*sign(x_real)*Abs(x_real)) == -2*x_real
++    # sign(x)*Abs(x) should NOT simplify for non-real x
++    y_nonreal = Symbol('y_nonreal')
++    assert collect_abs(sign(y_nonreal)*Abs(y_nonreal)) == sign(y_nonreal)*Abs(y_nonreal)
++    # sign(x)*Abs(y) with different arguments should NOT simplify
++    assert collect_abs(sign(x_real)*Abs(y)) == sign(x_real)*Abs(y)
++
+ 
+ def test_issue_19149():
+     eq = exp(3*x/4)

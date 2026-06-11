@@ -1,0 +1,36 @@
+diff --git a/sympy/matrices/expressions/diagonal.py b/sympy/matrices/expressions/diagonal.py
+index a0dc57a35..d796ce33d 100644
+--- a/sympy/matrices/expressions/diagonal.py
++++ b/sympy/matrices/expressions/diagonal.py
+@@ -1,14 +1,29 @@
+ from __future__ import print_function, division
+ 
++from sympy.core import Eq, S
++from sympy.functions import KroneckerDelta
+ from sympy.matrices.expressions import MatrixExpr
+-from sympy.core import S
+ 
+ class DiagonalMatrix(MatrixExpr):
+     arg = property(lambda self: self.args[0])
+     shape = property(lambda self: (self.arg.shape[0], self.arg.shape[0]))
+ 
+     def _entry(self, i, j):
+-        return S.Zero if i != j else self.arg[i, 0]
++        eq = Eq(i, j)
++        if eq is S.true:
++            # For column vector (n, 1): diagonal element at (i, 0)
++            # For square matrix (n, n): diagonal element at (i, i)
++            if self.arg.shape[1] == 1:
++                return self.arg[i, 0]
++            else:
++                return self.arg[i, i]
++        elif eq is S.false:
++            return S.Zero
++        # For symbolic i, j: use KroneckerDelta
++        if self.arg.shape[1] == 1:
++            return self.arg[i, 0] * KroneckerDelta(i, j)
++        else:
++            return self.arg[i, i] * KroneckerDelta(i, j)
+ 
+ class DiagonalOf(MatrixExpr):
+     arg = property(lambda self: self.args[0])

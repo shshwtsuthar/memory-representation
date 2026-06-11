@@ -1,0 +1,83 @@
+diff --git a/django/db/migrations/autodetector.py b/django/db/migrations/autodetector.py
+index bf9a45530a..46d4b7b9c7 100644
+--- a/django/db/migrations/autodetector.py
++++ b/django/db/migrations/autodetector.py
+@@ -1102,7 +1102,7 @@ class MigrationAutodetector:
+                     app_label,
+                     operation(
+                         name=model_name,
+-                        **{option_name: new_value}
++                        **{option_name: new_value, 'old_' + option_name: old_value}
+                     ),
+                     dependencies=dependencies,
+                 )
+diff --git a/django/db/migrations/operations/models.py b/django/db/migrations/operations/models.py
+index ad436cf611..7911df4be5 100644
+--- a/django/db/migrations/operations/models.py
++++ b/django/db/migrations/operations/models.py
+@@ -463,9 +463,11 @@ class AlterUniqueTogether(FieldRelatedOptionOperation):
+     """
+     option_name = "unique_together"
+ 
+-    def __init__(self, name, unique_together):
++    def __init__(self, name, unique_together, old_unique_together=None):
+         unique_together = normalize_together(unique_together)
+         self.unique_together = {tuple(cons) for cons in unique_together}
++        old_unique_together = normalize_together(old_unique_together)
++        self.old_unique_together = {tuple(cons) for cons in old_unique_together} if old_unique_together else set()
+         super().__init__(name)
+ 
+     def deconstruct(self):
+@@ -473,6 +475,8 @@ class AlterUniqueTogether(FieldRelatedOptionOperation):
+             'name': self.name,
+             'unique_together': self.unique_together,
+         }
++        if self.old_unique_together:
++            kwargs['old_unique_together'] = self.old_unique_together
+         return (
+             self.__class__.__qualname__,
+             [],
+@@ -501,8 +505,8 @@ class AlterUniqueTogether(FieldRelatedOptionOperation):
+         return (
+             self.references_model(model_name, app_label) and
+             (
+-                not self.unique_together or
+-                any((name in together) for together in self.unique_together)
++                not self.unique_together and not self.old_unique_together or
++                any((name in together) for together in self.unique_together | self.old_unique_together)
+             )
+         )
+ 
+@@ -517,9 +521,11 @@ class AlterIndexTogether(FieldRelatedOptionOperation):
+     """
+     option_name = "index_together"
+ 
+-    def __init__(self, name, index_together):
++    def __init__(self, name, index_together, old_index_together=None):
+         index_together = normalize_together(index_together)
+         self.index_together = {tuple(cons) for cons in index_together}
++        old_index_together = normalize_together(old_index_together)
++        self.old_index_together = {tuple(cons) for cons in old_index_together} if old_index_together else set()
+         super().__init__(name)
+ 
+     def deconstruct(self):
+@@ -527,6 +533,8 @@ class AlterIndexTogether(FieldRelatedOptionOperation):
+             'name': self.name,
+             'index_together': self.index_together,
+         }
++        if self.old_index_together:
++            kwargs['old_index_together'] = self.old_index_together
+         return (
+             self.__class__.__qualname__,
+             [],
+@@ -555,8 +563,8 @@ class AlterIndexTogether(FieldRelatedOptionOperation):
+         return (
+             self.references_model(model_name, app_label) and
+             (
+-                not self.index_together or
+-                any((name in together) for together in self.index_together)
++                not self.index_together and not self.old_index_together or
++                any((name in together) for together in self.index_together | self.old_index_together)
+             )
+         )
+ 

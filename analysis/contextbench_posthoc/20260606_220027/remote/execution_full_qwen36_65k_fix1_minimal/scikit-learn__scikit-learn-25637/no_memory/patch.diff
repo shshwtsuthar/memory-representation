@@ -1,0 +1,55 @@
+diff --git a/sklearn/utils/multiclass.py b/sklearn/utils/multiclass.py
+index f14b981f9..183138dbb 100644
+--- a/sklearn/utils/multiclass.py
++++ b/sklearn/utils/multiclass.py
+@@ -9,6 +9,7 @@ Multi-class / multi-label utility function
+ from collections.abc import Sequence
+ from itertools import chain
+ import warnings
++from numbers import Integral
+ 
+ from scipy.sparse import issparse
+ from scipy.sparse import dok_matrix
+@@ -363,7 +364,9 @@ def type_of_target(y, input_name=""):
+             return "binary"  # []
+         # 2-D empty array: [[]]
+         return "unknown"
+-    if not issparse(y) and y.dtype == object and not isinstance(y.flat[0], str):
++    if not issparse(y) and y.dtype == object and not isinstance(
++        y.flat[0], (str, Integral, float, bool)
++    ):
+         # [obj_1] and not ["label_1"]
+         return "unknown"
+ 
+diff --git a/sklearn/utils/tests/test_multiclass.py b/sklearn/utils/tests/test_multiclass.py
+index 731edbefc..407ae1674 100644
+--- a/sklearn/utils/tests/test_multiclass.py
++++ b/sklearn/utils/tests/test_multiclass.py
+@@ -382,6 +382,27 @@ def test_unique_labels_pandas_nullable(dtype):
+     assert_array_equal(labels, [0, 1])
+ 
+ 
++@pytest.mark.parametrize("dtype", ["Int64", "Float64", "boolean"])
++def test_type_of_target_pandas_nullable_boolean(dtype):
++    """Check that type_of_target works with pandas nullable boolean dtype.
++
++    Non-regression test for gh-25637.
++    """
++    pd = pytest.importorskip("pandas")
++
++    y_true = pd.Series([1, 0, 1, 0], dtype=dtype)
++    assert type_of_target(y_true) == "binary"
++
++    # Use appropriate values for each dtype
++    if dtype == "boolean":
++        # boolean dtype with only True/False is binary
++        y_true = pd.Series([True, False, True, False], dtype=dtype)
++        assert type_of_target(y_true) == "binary"
++    else:
++        y_true = pd.Series([1, 0, 2, 3, 4], dtype=dtype)
++        assert type_of_target(y_true) == "multiclass"
++
++
+ def test_class_distribution():
+     y = np.array(
+         [

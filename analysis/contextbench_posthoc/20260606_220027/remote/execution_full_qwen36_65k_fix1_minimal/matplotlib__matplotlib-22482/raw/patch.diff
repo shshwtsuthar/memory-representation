@@ -1,0 +1,363 @@
+diff --git a/lib/matplotlib/tests/test_pickle.py b/lib/matplotlib/tests/test_pickle.py
+index 0cba4f3920..29e5d66f06 100644
+--- a/lib/matplotlib/tests/test_pickle.py
++++ b/lib/matplotlib/tests/test_pickle.py
+@@ -307,3 +307,20 @@ def test_cycler():
+     ax = pickle.loads(pickle.dumps(ax))
+     l, = ax.plot([3, 4])
+     assert l.get_color() == "m"
++
++
++def test_widget_canvas():
++    """Test that widgets with canvas references can be pickled."""
++    import matplotlib.widgets as widgets
++
++    fig, (ax1, ax2) = plt.subplots(2, 1)
++    slider = widgets.Slider(ax2, 'Test', 0.0, 1.0, valinit=0.5)
++
++    # The figure should be picklable even with a widget referencing it
++    pickled = pickle.dumps(fig)
++    fig2 = pickle.loads(pickled)
++
++    # The unpickled figure should have a valid canvas
++    assert fig2.canvas is not None
++    plt.close(fig)
++    plt.close(fig2)
+diff --git a/lib/matplotlib/widgets.py b/lib/matplotlib/widgets.py
+index ed130e6854..5f6ae96c51 100644
+--- a/lib/matplotlib/widgets.py
++++ b/lib/matplotlib/widgets.py
+@@ -159,6 +159,17 @@ class AxesWidget(Widget):
+         return ((event.xdata, event.ydata) if event.inaxes is self.ax
+                 else self.ax.transData.inverted().transform((event.x, event.y)))
+ 
++    def __getstate__(self):
++        # Copy the state dict and remove the canvas since it's not picklable.
++        state = self.__dict__.copy()
++        del state['canvas']
++        return state
++
++    def __setstate__(self, state):
++        self.__dict__.update(state)
++        # Re-initialize the canvas from the axes.
++        self.canvas = self.ax.figure.canvas
++
+ 
+ class Button(AxesWidget):
+     """
+@@ -2101,6 +2112,20 @@ class MultiCursor(Widget):
+             for canvas in self._canvas_infos:
+                 canvas.draw_idle()
+ 
++    def __getstate__(self):
++        # Copy the state dict and remove unpicklable canvas objects.
++        state = self.__dict__.copy()
++        del state['_canvas']
++        del state['_canvas_infos']
++        return state
++
++    def __setstate__(self, state):
++        self.__dict__.update(state)
++        # Re-initialize canvas references from the axes.
++        self._canvas_infos = {
++            ax.figure.canvas: {"cids": [], "background": None} for ax in self.axes}
++        self._canvas = list(self._canvas_infos.keys())[0] if self._canvas_infos else None
++
+ 
+ class _SelectorWidget(AxesWidget):
+ 
+diff --git a/subprojects/.wraplock b/subprojects/.wraplock
+new file mode 100644
+index 0000000000..e69de29bb2
+diff --git a/test_issue_exact.py b/test_issue_exact.py
+new file mode 100644
+index 0000000000..59ac33b96e
+--- /dev/null
++++ b/test_issue_exact.py
+@@ -0,0 +1,79 @@
++"""Test the exact scenario from the issue"""
++import matplotlib
++matplotlib.use('Agg')  # Use non-GUI backend
++import matplotlib.pyplot as plt
++import matplotlib.widgets as widgets
++import numpy as np
++import pickle
++
++class interactive_plot():
++    def __init__(self, add_slider):
++        self.fig, self.axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [10, 1]})
++        
++        self.x_plot = np.linspace(0, 10, 1000)
++        self.line = self.axs[0].plot(self.x_plot, self.x_plot * 0)[0]
++        self.axs[0].set_ylim((0, 10))
++        self.axs[0].grid()
++        self.axs[0].set_title(r'$y = x^\alpha$')
++        
++        if add_slider:
++            self.slider = widgets.Slider(
++                self.axs[1],
++                label=r'$\alpha$',
++                valmin=0,
++                valmax=5,
++                valinit=0,
++                valstep=.01
++            )
++            self.slider.on_changed(self.update)
++    
++    def update(self, val):
++        self.line.set_ydata(self.x_plot ** val)
++
++# Test without slider - should work
++print("Test 1: Without slider")
++h = interactive_plot(add_slider=False)
++try:
++    data = pickle.dumps(h)
++    h2 = pickle.loads(data)
++    print("✓ SUCCESS: Object without slider pickled and unpickled!")
++    print(f"  Original figure number: {h.fig.number}")
++    print(f"  Unpickled figure number: {h2.fig.number}")
++except Exception as e:
++    print(f"✗ FAILED: {e}")
++
++# Test with slider - this is the bug we're fixing
++print("\nTest 2: With slider")
++h = interactive_plot(add_slider=True)
++try:
++    data = pickle.dumps(h)
++    h2 = pickle.loads(data)
++    print("✓ SUCCESS: Object with slider pickled and unpickled!")
++    print(f"  Original figure number: {h.fig.number}")
++    print(f"  Unpickled figure number: {h2.fig.number}")
++    print(f"  Slider value preserved: {h2.slider.val}")
++    print(f"  Slider canvas re-initialized: {h2.slider.canvas is not None}")
++    print(f"  Slider canvas correct: {h2.slider.canvas is h2.fig.canvas}")
++except Exception as e:
++    print(f"✗ FAILED: {e}")
++    import traceback
++    traceback.print_exc()
++
++# Test pickling the figure directly
++print("\nTest 3: Pickling figure directly with slider")
++fig, (ax1, ax2) = plt.subplots(2, 1)
++slider = widgets.Slider(ax2, 'Test', 0.0, 1.0, valinit=0.5)
++try:
++    data = pickle.dumps(fig)
++    fig2 = pickle.loads(data)
++    print("✓ SUCCESS: Figure with slider pickled and unpickled!")
++    print(f"  Original figure number: {fig.number}")
++    print(f"  Unpickled figure number: {fig2.number}")
++except Exception as e:
++    print(f"✗ FAILED: {e}")
++    import traceback
++    traceback.print_exc()
++
++print("\n" + "="*60)
++print("ALL TESTS COMPLETED!")
++print("="*60)
+diff --git a/test_widget_pickle.py b/test_widget_pickle.py
+new file mode 100644
+index 0000000000..41ca304410
+--- /dev/null
++++ b/test_widget_pickle.py
+@@ -0,0 +1,51 @@
++"""Test to reproduce the pickle issue with widgets"""
++import matplotlib
++matplotlib.use('Agg')  # Use non-GUI backend
++import matplotlib.pyplot as plt
++import matplotlib.widgets as widgets
++import numpy as np
++import pickle
++
++class interactive_plot():
++    def __init__(self, add_slider):
++        self.fig, self.axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [10, 1]})
++        
++        self.x_plot = np.linspace(0, 10, 1000)
++        self.line = self.axs[0].plot(self.x_plot, self.x_plot * 0)[0]
++        self.axs[0].set_ylim((0, 10))
++        self.axs[0].grid()
++        self.axs[0].set_title(r'$y = x^\alpha$')
++        
++        if add_slider:
++            self.slider = widgets.Slider(
++                self.axs[1],
++                label=r'$\alpha$',
++                valmin=0,
++                valmax=5,
++                valinit=0,
++                valstep=.01
++            )
++            self.slider.on_changed(self.update)
++    
++    def update(self, val):
++        self.line.set_ydata(self.x_plot ** val)
++
++# Test without slider - should work
++print("Testing without slider...")
++h = interactive_plot(add_slider=False)
++try:
++    with open('/tmp/test_no_slider.pkl', 'wb') as f:
++        pickle.dump(h, f)
++    print("✓ SUCCESS: Figure without slider pickled successfully!")
++except Exception as e:
++    print(f"✗ FAILED: {e}")
++
++# Test with slider - this is the bug
++print("\nTesting with slider...")
++h = interactive_plot(add_slider=True)
++try:
++    with open('/tmp/test_with_slider.pkl', 'wb') as f:
++        pickle.dump(h, f)
++    print("✓ SUCCESS: Figure with slider pickled successfully!")
++except Exception as e:
++    print(f"✗ FAILED: {e}")
+diff --git a/test_widget_pickle_comprehensive.py b/test_widget_pickle_comprehensive.py
+new file mode 100644
+index 0000000000..dc0f262c3d
+--- /dev/null
++++ b/test_widget_pickle_comprehensive.py
+@@ -0,0 +1,144 @@
++"""Comprehensive tests for widget pickling."""
++import matplotlib
++matplotlib.use('Agg')
++import matplotlib.pyplot as plt
++import matplotlib.widgets as widgets
++import pickle
++
++def test_slider_pickle():
++    """Test that a Slider widget can be pickled and unpickled."""
++    print("Testing Slider pickle...")
++    fig, ax = plt.subplots()
++    slider = widgets.Slider(ax, 'Test', 0.0, 1.0, valinit=0.5)
++    
++    # Pickle the widget itself
++    pickled = pickle.dumps(slider)
++    slider2 = pickle.loads(pickled)
++    
++    assert slider2.val == 0.5, f"Slider value should be 0.5, got {slider2.val}"
++    assert slider2.valmin == 0.0, f"Slider valmin should be 0.0, got {slider2.valmin}"
++    assert slider2.valmax == 1.0, f"Slider valmax should be 1.0, got {slider2.valmax}"
++    assert slider2.canvas is not None, "Canvas should be re-initialized"
++    
++    plt.close(fig)
++    print("✓ Slider pickle test passed!")
++
++def test_button_pickle():
++    """Test that a Button widget can be pickled and unpickled."""
++    print("Testing Button pickle...")
++    fig, ax = plt.subplots()
++    button = widgets.Button(ax, 'Click')
++    
++    # Pickle the widget itself
++    pickled = pickle.dumps(button)
++    button2 = pickle.loads(pickled)
++    
++    assert button2.label.get_text() == 'Click', f"Button label should be 'Click', got {button2.label.get_text()}"
++    assert button2.canvas is not None, "Canvas should be re-initialized"
++    
++    plt.close(fig)
++    print("✓ Button pickle test passed!")
++
++def test_textbox_pickle():
++    """Test that a TextBox widget can be pickled and unpickled."""
++    print("Testing TextBox pickle...")
++    fig, ax = plt.subplots()
++    textbox = widgets.TextBox(ax, 'Text')
++    
++    # Pickle the widget itself
++    pickled = pickle.dumps(textbox)
++    textbox2 = pickle.loads(pickled)
++    
++    assert textbox2.canvas is not None, "Canvas should be re-initialized"
++    
++    plt.close(fig)
++    print("✓ TextBox pickle test passed!")
++
++def test_checkbuttons_pickle():
++    """Test that CheckButtons widget can be pickled and unpickled."""
++    print("Testing CheckButtons pickle...")
++    fig, ax = plt.subplots()
++    check = widgets.CheckButtons(ax, ['A', 'B'])
++    
++    # Pickle the widget itself
++    pickled = pickle.dumps(check)
++    check2 = pickle.loads(pickled)
++    
++    assert check2.canvas is not None, "Canvas should be re-initialized"
++    
++    plt.close(fig)
++    print("✓ CheckButtons pickle test passed!")
++
++def test_radiobuttons_pickle():
++    """Test that RadioButtons widget can be pickled and unpickled."""
++    print("Testing RadioButtons pickle...")
++    fig, ax = plt.subplots()
++    radio = widgets.RadioButtons(ax, ['A', 'B'])
++    
++    # Pickle the widget itself
++    pickled = pickle.dumps(radio)
++    radio2 = pickle.loads(pickled)
++    
++    assert radio2.canvas is not None, "Canvas should be re-initialized"
++    
++    plt.close(fig)
++    print("✓ RadioButtons pickle test passed!")
++
++def test_cursor_pickle():
++    """Test that Cursor widget can be pickled and unpickled."""
++    print("Testing Cursor pickle...")
++    fig, ax = plt.subplots()
++    cursor = widgets.Cursor(ax)
++    
++    # Pickle the widget itself
++    pickled = pickle.dumps(cursor)
++    cursor2 = pickle.loads(pickled)
++    
++    assert cursor2.canvas is not None, "Canvas should be re-initialized"
++    
++    plt.close(fig)
++    print("✓ Cursor pickle test passed!")
++
++def test_multicursor_pickle():
++    """Test that MultiCursor widget can be pickled and unpickled."""
++    print("Testing MultiCursor pickle...")
++    fig, ax = plt.subplots()
++    ax.plot([0, 1, 2], [0, 1, 0])
++    multi = widgets.MultiCursor(fig.canvas, [ax], color='r')
++    
++    # Pickle the widget itself
++    pickled = pickle.dumps(multi)
++    multi2 = pickle.loads(pickled)
++    
++    assert multi2._canvas is not None, "Canvas should be re-initialized"
++    assert len(multi2._canvas_infos) > 0, "Canvas infos should be re-initialized"
++    
++    plt.close(fig)
++    print("✓ MultiCursor pickle test passed!")
++
++def test_figure_with_widget_pickle():
++    """Test that a figure with a widget can be pickled."""
++    print("Testing figure with widget pickle...")
++    fig, (ax1, ax2) = plt.subplots(2, 1)
++    slider = widgets.Slider(ax2, 'Test', 0.0, 1.0, valinit=0.5)
++    
++    # Pickle the figure
++    pickled = pickle.dumps(fig)
++    fig2 = pickle.loads(pickled)
++    
++    assert fig2.canvas is not None, "Figure canvas should be re-initialized"
++    
++    plt.close(fig)
++    plt.close(fig2)
++    print("✓ Figure with widget pickle test passed!")
++
++if __name__ == '__main__':
++    test_slider_pickle()
++    test_button_pickle()
++    test_textbox_pickle()
++    test_checkbuttons_pickle()
++    test_radiobuttons_pickle()
++    test_cursor_pickle()
++    test_multicursor_pickle()
++    test_figure_with_widget_pickle()
++    print("\n=== ALL TESTS PASSED! ===")

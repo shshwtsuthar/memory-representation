@@ -1,0 +1,90 @@
+diff --git a/django/db/migrations/autodetector.py b/django/db/migrations/autodetector.py
+index bf9a45530a..ce62219118 100644
+--- a/django/db/migrations/autodetector.py
++++ b/django/db/migrations/autodetector.py
+@@ -880,19 +880,31 @@ class MigrationAutodetector:
+             self._generate_removed_field(app_label, model_name, field_name)
+ 
+     def _generate_removed_field(self, app_label, model_name, field_name):
++        # Check if the field is in unique_together or index_together
++        old_model_state = self.from_state.models[app_label, model_name]
++        old_unique_together = old_model_state.options.get('unique_together') or set()
++        old_index_together = old_model_state.options.get('index_together') or set()
++        field_in_foo_together = (
++            field_name in {f for group in old_unique_together for f in group} or
++            field_name in {f for group in old_index_together for f in group}
++        )
++        # We might need to depend on the removal of an
++        # order_with_respect_to or index/unique_together operation;
++        # this is safely ignored if there isn't one
++        dependencies = [
++            (app_label, model_name, field_name, "order_wrt_unset"),
++        ]
++        if field_in_foo_together:
++            dependencies.append(
++                (app_label, model_name, field_name, "foo_together_change"),
++            )
+         self.add_operation(
+             app_label,
+             operations.RemoveField(
+                 model_name=model_name,
+                 name=field_name,
+             ),
+-            # We might need to depend on the removal of an
+-            # order_with_respect_to or index/unique_together operation;
+-            # this is safely ignored if there isn't one
+-            dependencies=[
+-                (app_label, model_name, field_name, "order_wrt_unset"),
+-                (app_label, model_name, field_name, "foo_together_change"),
+-            ],
++            dependencies=dependencies,
+         )
+ 
+     def generate_altered_fields(self):
+diff --git a/tests/migrations/test_autodetector.py b/tests/migrations/test_autodetector.py
+index e3ce3a129a..9d1bf084dc 100644
+--- a/tests/migrations/test_autodetector.py
++++ b/tests/migrations/test_autodetector.py
+@@ -1551,6 +1551,42 @@ class AutodetectorTests(TestCase):
+         })
+         self.assertOperationAttributes(changes, "otherapp", 0, 2, name="book", index_together={("title", "newfield2")})
+ 
++    def test_replace_field_and_foo_together(self):
++        """
++        Replacing a field in unique_together with a field of a different name
++        (e.g., IntegerField to ForeignKey) requires correct operation ordering.
++        AlterUniqueTogether must depend on RemoveField to avoid
++        'duplicate column name' errors.
++        """
++        # Old model with IntegerField in unique_together
++        old_book = ModelState("otherapp", "Book", [
++            ("id", models.AutoField(primary_key=True)),
++            ("foo_id", models.IntegerField()),
++            ("title", models.CharField(max_length=200)),
++        ], {
++            "unique_together": {("title", "foo_id")},
++            "index_together": {("title", "foo_id")},
++        })
++        # New model with ForeignKey of different name in unique_together
++        new_book = ModelState("otherapp", "Book", [
++            ("id", models.AutoField(primary_key=True)),
++            ("foo", models.ForeignKey("testapp.Author", models.CASCADE)),
++            ("title", models.CharField(max_length=200)),
++        ], {
++            "unique_together": {("title", "foo")},
++            "index_together": {("title", "foo")},
++        })
++        changes = self.get_changes([self.author_empty, old_book], [self.author_empty, new_book])
++        # Right number/type of migrations?
++        self.assertNumberMigrations(changes, "otherapp", 1)
++        # Verify RemoveField comes before AlterUniqueTogether to avoid
++        # 'duplicate column name' errors when both columns exist simultaneously
++        op_types = [op.__class__.__name__ for op in changes['otherapp'][0].operations]
++        remove_idx = op_types.index('RemoveField')
++        alter_unique_idx = op_types.index('AlterUniqueTogether')
++        self.assertLess(remove_idx, alter_unique_idx,
++            "RemoveField must come before AlterUniqueTogether to avoid duplicate column name errors")
++
+     def test_proxy(self):
+         """The autodetector correctly deals with proxy models."""
+         # First, we test adding a proxy model

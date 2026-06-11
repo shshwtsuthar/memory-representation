@@ -1,0 +1,108 @@
+diff --git a/django/core/checks/model_checks.py b/django/core/checks/model_checks.py
+index 2397fe3bb2..eb0094d875 100644
+--- a/django/core/checks/model_checks.py
++++ b/django/core/checks/model_checks.py
+@@ -1,5 +1,6 @@
+ import inspect
+ import types
++from collections import defaultdict
+ from itertools import chain
+ 
+ from django.apps import apps
+@@ -8,12 +9,16 @@ from django.core.checks import Error, Tags, register
+ 
+ @register(Tags.models)
+ def check_all_models(app_configs=None, **kwargs):
++    from django.db import models
++    db_table_models = defaultdict(list)
+     errors = []
+     if app_configs is None:
+         models = apps.get_models()
+     else:
+         models = chain.from_iterable(app_config.get_models() for app_config in app_configs)
+     for model in models:
++        if model._meta.managed and not model._meta.proxy:
++            db_table_models[model._meta.db_table].append(model._meta.label)
+         if not inspect.ismethod(model.check):
+             errors.append(
+                 Error(
+@@ -25,6 +30,16 @@ def check_all_models(app_configs=None, **kwargs):
+             )
+         else:
+             errors.extend(model.check(**kwargs))
++    for db_table, model_labels in db_table_models.items():
++        if len(model_labels) > 1:
++            errors.append(
++                Error(
++                    "db_table '%s' is used by multiple models: %s."
++                    % (db_table, ', '.join(model_labels)),
++                    obj=db_table,
++                    id='models.E028'
++                )
++            )
+     return errors
+ 
+ 
+diff --git a/tests/check_framework/tests.py b/tests/check_framework/tests.py
+index 061ead9d23..2eca620965 100644
+--- a/tests/check_framework/tests.py
++++ b/tests/check_framework/tests.py
+@@ -301,6 +301,58 @@ class CheckFrameworkReservedNamesTests(SimpleTestCase):
+         ]
+         self.assertEqual(errors, expected)
+ 
++    @isolate_apps('check_framework', kwarg_name='apps')
++    @override_system_checks([checks.model_checks.check_all_models])
++    def test_duplicate_db_table_collision(self, apps):
++        class Model1(models.Model):
++            class Meta:
++                db_table = 'test_table'
++
++        class Model2(models.Model):
++            class Meta:
++                db_table = 'test_table'
++
++        errors = checks.run_checks(app_configs=apps.get_app_configs())
++        self.assertEqual(errors, [
++            Error(
++                "db_table 'test_table' is used by multiple models: "
++                "check_framework.Model1, check_framework.Model2.",
++                obj='test_table',
++                id='models.E028',
++            )
++        ])
++
++    @isolate_apps('check_framework', kwarg_name='apps')
++    @override_system_checks([checks.model_checks.check_all_models])
++    def test_no_duplicate_db_table_for_proxy_models(self, apps):
++        class Model1(models.Model):
++            class Meta:
++                db_table = 'test_table'
++
++        class Model2(Model1):
++            class Meta:
++                proxy = True
++                db_table = 'test_table'
++
++        errors = checks.run_checks(app_configs=apps.get_app_configs())
++        self.assertEqual(errors, [])
++
++    @isolate_apps('check_framework', kwarg_name='apps')
++    @override_system_checks([checks.model_checks.check_all_models])
++    def test_no_duplicate_db_table_for_unmanaged_models(self, apps):
++        class Model1(models.Model):
++            class Meta:
++                managed = False
++                db_table = 'test_table'
++
++        class Model2(models.Model):
++            class Meta:
++                managed = False
++                db_table = 'test_table'
++
++        errors = checks.run_checks(app_configs=apps.get_app_configs())
++        self.assertEqual(errors, [])
++
+ 
+ class ChecksRunDuringTests(SimpleTestCase):
+     def test_registered_check_did_run(self):

@@ -1,0 +1,254 @@
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index 9ce46e3f73..0ae0f80ee0 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -5,6 +5,7 @@ import decimal
+ import operator
+ import uuid
+ import warnings
++from enum import Enum
+ from base64 import b64decode, b64encode
+ from functools import partialmethod, total_ordering
+ 
+@@ -155,6 +156,9 @@ class Field(RegisterLookupMixin):
+         self.unique_for_year = unique_for_year
+         if isinstance(choices, collections.abc.Iterator):
+             choices = list(choices)
++        # Convert Enum class to list of (value, name) tuples
++        if isinstance(choices, type) and issubclass(choices, Enum):
++            choices = [(member.value, member.name) for member in choices]
+         self.choices = choices
+         self.help_text = help_text
+         self.db_index = db_index
+@@ -771,6 +775,8 @@ class Field(RegisterLookupMixin):
+         """Perform preliminary non-db specific value checks and conversions."""
+         if isinstance(value, Promise):
+             value = value._proxy____cast()
++        if isinstance(value, Enum):
++            value = value.value
+         return value
+ 
+     def get_db_prep_value(self, value, connection, prepared=False):
+diff --git a/django/forms/fields.py b/django/forms/fields.py
+index a977256525..3a52a10c39 100644
+--- a/django/forms/fields.py
++++ b/django/forms/fields.py
+@@ -10,6 +10,7 @@ import os
+ import re
+ import uuid
+ from decimal import Decimal, DecimalException
++from enum import Enum
+ from io import BytesIO
+ from urllib.parse import urlsplit, urlunsplit
+ 
+@@ -774,14 +775,38 @@ class ChoiceField(Field):
+     def _get_choices(self):
+         return self._choices
+ 
++    @staticmethod
++    def _convert_enum_choices(choices):
++        """Recursively convert Enum classes in choices to lists of (value, name) tuples."""
++        if isinstance(choices, type) and issubclass(choices, Enum):
++            return [(member.value, member.name) for member in choices]
++        elif isinstance(choices, (list, tuple)):
++            result = []
++            for item in choices:
++                if isinstance(item, (list, tuple)) and len(item) == 2:
++                    group_name, group_choices = item
++                    # Check if group_choices is an Enum class
++                    if isinstance(group_choices, type) and issubclass(group_choices, Enum):
++                        group_choices = [(m.value, m.name) for m in group_choices]
++                    result.append((group_name, ChoiceField._convert_enum_choices(group_choices)))
++                else:
++                    result.append(ChoiceField._convert_enum_choices(item))
++            return result
++        return choices
++
+     def _set_choices(self, value):
+         # Setting choices also sets the choices on the widget.
+         # choices can be any iterable, but we call list() on it because
+         # it will be consumed more than once.
+-        if callable(value):
++        if isinstance(value, type) and issubclass(value, Enum):
++            value = [(member.value, member.name) for member in value]
++            self._choices = self.widget.choices = value
++        elif callable(value):
+             value = CallableChoiceIterator(value)
+         else:
+             value = list(value)
++            # Recursively convert any Enum classes within the choices
++            value = self._convert_enum_choices(value)
+ 
+         self._choices = self.widget.choices = value
+ 
+diff --git a/tests/forms_tests/field_tests/test_choicefield.py b/tests/forms_tests/field_tests/test_choicefield.py
+index 465cfd83a8..a3ef0c4ac9 100644
+--- a/tests/forms_tests/field_tests/test_choicefield.py
++++ b/tests/forms_tests/field_tests/test_choicefield.py
+@@ -1,3 +1,5 @@
++from enum import Enum
++
+ from django.forms import ChoiceField, Form, ValidationError
+ from django.test import SimpleTestCase
+ 
+@@ -86,3 +88,35 @@ class ChoiceFieldTest(FormFieldAssertionsMixin, SimpleTestCase):
+             '<select id="id_f" name="f" disabled><option value="J">John</option>'
+             '<option value="P">Paul</option></select>'
+         )
++
++    def test_choicefield_enum_class(self):
++        """ChoiceField accepts an Enum class as choices."""
++        class YearInSchool(Enum):
++            FRESHMAN = 'FR'
++            SOPHOMORE = 'SO'
++            JUNIOR = 'JR'
++            SENIOR = 'SR'
++
++        f = ChoiceField(choices=YearInSchool)
++        self.assertEqual(f.choices, [
++            ('FR', 'FRESHMAN'),
++            ('SO', 'SOPHOMORE'),
++            ('JR', 'JUNIOR'),
++            ('SR', 'SENIOR'),
++        ])
++        self.assertEqual('FR', f.clean('FR'))
++        msg = "'Select a valid choice. X is not one of the available choices.'"
++        with self.assertRaisesMessage(ValidationError, msg):
++            f.clean('X')
++
++    def test_choicefield_enum_class_with_grouped_choices(self):
++        """ChoiceField accepts an Enum class with grouped choices."""
++        class YearInSchool(Enum):
++            FRESHMAN = 'FR'
++            SOPHOMORE = 'SO'
++            JUNIOR = 'JR'
++            SENIOR = 'SR'
++
++        f = ChoiceField(choices=[('Undergraduate', YearInSchool)])
++        self.assertEqual('FR', f.clean('FR'))
++        self.assertEqual('SO', f.clean('SO'))
+diff --git a/tests/model_fields/test_charfield.py b/tests/model_fields/test_charfield.py
+index 1b50f01f3a..1f47706100 100644
+--- a/tests/model_fields/test_charfield.py
++++ b/tests/model_fields/test_charfield.py
+@@ -3,9 +3,15 @@ from unittest import skipIf
+ from django.core.exceptions import ValidationError
+ from django.db import connection, models
+ from django.test import SimpleTestCase, TestCase
++from django.utils.translation import gettext_lazy
+ 
+ from .models import Post
+ 
++try:
++    from enum import Enum, IntEnum
++except ImportError:
++    IntEnum = None
++
+ 
+ class TestCharField(TestCase):
+ 
+@@ -53,3 +59,104 @@ class ValidationTests(SimpleTestCase):
+         f = models.CharField(null=False)
+         with self.assertRaises(ValidationError):
+             f.clean(None, None)
++
++
++class EnumChoicesTests(SimpleTestCase):
++    """Tests for using Enum classes as field choices."""
++
++    def test_enum_class_as_choices(self):
++        """Enum class can be used directly as choices."""
++        class YearInSchool(Enum):
++            FRESHMAN = 'FR'
++            SOPHOMORE = 'SO'
++            JUNIOR = 'JR'
++            SENIOR = 'SR'
++
++        f = models.CharField(max_length=2, choices=YearInSchool)
++        self.assertEqual(f.choices, [
++            ('FR', 'FRESHMAN'),
++            ('SO', 'SOPHOMORE'),
++            ('JR', 'JUNIOR'),
++            ('SR', 'SENIOR'),
++        ])
++
++    def test_enum_class_with_get_choices(self):
++        """Enum choices work with get_choices()."""
++        class YearInSchool(Enum):
++            FRESHMAN = 'FR'
++            SOPHOMORE = 'SO'
++
++        f = models.CharField(max_length=2, choices=YearInSchool)
++        choices = f.get_choices()
++        # Should include blank choice prepended
++        self.assertEqual(choices[0][0], '')
++        self.assertIn(('FR', 'FRESHMAN'), choices)
++        self.assertIn(('SO', 'SOPHOMORE'), choices)
++
++    def test_enum_member_as_default(self):
++        """Enum member can be used as default value."""
++        class YearInSchool(Enum):
++            FRESHMAN = 'FR'
++            SOPHOMORE = 'SO'
++
++        f = models.CharField(max_length=2, choices=YearInSchool, default=YearInSchool.FRESHMAN)
++        # get_default() returns the raw default (the Enum member)
++        self.assertEqual(f.get_default(), YearInSchool.FRESHMAN)
++
++    def test_enum_member_prep_value(self):
++        """Enum members are converted to their value in get_prep_value()."""
++        class YearInSchool(Enum):
++            FRESHMAN = 'FR'
++            SOPHOMORE = 'SO'
++
++        f = models.CharField(max_length=2, choices=YearInSchool)
++        self.assertEqual(f.get_prep_value(YearInSchool.FRESHMAN), 'FR')
++        self.assertEqual(f.get_prep_value(YearInSchool.SOPHOMORE), 'SO')
++
++    def test_int_enum_class_as_choices(self):
++        """IntEnum class can be used as choices."""
++        class Priority(IntEnum):
++            LOW = 1
++            MEDIUM = 2
++            HIGH = 3
++
++        f = models.IntegerField(choices=Priority)
++        self.assertEqual(f.choices, [
++            (1, 'LOW'),
++            (2, 'MEDIUM'),
++            (3, 'HIGH'),
++        ])
++
++    def test_int_enum_member_prep_value(self):
++        """IntEnum members are converted to their integer value."""
++        class Priority(IntEnum):
++            LOW = 1
++            HIGH = 3
++
++        f = models.IntegerField(choices=Priority)
++        self.assertEqual(f.get_prep_value(Priority.LOW), 1)
++        self.assertEqual(f.get_prep_value(Priority.HIGH), 3)
++
++    def test_flatchoices_with_enum(self):
++        """flatchoices works correctly with Enum choices."""
++        class YearInSchool(Enum):
++            FRESHMAN = 'FR'
++            SOPHOMORE = 'SO'
++
++        f = models.CharField(max_length=2, choices=YearInSchool)
++        self.assertEqual(f.flatchoices, [
++            ('FR', 'FRESHMAN'),
++            ('SO', 'SOPHOMORE'),
++        ])
++
++    def test_formfield_with_enum_choices(self):
++        """formfield() works with Enum choices."""
++        class YearInSchool(Enum):
++            FRESHMAN = 'FR'
++            SOPHOMORE = 'SO'
++
++        f = models.CharField(max_length=2, choices=YearInSchool)
++        form_field = f.formfield()
++        choice_values = [c[0] for c in form_field.choices]
++        self.assertIn('FR', choice_values)
++        self.assertIn('SO', choice_values)

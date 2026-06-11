@@ -1,0 +1,99 @@
+diff --git a/lib/matplotlib/colors.py b/lib/matplotlib/colors.py
+index 05922c93df..e2e6cae39d 100644
+--- a/lib/matplotlib/colors.py
++++ b/lib/matplotlib/colors.py
+@@ -48,6 +48,7 @@ import io
+ import itertools
+ from numbers import Real
+ import re
++import warnings
+ 
+ from PIL import Image
+ from PIL.PngImagePlugin import PngInfo
+@@ -1307,14 +1308,23 @@ class Normalize:
+         is_scalar = not np.iterable(value)
+         if is_scalar:
+             value = [value]
+-        dtype = np.min_scalar_type(value)
++        # Suppress the "converting a masked element to nan" warning that can
++        # occur when value is a masked array containing all nan values. See
++        # issue #18294.
++        with warnings.catch_warnings():
++            warnings.filterwarnings('ignore',
++                                    'converting a masked element to nan')
++            dtype = np.min_scalar_type(value)
+         if np.issubdtype(dtype, np.integer) or dtype.type is np.bool_:
+             # bool_/int8/int16 -> float32; int32/int64 -> float64
+             dtype = np.promote_types(dtype, np.float32)
+         # ensure data passed in as an ndarray subclass are interpreted as
+         # an ndarray. See issue #6622.
+         mask = np.ma.getmask(value)
+-        data = np.asarray(value)
++        with warnings.catch_warnings():
++            warnings.filterwarnings('ignore',
++                                    'converting a masked element to nan')
++            data = np.asarray(value)
+         result = np.ma.array(data, mask=mask, dtype=dtype, copy=True)
+         return result, is_scalar
+ 
+diff --git a/test_all_nan_warning.py b/test_all_nan_warning.py
+new file mode 100644
+index 0000000000..595c093351
+--- /dev/null
++++ b/test_all_nan_warning.py
+@@ -0,0 +1,55 @@
++"""Test that all-NaN color arrays don't produce warnings."""
++import numpy as np
++import warnings
++
++# Test the Normalize.process_value method directly
++from matplotlib.colors import Normalize
++
++print("Testing Normalize.process_value with all-NaN input...")
++
++# Test 1: All NaN values
++with warnings.catch_warnings(record=True) as w:
++    warnings.simplefilter('always')
++    result, is_scalar = Normalize.process_value(np.full(10, np.nan))
++    nan_warnings = [x for x in w if 'masked element' in str(x.message)]
++    if nan_warnings:
++        print(f"FAIL: Got {len(nan_warnings)} masked element warnings")
++        for warning in nan_warnings:
++            print(f"  {warning.message}")
++    else:
++        print("PASS: No masked element warnings for all-NaN input")
++
++# Test 2: Some NaN values (should also not warn)
++with warnings.catch_warnings(record=True) as w:
++    warnings.simplefilter('always')
++    c = np.full(10, np.nan)
++    c[0] = 1.
++    result, is_scalar = Normalize.process_value(c)
++    nan_warnings = [x for x in w if 'masked element' in str(x.message)]
++    if nan_warnings:
++        print(f"FAIL: Got {len(nan_warnings)} masked element warnings")
++    else:
++        print("PASS: No masked element warnings for partial-NaN input")
++
++# Test 3: Normal values (should not warn)
++with warnings.catch_warnings(record=True) as w:
++    warnings.simplefilter('always')
++    result, is_scalar = Normalize.process_value(np.arange(10))
++    nan_warnings = [x for x in w if 'masked element' in str(x.message)]
++    if nan_warnings:
++        print(f"FAIL: Got {len(nan_warnings)} masked element warnings")
++    else:
++        print("PASS: No masked element warnings for normal input")
++
++# Test 4: Masked array with all NaN
++with warnings.catch_warnings(record=True) as w:
++    warnings.simplefilter('always')
++    masked = np.ma.array(np.full(10, np.nan), mask=np.zeros(10, bool))
++    result, is_scalar = Normalize.process_value(masked)
++    nan_warnings = [x for x in w if 'masked element' in str(x.message)]
++    if nan_warnings:
++        print(f"FAIL: Got {len(nan_warnings)} masked element warnings")
++    else:
++        print("PASS: No masked element warnings for masked all-NaN input")
++
++print("\nAll tests completed!")

@@ -1,0 +1,41 @@
+diff --git a/src/_pytest/tmpdir.py b/src/_pytest/tmpdir.py
+index 29c7e19d7..040db3514 100644
+--- a/src/_pytest/tmpdir.py
++++ b/src/_pytest/tmpdir.py
+@@ -154,9 +154,12 @@ def get_user() -> Optional[str]:
+     import getpass
+ 
+     try:
+-        return getpass.getuser()
++        user = getpass.getuser()
+     except (ImportError, KeyError):
+         return None
++    # Replace any illegal characters (like backslashes in Windows domain usernames)
++    # with underscores to ensure the username is safe for directory names.
++    return re.sub(r"[\W]", "_", user)
+ 
+ 
+ def pytest_configure(config: Config) -> None:
+diff --git a/testing/test_tmpdir.py b/testing/test_tmpdir.py
+index d123287aa..d43ca6985 100644
+--- a/testing/test_tmpdir.py
++++ b/testing/test_tmpdir.py
+@@ -246,6 +246,18 @@ def test_get_user(monkeypatch):
+     assert get_user() is None
+ 
+ 
++def test_get_user_with_illegal_chars(monkeypatch):
++    """Test that get_user() sanitizes usernames with illegal characters
++    for directory names, such as backslashes in Windows domain usernames
++    (e.g., 'domain\\user' -> 'domain_user').
++    """
++    import getpass
++
++    monkeypatch.setattr(getpass, "getuser", lambda: "domain\\user")
++    result = get_user()
++    assert result == "domain_user"
++
++
+ class TestNumberedDir:
+     PREFIX = "fun-"
+ 

@@ -1,0 +1,107 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: no_memory
+
+No prior context is provided for this run.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: sympy/sympy
+Base commit: 22fc107a94eaabc4f6eb31470b39db65abb7a394
+Instance ID: sympy__sympy-27868
+
+CURRENT_ISSUE
+Mathematica parser fail to parse the expression contatining Greek letters: Sqrt[2]*σ
+Mathematica parser raises an error when parsing an expression containing Greek letters. Here is a minimal example to reproduce the problem.
+
+```python
+from sympy.parsing.mathematica import parse_mathematica
+
+print(parse_mathematica('Sqrt[2]*T')) # output: sqrt(2)*T
+print(parse_mathematica('Sqrt[2]*σ')) # raise error
+```
+
+error:
+
+```
+ValueError: Error from parse_expr with transformed code: "Symbol ('Sqrt' )[Integer (2 )]*Symbol ('σ' )"
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "my_script.py", line 4, in <module>
+    print(parse_mathematica('Sqrt[2]*σ'))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "sympy\parsing\mathematica.py", line 83, in parse_mathematica
+    return parser.parse(s)
+           ^^^^^^^^^^^^^^^
+  File "sympy\parsing\mathematica.py", line 538, in parse
+    s4 = self._from_fullformlist_to_sympy(s3)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "sympy\parsing\mathematica.py", line 1079, in _from_fullformlist_to_sympy
+    return recurse(full_form_list)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "sympy\parsing\mathematica.py", line 1077, in recurse
+    return self._atom_conversions.get(expr, sympify(expr))
+                                            ^^^^^^^^^^^^^
+  File "sympy\core\sympify.py", line 481, in sympify
+    expr = parse_expr(a, local_dict=locals, transformations=transformations, evaluate=evaluate)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "sympy\parsing\sympy_parser.py", line 1090, in parse_expr
+    raise e from ValueError(f"Error from parse_expr with transformed code: {code!r}")
+  File "sympy\parsing\sympy_parser.py", line 1081, in parse_expr
+    rv = eval_expr(code, local_dict, global_dict)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "sympy\parsing\sympy_parser.py", line 909, in eval_expr
+    expr = eval(
+           ^^^^^
+  File "<string>", line 1, in <module>
+TypeError: 'Symbol' object is not subscriptable
+```
+
+The `'Sqrt[2]*T'`case and `'Sqrt[2]*σ'` case diverge from the `MathematicaParser._from_mathematica_to_tokens` method.
+
+```python
+from sympy.parsing.mathematica import MathematicaParser
+
+print(MathematicaParser()._from_mathematica_to_tokens(r'Sqrt[2]*T')) # output: ['Sqrt', '[', '2', ']', '*', 'T']
+print(MathematicaParser()._from_mathematica_to_tokens(r'Sqrt[2]*σ')) # output: ['Sqrt[2]*σ']
+```
+
+Two related issues, #24055 and #26642, reported that the Mathematica parser cannot parse the expression with only a single Greek letter. The #24102 PR partially fixed the issue. Single-Greek-letter expressions can be parsed correctly in the latest SymPy version.
+
+The PR changed the behavior of the `_from_mathematica_to_tokens` method. Here is the behavior without #24102.
+
+```python
+from sympy.parsing.mathematica import MathematicaParser
+from sympy.parsing.mathematica import parse_mathematica
+
+print(MathematicaParser()._from_mathematica_to_tokens(r'Sqrt[2]*T')) # output: ['Sqrt', '[', '2', ']', '*', 'T']
+print(MathematicaParser()._from_mathematica_to_tokens(r'Sqrt[2]*σ')) # output: ['Sqrt', '[', '2', ']', '*']
+
+print(parse_mathematica('Sqrt[2]*σ')) # error
+# File "sympy\parsing\mathematica.py", line 915, in _parse_after_braces
+#    raise SyntaxError("unable to create a single AST for the expression")
+```
+
+## System
+
+SymPy version: 1.13.3
+Python version: 3.12.0b4
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

@@ -1,0 +1,364 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: raw
+
+The following is a stripped raw transcript from an officially related prior issue.
+
+STRIPPED RAW CLAUDE CODE TRAJECTORY
+This transcript was rendered from original raw JSONL using the canonical ADP strip manifest.
+
+[RAW line 2 USER]
+PRIOR ISSUE METADATA
+repo: django/django
+instance_id: django__django-16255
+base_commit: 444b6da7cc229a58a2c476a52e45233001dc7073
+problem_statement:
+Sitemaps without items raise ValueError on callable lastmod.
+Description
+
+When sitemap contains not items, but supports returning lastmod for an item, it fails with a ValueError:
+Traceback (most recent call last):
+ File "/usr/local/lib/python3.10/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+ File "/usr/local/lib/python3.10/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+ File "/usr/local/lib/python3.10/site-packages/django/utils/decorators.py", line 133, in _wrapped_view
+    response = view_func(request, *args, **kwargs)
+ File "/usr/local/lib/python3.10/site-packages/django/contrib/sitemaps/views.py", line 34, in inner
+    response = func(request, *args, **kwargs)
+ File "/usr/local/lib/python3.10/site-packages/django/contrib/sitemaps/views.py", line 76, in index
+    site_lastmod = site.get_latest_lastmod()
+ File "/usr/local/lib/python3.10/site-packages/django/contrib/sitemaps/__init__.py", line 170, in get_latest_lastmod
+    return max([self.lastmod(item) for item in self.items()])
+Exception Type: ValueError at /sitemap.xml
+Exception Value: max() arg is an empty sequence
+Something like this might be a solution:
+     def get_latest_lastmod(self):
+         if not hasattr(self, "lastmod"):
+             return None
+         if callable(self.lastmod):
+             try:
+                 return max([self.lastmod(item) for item in self.items()])
+-            except TypeError:
++            except (TypeError, ValueError):
+                 return None
+         else:
+             return self.lastmod
+[RAW line 5 TOOL Bash]
+
+[RAW line 6 TOOL Glob]
+{
+  "pattern": "**/sitemaps/__init__.py"
+}
+[RAW line 11 TOOL Bash]
+find ./swebench_9_15/testbed -name "__init__.py" -path "*/sitemaps/__init__.py" 2>/dev/null
+[RAW line 18 TOOL Bash]
+ls -la ./swebench_9_15/testbed 2>/dev/null || echo "Testbed directory does not exist"
+[RAW line 19 TOOL RESULT toolu_01PfHDwQAZ9NnjegPsbZC5nb]
+Testbed directory does not exist
+[RAW line 32 TOOL Bash]
+find testbed -name "__init__.py" -path "*/sitemaps/__init__.py"
+[RAW line 34 TOOL RESULT toolu_01VhAxGPJbK8NnkN5pXUC4ci]
+testbed/django/contrib/sitemaps/__init__.py
+testbed/django/contrib/gis/sitemaps/__init__.py
+[RAW line 36 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/django/contrib/sitemaps/__init__.py"
+}
+[RAW line 37 TOOL RESULT toolu_015aL9XJhk2gRk6oUy3jkVuH]
+     1→import warnings
+     2→from urllib.parse import urlencode
+     3→from urllib.request import urlopen
+     4→
+     5→from django.apps import apps as django_apps
+     6→from django.conf import settings
+     7→from django.core import paginator
+     8→from django.core.exceptions import ImproperlyConfigured
+     9→from django.urls import NoReverseMatch, reverse
+    10→from django.utils import translation
+    11→from django.utils.deprecation import RemovedInDjango50Warning
+    12→
+    13→PING_URL = "https://www.google.com/webmasters/tools/ping"
+    14→
+    15→
+    16→class SitemapNotFound(Exception):
+    17→    pass
+    18→
+    19→
+    20→def ping_google(sitemap_url=None, ping_url=PING_URL, sitemap_uses_https=True):
+    21→    """
+    22→    Alert Google that the sitemap for the current site has been updated.
+    23→    If sitemap_url is provided, it should be an absolute path to the sitemap
+    24→    for this site -- e.g., '/sitemap.xml'. If sitemap_url is not provided, this
+    25→    function will attempt to deduce it by using urls.reverse().
+    26→    """
+    27→    sitemap_full_url = _get_sitemap_full_url(sitemap_url, sitemap_uses_https)
+    28→    params = urlencode({"sitemap": sitemap_full_url})
+    29→    urlopen("%s?%s" % (ping_url, params))
+    30→
+    31→
+    32→def _get_sitemap_full_url(sitemap_url, sitemap_uses_https=True):
+    33→    if not django_apps.is_installed("django.contrib.sites"):
+    34→        raise ImproperlyConfigured(
+    35→            "ping_google requires django.contrib.sites, which isn't installed."
+    36→        )
+    37→
+    38→    if sitemap_url is None:
+    39→        try:
+    40→            # First, try to get the "index" sitemap URL.
+    41→            sitemap_url = reverse("django.contrib.sitemaps.views.index")
+    42→        except NoReverseMatch:
+    43→            try:
+    44→                # Next, try for the "global" sitemap URL.
+    45→                sitemap_url = reverse("django.contrib.sitemaps.views.sitemap")
+
+[... truncated ...]
+[RAW line 41 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/django/contrib/sitemaps/__init__.py",
+  "new_text_sha256": "ec754335b721a312835d87c60225f33dc3c533ffaa13764dabca2621cd682954",
+  "old_text_sha256": "2ba7122bd7f61f426f4644fba51e869553309eb204371bbc0fa0d58c1e5d1e35"
+}
+[RAW line 47 TOOL Bash]
+find testbed -path "*/sitemaps/tests*" -type f -name "*.py" | head -5
+[RAW line 51 TOOL Bash]
+find testbed -path "*sitemaps*test*.py" -type f | head -10
+[RAW line 52 TOOL RESULT toolu_01WhfaHv3VZJYWiA1rGJcse4]
+testbed/tests/sitemaps_tests/test_utils.py
+testbed/tests/sitemaps_tests/models.py
+testbed/tests/sitemaps_tests/__init__.py
+testbed/tests/sitemaps_tests/test_management.py
+testbed/tests/sitemaps_tests/test_generic.py
+testbed/tests/sitemaps_tests/test_http.py
+testbed/tests/sitemaps_tests/urls/index_only.py
+testbed/tests/sitemaps_tests/urls/https.py
+testbed/tests/sitemaps_tests/urls/empty.py
+testbed/tests/sitemaps_tests/urls/sitemap_only.py
+[RAW line 54 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/tests/sitemaps_tests/test_http.py",
+  "limit": 100
+}
+[RAW line 55 TOOL RESULT toolu_016LggYk9EqS6egkC6WTDxMh]
+     1→import os
+     2→from datetime import date
+     3→
+     4→from django.contrib.sitemaps import Sitemap
+     5→from django.contrib.sites.models import Site
+     6→from django.core.exceptions import ImproperlyConfigured
+     7→from django.test import ignore_warnings, modify_settings, override_settings
+     8→from django.utils import translation
+     9→from django.utils.deprecation import RemovedInDjango50Warning
+    10→from django.utils.formats import localize
+    11→
+    12→from .base import SitemapTestsBase
+    13→from .models import TestModel
+    14→
+    15→
+    16→class HTTPSitemapTests(SitemapTestsBase):
+    17→    use_sitemap_err_msg = (
+    18→        "To use sitemaps, either enable the sites framework or pass a "
+    19→        "Site/RequestSite object in your view."
+    20→    )
+    21→
+    22→    def test_simple_sitemap_index(self):
+    23→        "A simple sitemap index can be rendered"
+    24→        response = self.client.get("/simple/index.xml")
+    25→        expected_content = """<?xml version="1.0" encoding="UTF-8"?>
+    26→<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    27→<sitemap><loc>%s/simple/sitemap-simple.xml</loc><lastmod>%s</lastmod></sitemap>
+    28→</sitemapindex>
+    29→""" % (
+    30→            self.base_url,
+    31→            date.today(),
+    32→        )
+    33→        self.assertXMLEqual(response.content.decode(), expected_content)
+    34→
+    35→    def test_sitemap_not_callable(self):
+    36→        """A sitemap may not be callable."""
+    37→        response = self.client.get("/simple-not-callable/index.xml")
+    38→        expected_content = """<?xml version="1.0" encoding="UTF-8"?>
+    39→<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    40→<sitemap><loc>%s/simple/sitemap-simple.xml</loc><lastmod>%s</lastmod></sitemap>
+    41→</sitemapindex>
+    42→""" % (
+    43→            self.base_url,
+    44→            date.today(),
+    45→        )
+    46→        self.assertXMLEqual(respo
+[... truncated ...]
+[RAW line 61 TOOL Bash]
+cd testbed && python test_issue.py
+[RAW line 62 TOOL RESULT toolu_01JHQpHZZ5UfuvbanwjhwXtz]
+Exit code 1
+  File "test_issue.py", line 30
+SyntaxError: Non-ASCII character '\xe2' in file test_issue.py on line 30, but no encoding declared; see http://www.python.org/peps/pep-0263.html for details
+[RAW line 67 TOOL Bash]
+cd testbed && python test_issue.py
+[RAW line 68 TOOL RESULT toolu_01WK8HCDzTJrg9D3qgaeYEDe]
+Exit code 1
+  File "test_issue.py", line 31
+    print(f"✓ Test passed! get_latest_lastmod() returned: {result}")
+                                                                    ^
+SyntaxError: invalid syntax
+[RAW line 73 TOOL Bash]
+cd testbed && python test_issue.py
+[RAW line 74 TOOL RESULT toolu_01UxBo26cskEtWFpzjEQhNi2]
+Exit code 1
+Traceback (most recent call last):
+  File "test_issue.py", line 8, in <module>
+    from django.contrib.sitemaps import Sitemap
+  File "./swebench_9_15/testbed/django/__init__.py", line 1, in <module>
+    from django.utils.version import get_version
+  File "./swebench_9_15/testbed/django/utils/version.py", line 7, in <module>
+    from django.utils.regex_helper import _lazy_re_compile
+  File "./swebench_9_15/testbed/django/utils/regex_helper.py", line 10, in <module>
+    from django.utils.functional import SimpleLazyObject
+  File "./swebench_9_15/testbed/django/utils/functional.py", line 265
+    if (_wrapped := self._wrapped) is empty:
+                 ^
+SyntaxError: invalid syntax
+[RAW line 76 TOOL Bash]
+python --version && python3 --version
+[RAW line 77 TOOL RESULT toolu_01NHoyZ7AwUHmNACE3h8BcWR]
+Python 3.8.8
+Python 2.7.3
+[RAW line 79 TOOL Bash]
+cd testbed && python3 test_issue.py
+[RAW line 80 TOOL RESULT toolu_01QgktJYdZeK31KiecGhZ28u]
+Testing fix for django__django-16255...
+============================================================
+Test passed! get_latest_lastmod() returned: None
+Assertion passed! Result is None as expected.
+============================================================
+All tests passed!
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+[RAW line 103 TOOL Bash]
+cd testbed && python3 -m pytest tests/sitemaps_tests/test_http.py -xvs -k "test_simple_sitemap" 2>&1 | head -50
+[RAW line 106 TOOL Bash]
+python3 tests/runtests.py sitemaps_tests.test_http -v 2 2>&1 | head -80
+[RAW line 107 TOOL RESULT toolu_01Ujy86SnxDUFvyWhnPuxFZZ]
+Testing against Django installed in './swebench_9_15/testbed/django' with up to 8 processes
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Importing application sitemaps_tests
+Found 39 test(s).
+Skipping setup of unused database(s): other.
+Creating test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+Operations to perform:
+  Synchronize unmigrated apps: auth, contenttypes, messages, sessions, sitemaps_tests, staticfiles
+  Apply all migrations: admin, sites
+Synchronizing apps without migrations:
+  Creating tables...
+    Creating table django_content_type
+    Creating table auth_permission
+    Creating table auth_group
+    Creating table auth_user
+    Creating table django_session
+    Creating table sitemaps_tests_testmodel
+    Creating table sitemaps_tests_i18ntestmodel
+    Running deferred SQL...
+Running migrations:
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying sites.0001_initial... OK
+  Applying sites.0002_alter_domain_unique... OK
+Cloning test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+Cloning test database for alias 'default' ('file:memorydb_default?mode=memory&cache=shared')...
+System check identified no issues (0 silenced).
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib.
+[... truncated ...]
+[RAW line 109 TOOL Bash]
+python3 tests/runtests.py sitemaps_tests.test_http -v 0 2>&1 | tail -30
+[RAW line 110 TOOL RESULT toolu_01M9x9wKKedJj9eZGy5u8xci]
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+----------------------------------------------------------------------
+Ran 39 tests in 0.440s
+
+OK
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: django/django
+Base commit: 2ccc0b22db6730ba0950b10bbc5238ae575e4a45
+Instance ID: django__django-25916
+
+CURRENT_ISSUE
+Add lastmod support to sitemapindex
+
+Description
+(last modified by
+Matthew Downey
+)
+Add support for
+<lastmod>
+for generated
+<sitemapindex>
+​
+https://github.com/django/django/pull/5814
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

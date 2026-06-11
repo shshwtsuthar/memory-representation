@@ -1,0 +1,226 @@
+diff --git a/test_issue.py b/test_issue.py
+new file mode 100644
+index 0000000000..ea77c99c8b
+--- /dev/null
++++ b/test_issue.py
+@@ -0,0 +1,220 @@
++"""
++Test for issue: Removing a field from index_together/unique_together 
++and from the model generates a migration that crashes.
++
++Scenario:
++1. Model has fields field1, field2, field3 with index_together = [['field1', 'field2', 'field3']]
++2. User removes field3 from the model and from index_together
++3. Migration: RemoveField('field3') + AlterIndexTogether([['field1', 'field2']])
++4. When applying: RemoveField deletes column for field3, then AlterIndexTogether 
++   tries to delete the old index on (field1, field2, field3) but field3 no longer exists
++"""
++import os
++import sys
++import django
++
++# Setup Django
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tests.settings')
++sys.path.insert(0, '/testbed')
++
++django.setup()
++
++from django.db import connection, migrations, models
++from django.db.migrations.migration import Migration
++from django.test.utils import setup_test_environment, teardown_test_environment
++
++
++def test_remove_field_from_index_together():
++    """Test that removing a field from index_together and the model works."""
++    print("=" * 70)
++    print("Testing: Remove field from index_together and model")
++    print("=" * 70)
++    
++    app_label = 'test_remove_field'
++    
++    # Create the initial state with 3 fields and index_together
++    initial_operations = [
++        migrations.CreateModel(
++            'TestModel',
++            [
++                ('id', models.AutoField(primary_key=True)),
++                ('field1', models.IntegerField()),
++                ('field2', models.IntegerField()),
++                ('field3', models.IntegerField()),
++            ],
++            options={
++                'index_together': [['field1', 'field2', 'field3']],
++            },
++        ),
++    ]
++    
++    # Apply initial operations
++    with connection.schema_editor() as editor:
++        migration = Migration('initial', app_label)
++        migration.operations = initial_operations
++        project_state = migration.apply(None, editor)
++    
++    print("\n1. Model created with index_together = [['field1', 'field2', 'field3']]")
++    
++    # Check constraints
++    with connection.cursor() as cursor:
++        constraints = connection.introspection.get_constraints(cursor, 'test_remove_field_testmodel')
++        print("\n   Constraints after creation:")
++        for name, info in constraints.items():
++            if info.get('columns'):
++                print(f"     {name}: unique={info.get('unique')}, index={info.get('index')}, columns={info['columns']}")
++    
++    # Now remove field3 and update index_together
++    new_operations = [
++        migrations.RemoveField(
++            model_name='testmodel',
++            name='field3',
++        ),
++        migrations.AlterIndexTogether(
++            'testmodel',
++            [['field1', 'field2']],
++        ),
++    ]
++    
++    print("\n2. Removing field3 and updating index_together to [['field1', 'field2']]...")
++    
++    try:
++        with connection.schema_editor() as editor:
++            migration = Migration('remove_field', app_label)
++            migration.operations = new_operations
++            new_state = migration.apply(project_state, editor)
++        
++        print("\n   SUCCESS: Migration applied without error!")
++        
++        # Check constraints after
++        with connection.cursor() as cursor:
++            constraints = connection.introspection.get_constraints(cursor, 'test_remove_field_testmodel')
++            print("\n   Constraints after migration:")
++            for name, info in constraints.items():
++                if info.get('columns'):
++                    print(f"     {name}: unique={info.get('unique')}, index={info.get('index')}, columns={info['columns']}")
++        
++        # Clean up
++        with connection.schema_editor() as editor:
++            migration = Migration('cleanup', app_label)
++            migration.operations = [migrations.DeleteModel('TestModel')]
++            migration.unapply(new_state, editor)
++        
++        print("\n" + "=" * 70)
++        print("TEST PASSED")
++        print("=" * 70)
++        return True
++        
++    except Exception as e:
++        print(f"\n   FAILED with error: {type(e).__name__}: {e}")
++        print("\n" + "=" * 70)
++        print("TEST FAILED")
++        print("=" * 70)
++        return False
++
++
++def test_remove_field_from_unique_together():
++    """Test that removing a field from unique_together and the model works."""
++    print("\n" + "=" * 70)
++    print("Testing: Remove field from unique_together and model")
++    print("=" * 70)
++    
++    app_label = 'test_remove_field_unique'
++    
++    # Create the initial state with 3 fields and unique_together
++    initial_operations = [
++        migrations.CreateModel(
++            'TestModel',
++            [
++                ('id', models.AutoField(primary_key=True)),
++                ('field1', models.IntegerField()),
++                ('field2', models.IntegerField()),
++                ('field3', models.IntegerField()),
++            ],
++            options={
++                'unique_together': [['field1', 'field2', 'field3']],
++            },
++        ),
++    ]
++    
++    # Apply initial operations
++    with connection.schema_editor() as editor:
++        migration = Migration('initial', app_label)
++        migration.operations = initial_operations
++        project_state = migration.apply(None, editor)
++    
++    print("\n1. Model created with unique_together = [['field1', 'field2', 'field3']]")
++    
++    # Check constraints
++    with connection.cursor() as cursor:
++        constraints = connection.introspection.get_constraints(cursor, 'test_remove_field_unique_testmodel')
++        print("\n   Constraints after creation:")
++        for name, info in constraints.items():
++            if info.get('columns'):
++                print(f"     {name}: unique={info.get('unique')}, index={info.get('index')}, columns={info['columns']}")
++    
++    # Now remove field3 and update unique_together
++    new_operations = [
++        migrations.RemoveField(
++            model_name='testmodel',
++            name='field3',
++        ),
++        migrations.AlterUniqueTogether(
++            'testmodel',
++            [['field1', 'field2']],
++        ),
++    ]
++    
++    print("\n2. Removing field3 and updating unique_together to [['field1', 'field2']]...")
++    
++    try:
++        with connection.schema_editor() as editor:
++            migration = Migration('remove_field', app_label)
++            migration.operations = new_operations
++            new_state = migration.apply(project_state, editor)
++        
++        print("\n   SUCCESS: Migration applied without error!")
++        
++        # Check constraints after
++        with connection.cursor() as cursor:
++            constraints = connection.introspection.get_constraints(cursor, 'test_remove_field_unique_testmodel')
++            print("\n   Constraints after migration:")
++            for name, info in constraints.items():
++                if info.get('columns'):
++                    print(f"     {name}: unique={info.get('unique')}, index={info.get('index')}, columns={info['columns']}")
++        
++        # Clean up
++        with connection.schema_editor() as editor:
++            migration = Migration('cleanup', app_label)
++            migration.operations = [migrations.DeleteModel('TestModel')]
++            migration.unapply(new_state, editor)
++        
++        print("\n" + "=" * 70)
++        print("TEST PASSED")
++        print("=" * 70)
++        return True
++        
++    except Exception as e:
++        print(f"\n   FAILED with error: {type(e).__name__}: {e}")
++        print("\n" + "=" * 70)
++        print("TEST FAILED")
++        print("=" * 70)
++        return False
++
++
++if __name__ == '__main__':
++    result1 = test_remove_field_from_index_together()
++    result2 = test_remove_field_from_unique_together()
++    
++    print("\n" + "=" * 70)
++    print("FINAL RESULTS")
++    print("=" * 70)
++    print(f"index_together test: {'PASSED' if result1 else 'FAILED'}")
++    print(f"unique_together test: {'PASSED' if result2 else 'FAILED'}")
++    
++    if result1 and result2:
++        print("\nAll tests passed!")
++        sys.exit(0)
++    else:
++        print("\nSome tests failed!")
++        sys.exit(1)

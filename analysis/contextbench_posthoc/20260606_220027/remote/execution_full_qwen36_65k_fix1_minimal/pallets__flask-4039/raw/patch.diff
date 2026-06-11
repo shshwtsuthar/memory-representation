@@ -1,0 +1,244 @@
+diff --git a/src/flask/app.py b/src/flask/app.py
+index f0f31486..2db04c95 100644
+--- a/src/flask/app.py
++++ b/src/flask/app.py
+@@ -2073,4 +2073,9 @@ class Flask(Scaffold):
+         if _request_ctx_stack.top.request.blueprint is None:
+             return []
+         else:
+-            return reversed(_request_ctx_stack.top.request.blueprint.split("."))
++            blueprint = _request_ctx_stack.top.request.blueprint
++            parts = blueprint.split(".")
++            # Check the full blueprint name first (for blueprints registered
++            # directly with dotted names like "app.api"), then check each
++            # parent level in reverse order (for nested blueprints).
++            return [blueprint] + list(reversed(parts[:-1]))
+diff --git a/test_error_handler_lookup.py b/test_error_handler_lookup.py
+new file mode 100644
+index 00000000..0917b9b1
+--- /dev/null
++++ b/test_error_handler_lookup.py
+@@ -0,0 +1,68 @@
++"""Debug test to understand error handler lookup."""
++import sys
++sys.path.insert(0, '/testbed/src')
++
++from flask import Flask, Blueprint
++
++app = Flask(__name__)
++parent = Blueprint("parent", __name__)
++child = Blueprint("child", __name__)
++grandchild = Blueprint("grandchild", __name__)
++
++@parent.errorhandler(403)
++def forbidden(e):
++    return "Parent no", 403
++
++@parent.route("/")
++def parent_index():
++    return "Parent yes"
++
++@child.route("/")
++def child_index():
++    return "Child yes"
++
++@grandchild.errorhandler(403)
++def grandchild_forbidden(e):
++    return "Grandchild no", 403
++
++@grandchild.route("/")
++def grandchild_index():
++    return "Grandchild yes"
++
++child.register_blueprint(grandchild, url_prefix="/grandchild")
++parent.register_blueprint(child, url_prefix="/child")
++app.register_blueprint(parent, url_prefix="/parent")
++
++# Check error_handler_spec
++print("=== error_handler_spec keys ===")
++for key in sorted(app.error_handler_spec.keys()):
++    print(f"  {key!r}: {dict(app.error_handler_spec[key])}")
++
++# Test error handler lookup
++with app.test_request_context("/parent/child/grandchild/"):
++    from flask import _request_ctx_stack
++    blueprint = _request_ctx_stack.top.request.blueprint
++    print(f"\n=== request.blueprint ===")
++    print(f"  {blueprint!r}")
++    
++    blueprints_list = list(app._request_blueprints())
++    print(f"\n=== _request_blueprints() ===")
++    print(f"  {blueprints_list}")
++    
++    # Manually check what _find_error_handler would find
++    from werkzeug.exceptions import Forbidden
++    exc_class, code = app._get_exc_class_and_code(type(Forbidden()))
++    print(f"\n=== Exception info ===")
++    print(f"  exc_class: {exc_class}")
++    print(f"  code: {code}")
++    
++    print(f"\n=== Error handler lookup ===")
++    for c in [code, None]:
++        for name in blueprints_list + [None]:
++            handler_map = app.error_handler_spec[name][c]
++            print(f"  Checking [{name!r}][{c!r}]: {dict(handler_map)}")
++            for cls in exc_class.__mro__:
++                handler = handler_map.get(cls)
++                if handler is not None:
++                    print(f"    Found handler for {cls.__name__}: {handler}")
++                    break
+diff --git a/test_issue_repro.py b/test_issue_repro.py
+new file mode 100644
+index 00000000..670a4580
+--- /dev/null
++++ b/test_issue_repro.py
+@@ -0,0 +1,70 @@
++"""Test to reproduce the issue with blueprint error handlers not being called when the blueprint name contains a dot."""
++import sys
++sys.path.insert(0, '/testbed/src')
++
++from flask import Flask, Blueprint, jsonify
++
++def test_blueprint_with_dot_error_handler():
++    """Test that error handlers work when blueprint name contains a dot."""
++    app = Flask(__name__)
++    
++    # Create blueprints with dots in their names
++    ui = Blueprint("app.ui", __name__, url_prefix="/ui")
++    api = Blueprint("app.api", __name__, url_prefix="/api")
++    
++    ui_error_called = []
++    api_error_called = []
++    
++    @ui.errorhandler(Exception)
++    def ui_error_handler(error):
++        ui_error_called.append(True)
++        return str(error), 500
++    
++    @ui.get("/")
++    def ui_index():
++        raise Exception("this is an unhandled exception from the ui")
++    
++    @api.errorhandler(Exception)
++    def api_error_handler(error):
++        api_error_called.append(True)
++        return jsonify(error=str(error))
++    
++    @api.get("/")
++    def api_index():
++        raise Exception("this is an unhandled exception from the api")
++    
++    app.register_blueprint(ui)
++    app.register_blueprint(api)
++    
++    # Test with client
++    with app.test_client() as client:
++        # Test UI endpoint
++        print("Testing UI endpoint...")
++        response = client.get("/ui/")
++        print(f"UI response status: {response.status_code}")
++        print(f"UI error handler called: {len(ui_error_called) > 0}")
++        
++        if len(ui_error_called) == 0:
++            print("FAIL: UI error handler was not called!")
++            return False
++        else:
++            print("PASS: UI error handler was called!")
++        
++        # Test API endpoint
++        print("\nTesting API endpoint...")
++        response = client.get("/api/")
++        print(f"API response status: {response.status_code}")
++        print(f"API error handler called: {len(api_error_called) > 0}")
++        
++        if len(api_error_called) == 0:
++            print("FAIL: API error handler was not called!")
++            return False
++        else:
++            print("PASS: API error handler was called!")
++    
++    print("\nAll tests passed!")
++    return True
++
++if __name__ == "__main__":
++    success = test_blueprint_with_dot_error_handler()
++    sys.exit(0 if success else 1)
+diff --git a/test_nested_debug.py b/test_nested_debug.py
+new file mode 100644
+index 00000000..235d71e1
+--- /dev/null
++++ b/test_nested_debug.py
+@@ -0,0 +1,73 @@
++"""Debug test to understand nested blueprint behavior."""
++import sys
++sys.path.insert(0, '/testbed/src')
++
++from flask import Flask, Blueprint
++
++app = Flask(__name__)
++parent = Blueprint("parent", __name__)
++child = Blueprint("child", __name__)
++grandchild = Blueprint("grandchild", __name__)
++
++@parent.errorhandler(403)
++def forbidden(e):
++    return "Parent no", 403
++
++@parent.route("/")
++def parent_index():
++    return "Parent yes"
++
++@parent.route("/no")
++def parent_no():
++    from flask import request
++    print(f"In parent_no, blueprint is: {request.blueprint}")
++    return "Parent yes"
++
++@child.route("/")
++def child_index():
++    return "Child yes"
++
++@child.route("/no")
++def child_no():
++    from flask import request
++    print(f"In child_no, blueprint is: {request.blueprint}")
++    return "Child yes"
++
++@grandchild.errorhandler(403)
++def grandchild_forbidden(e):
++    return "Grandchild no", 403
++
++@grandchild.route("/")
++def grandchild_index():
++    from flask import request
++    print(f"In grandchild_index, blueprint is: {request.blueprint}")
++    return "Grandchild yes"
++
++@grandchild.route("/no")
++def grandchild_no():
++    from flask import request, abort
++    print(f"In grandchild_no, blueprint is: {request.blueprint}")
++    abort(403)
++
++child.register_blueprint(grandchild, url_prefix="/grandchild")
++parent.register_blueprint(child, url_prefix="/child")
++app.register_blueprint(parent, url_prefix="/parent")
++
++# Check error_handler_spec
++print("\n=== error_handler_spec keys ===")
++for key in sorted(app.error_handler_spec.keys()):
++    print(f"  {key!r}")
++
++# Test with client
++with app.test_client() as client:
++    print("\n=== Testing grandchild endpoint ===")
++    response = client.get("/parent/child/grandchild/no")
++    print(f"Response: {response.data}")
++    
++    print("\n=== Testing child endpoint ===")
++    response = client.get("/parent/child/no")
++    print(f"Response: {response.data}")
++    
++    print("\n=== Testing parent endpoint ===")
++    response = client.get("/parent/no")
++    print(f"Response: {response.data}")

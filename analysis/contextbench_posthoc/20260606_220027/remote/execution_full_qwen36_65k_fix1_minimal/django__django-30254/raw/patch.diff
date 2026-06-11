@@ -1,0 +1,92 @@
+diff --git a/django/db/models/base.py b/django/db/models/base.py
+index 2884679ba1..1bbaed29d1 100644
+--- a/django/db/models/base.py
++++ b/django/db/models/base.py
+@@ -84,10 +84,14 @@ class ModelBase(type):
+         # Pass all attrs without a (Django-specific) contribute_to_class()
+         # method to type.__new__() so that they're properly initialized
+         # (i.e. __set_name__()).
++        attrs_to_restore = {}
+         for obj_name, obj in list(attrs.items()):
+             if not _has_contribute_to_class(obj):
++                attrs_to_restore[obj_name] = obj
+                 new_attrs[obj_name] = attrs.pop(obj_name)
+         new_class = super_new(cls, name, bases, new_attrs, **kwargs)
++        # Restore attrs for custom metaclass __init__ access.
++        attrs.update(attrs_to_restore)
+ 
+         abstract = getattr(attr_meta, 'abstract', False)
+         meta = attr_meta or getattr(new_class, 'Meta', None)
+diff --git a/test_metaclass_attrs.py b/test_metaclass_attrs.py
+new file mode 100644
+index 0000000000..3c4f6c42a6
+--- /dev/null
++++ b/test_metaclass_attrs.py
+@@ -0,0 +1,67 @@
++"""
++Test that custom model metaclasses can access the attribute dict in __init__.
++
++This is a regression test for the issue where all attributes without a
++contribute_to_class method are popped from the dict in ModelBase.__new__,
++preventing custom metaclasses from accessing them.
++"""
++import os
++import sys
++
++# Setup Django
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tests.test_sqlite')
++sys.path.insert(0, '/testbed')
++
++import django
++from django.conf import settings
++if not settings.configured:
++    settings.configure(
++        DATABASES={
++            'default': {'ENGINE': 'django.db.backends.sqlite3'},
++        },
++        INSTALLED_APPS=['django.contrib.contenttypes', 'django.contrib.auth'],
++        SECRET_KEY='test-secret-key',
++    )
++    django.setup()
++
++from django.db import models
++from django.db.models.base import ModelBase
++
++# Track what the custom metaclass sees
++captured_attrs = {}
++
++class PageBase(ModelBase):
++    """Custom metaclass that wants to inspect the class being defined."""
++    def __init__(cls, name, bases, dct):
++        super(PageBase, cls).__init__(name, bases, dct)
++        # This is what Wagtail's Page model does - check for a marker in dct
++        if 'magic' in dct:
++            captured_attrs['magic'] = dct['magic']
++            print("enabling magic on %s" % (name))
++
++
++class Page(models.Model, metaclass=PageBase):
++    """Model with a custom metaclass that uses the attrs dict."""
++    magic = True
++    title = models.CharField(max_length=255)
++
++    class Meta:
++        app_label = 'test'
++
++
++def test_metaclass_sees_attrs():
++    """Test that the custom metaclass can see 'magic' in the attrs dict."""
++    if 'magic' not in captured_attrs:
++        print("FAIL: 'magic' not found in captured attrs")
++        print("captured_attrs:", captured_attrs)
++        return False
++    if captured_attrs['magic'] is not True:
++        print("FAIL: 'magic' has wrong value: %s" % captured_attrs['magic'])
++        return False
++    print("PASS: Custom metaclass can access 'magic' in attrs dict")
++    return True
++
++
++if __name__ == '__main__':
++    success = test_metaclass_sees_attrs()
++    sys.exit(0 if success else 1)

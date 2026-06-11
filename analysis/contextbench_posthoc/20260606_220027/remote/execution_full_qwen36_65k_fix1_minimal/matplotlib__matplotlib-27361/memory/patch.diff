@@ -1,0 +1,402 @@
+diff --git a/lib/mpl_toolkits/mplot3d/art3d.py b/lib/mpl_toolkits/mplot3d/art3d.py
+index 4aff115b0c..6cf61fce8d 100644
+--- a/lib/mpl_toolkits/mplot3d/art3d.py
++++ b/lib/mpl_toolkits/mplot3d/art3d.py
+@@ -496,6 +496,14 @@ class PathPatch3D(Patch3D):
+         """
+         Patch3D.set_3d_properties(self, path.vertices, zs=zs, zdir=zdir)
+         self._code3d = path.codes
++        self._path2d_original = path
++
++    def get_path(self):
++        # _path2d is set during do_3d_projection(). If it doesn't exist yet
++        # (e.g., during tight layout calculation), return the original path.
++        if not hasattr(self, '_path2d'):
++            return self._path2d_original
++        return self._path2d
+ 
+     def do_3d_projection(self):
+         s = self._segment3d
+diff --git a/lib/mpl_toolkits/mplot3d/tests/test_axes3d.py b/lib/mpl_toolkits/mplot3d/tests/test_axes3d.py
+index 4024eeddcf..404841dcb5 100644
+--- a/lib/mpl_toolkits/mplot3d/tests/test_axes3d.py
++++ b/lib/mpl_toolkits/mplot3d/tests/test_axes3d.py
+@@ -2329,3 +2329,19 @@ def test_ndarray_color_kwargs_value_error():
+     ax = fig.add_subplot(111, projection='3d')
+     ax.scatter(1, 0, 0, color=np.array([0, 0, 0, 1]))
+     fig.canvas.draw()
++
++
++@mpl3d_image_comparison(['pathpatch_3d_tight_layout.png'], style='mpl20')
++def test_pathpatch_3d_tight_layout():
++    # Test that tight layout works with 3D path patches (GH#27361)
++    # The issue was that PathPatch3D.get_path() would fail with
++    # AttributeError: 'PathPatch3D' object has no attribute '_path2d'
++    # when tight layout calculation triggered get_path() before do_3d_projection()
++    fig = plt.figure(layout="tight")
++    ax = fig.add_subplot(projection='3d')
++    p = mpatch.Rectangle((0, 0), 1.0, 1.0)
++    ax.add_patch(p)
++    art3d.pathpatch_2d_to_3d(p)
++    ax.set_xlim(0, 2)
++    ax.set_ylim(0, 2)
++    ax.set_zlim(0, 2)
+diff --git a/patch_art3d.py b/patch_art3d.py
+new file mode 100644
+index 0000000000..a11c214c78
+--- /dev/null
++++ b/patch_art3d.py
+@@ -0,0 +1,33 @@
++"""
++Monkey-patch the installed art3d module to fix the tight layout issue.
++"""
++import mpl_toolkits.mplot3d.art3d as art3d
++
++# Get the PathPatch3D class
++PathPatch3D = art3d.PathPatch3D
++
++# Store the original set_3d_properties
++original_set_3d_properties = PathPatch3D.set_3d_properties
++
++def patched_set_3d_properties(self, path, zs=0, zdir='z'):
++    """Set the z position and direction of the path patch."""
++    original_set_3d_properties(self, path, zs, zdir)
++    # Store the original path for use in get_path() when _path2d is not yet set
++    self._path2d_original = path
++
++# Store the original get_path
++original_get_path = PathPatch3D.get_path
++
++def patched_get_path(self):
++    """Get the path, returning original if _path2d not yet set."""
++    # _path2d is set during do_3d_projection(). If it doesn't exist yet
++    # (e.g., during tight layout calculation), return the original path.
++    if not hasattr(self, '_path2d'):
++        return self._path2d_original
++    return self._path2d
++
++# Apply the patches
++PathPatch3D.set_3d_properties = patched_set_3d_properties
++PathPatch3D.get_path = patched_get_path
++
++print("Successfully patched art3d.PathPatch3D")
+diff --git a/subprojects/.wraplock b/subprojects/.wraplock
+new file mode 100644
+index 0000000000..e69de29bb2
+diff --git a/test.pdf b/test.pdf
+new file mode 100644
+index 0000000000000000000000000000000000000000..82d67ab4f8d196a572d62c9ac0dd6d376b7a7617
+GIT binary patch
+literal 7083
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/test_comprehensive.py b/test_comprehensive.py
+new file mode 100644
+index 0000000000..73951b3b0e
+--- /dev/null
++++ b/test_comprehensive.py
+@@ -0,0 +1,158 @@
++"""
++Comprehensive test for the PathPatch3D tight layout fix (GH#27361).
++Tests that tight layout works with 3D path patches.
++"""
++import matplotlib
++matplotlib.use('Agg')  # Use non-interactive backend
++import matplotlib.pyplot as plt
++import matplotlib.patches as pat
++import mpl_toolkits.mplot3d.art3d as art3d
++
++def test_tight_layout_with_pathpatch():
++    """Test that tight layout works with 3D path patches (GH#27361)."""
++    print("Test 1: layout='tight' with savefig...")
++    fig, ax = plt.subplots(subplot_kw={"projection": "3d"}, layout="tight")
++    p = pat.Rectangle((0, 0), 1.0, 1.0)
++    ax.add_patch(p)
++    art3d.pathpatch_2d_to_3d(p)
++    try:
++        fig.savefig("/tmp/test_tight_layout.png")
++        print("  PASSED: savefig with layout='tight' works")
++    except AttributeError as e:
++        print(f"  FAILED: {e}")
++        return False
++    plt.close(fig)
++    return True
++
++def test_tight_layout_with_dpi():
++    """Test that tight layout works with different DPI settings."""
++    print("Test 2: layout='tight' with dpi=300...")
++    fig, ax = plt.subplots(subplot_kw={"projection": "3d"}, layout="tight", dpi=300)
++    p = pat.Rectangle((0, 0), 1.0, 1.0)
++    ax.add_patch(p)
++    art3d.pathpatch_2d_to_3d(p)
++    try:
++        fig.savefig("/tmp/test_tight_layout_dpi300.png", dpi=300)
++        print("  PASSED: savefig with dpi=300 works")
++    except AttributeError as e:
++        print(f"  FAILED: {e}")
++        return False
++    plt.close(fig)
++    return True
++
++def test_compressed_layout():
++    """Test that compressed layout also works."""
++    print("Test 3: layout='compressed'...")
++    fig, ax = plt.subplots(subplot_kw={"projection": "3d"}, layout="compressed")
++    p = pat.Rectangle((0, 0), 1.0, 1.0)
++    ax.add_patch(p)
++    art3d.pathpatch_2d_to_3d(p)
++    try:
++        fig.savefig("/tmp/test_compressed_layout.png")
++        print("  PASSED: savefig with layout='compressed' works")
++    except AttributeError as e:
++        print(f"  FAILED: {e}")
++        return False
++    plt.close(fig)
++    return True
++
++def test_constrained_layout():
++    """Test that constrained layout also works."""
++    print("Test 4: layout='constrained'...")
++    fig, ax = plt.subplots(subplot_kw={"projection": "3d"}, layout="constrained")
++    p = pat.Rectangle((0, 0), 1.0, 1.0)
++    ax.add_patch(p)
++    art3d.pathpatch_2d_to_3d(p)
++    try:
++        fig.savefig("/tmp/test_constrained_layout.png")
++        print("  PASSED: savefig with layout='constrained' works")
++    except AttributeError as e:
++        print(f"  FAILED: {e}")
++        return False
++    plt.close(fig)
++    return True
++
++def test_tight_layout_method():
++    """Test that tight_layout() method also works."""
++    print("Test 5: tight_layout() method...")
++    fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
++    p = pat.Rectangle((0, 0), 1.0, 1.0)
++    ax.add_patch(p)
++    art3d.pathpatch_2d_to_3d(p)
++    try:
++        fig.tight_layout()
++        fig.savefig("/tmp/test_tight_layout_method.png")
++        print("  PASSED: tight_layout() method works")
++    except AttributeError as e:
++        print(f"  FAILED: {e}")
++        return False
++    plt.close(fig)
++    return True
++
++def test_pathpatch3d_get_path_before_projection():
++    """Test that get_path() works before do_3d_projection()."""
++    print("Test 6: get_path() before do_3d_projection()...")
++    from matplotlib.path import Path
++    path = Path.unit_rectangle()
++    pp3d = art3d.PathPatch3D(path, zs=0, zdir='z')
++    try:
++        # This should not raise AttributeError
++        p = pp3d.get_path()
++        print(f"  PASSED: get_path() returned {type(p)}")
++    except AttributeError as e:
++        print(f"  FAILED: {e}")
++        return False
++    return True
++
++def test_pathpatch3d_get_path_after_projection():
++    """Test that get_path() works after do_3d_projection()."""
++    print("Test 7: get_path() after do_3d_projection()...")
++    from matplotlib.path import Path
++    import numpy as np
++    import mpl_toolkits.mplot3d.proj3d as proj3d
++    
++    path = Path.unit_rectangle()
++    pp3d = art3d.PathPatch3D(path, zs=0, zdir='z')
++    # Simulate what happens during rendering
++    pp3d._segment3d = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)]
++    pp3d._code3d = path.codes
++    pp3d._path2d_original = path
++    try:
++        # Simulate do_3d_projection
++        s = pp3d._segment3d
++        xs, ys, zs = zip(*s)
++        vxs, vys, vzs, vis = proj3d.proj_transform_clip(xs, ys, zs, np.eye(4))
++        # Create codes array matching the vertices
++        codes = np.array([Path.MOVETO, Path.LINETO, Path.LINETO, Path.LINETO])
++        pp3d._path2d = matplotlib.path.Path(np.column_stack([vxs, vys]), codes)
++        # Now get_path should return the projected path
++        p = pp3d.get_path()
++        print(f"  PASSED: get_path() returned {type(p)} after projection")
++    except AttributeError as e:
++        print(f"  FAILED: {e}")
++        return False
++    return True
++
++if __name__ == "__main__":
++    print("=" * 60)
++    print("Testing PathPatch3D tight layout fix (GH#27361)")
++    print("=" * 60)
++    
++    results = []
++    results.append(test_tight_layout_with_pathpatch())
++    results.append(test_tight_layout_with_dpi())
++    results.append(test_compressed_layout())
++    results.append(test_constrained_layout())
++    results.append(test_tight_layout_method())
++    results.append(test_pathpatch3d_get_path_before_projection())
++    results.append(test_pathpatch3d_get_path_after_projection())
++    
++    print("=" * 60)
++    passed = sum(results)
++    total = len(results)
++    print(f"Results: {passed}/{total} tests passed")
++    if passed == total:
++        print("ALL TESTS PASSED!")
++    else:
++        print("SOME TESTS FAILED!")
++    print("=" * 60)
+diff --git a/test_issue.py b/test_issue.py
+new file mode 100644
+index 0000000000..fa00b7c0b5
+--- /dev/null
++++ b/test_issue.py
+@@ -0,0 +1,11 @@
++import matplotlib.pyplot as plt
++import matplotlib.patches as pat
++import mpl_toolkits.mplot3d.art3d as art3d
++
++fig, ax = plt.subplots(subplot_kw={"projection": "3d"}, layout="tight")
++
++p = pat.Rectangle((0, 0), 1.0, 1.0)
++ax.add_patch(p)
++art3d.pathpatch_2d_to_3d(p)
++
++fig.savefig("test.pdf")
+diff --git a/test_issue2.py b/test_issue2.py
+new file mode 100644
+index 0000000000..b852c1ea50
+--- /dev/null
++++ b/test_issue2.py
+@@ -0,0 +1,23 @@
++import matplotlib.pyplot as plt
++import matplotlib.patches as pat
++import mpl_toolkits.mplot3d.art3d as art3d
++
++fig, ax = plt.subplots(subplot_kw={"projection": "3d"}, layout="tight")
++
++p = pat.Rectangle((0, 0), 1.0, 1.0)
++print(f"Before add_patch: type(p) = {type(p)}")
++ax.add_patch(p)
++print(f"After add_patch: type(p) = {type(p)}")
++art3d.pathpatch_2d_to_3d(p)
++print(f"After pathpatch_2d_to_3d: type(p) = {type(p)}")
++
++# Check if _path2d_original exists
++print(f"Has _path2d_original: {hasattr(p, '_path2d_original')}")
++print(f"Has _path2d: {hasattr(p, '_path2d')}")
++
++# Try to get path
++try:
++    path = p.get_path()
++    print(f"get_path() succeeded: {path}")
++except AttributeError as e:
++    print(f"get_path() failed: {e}")

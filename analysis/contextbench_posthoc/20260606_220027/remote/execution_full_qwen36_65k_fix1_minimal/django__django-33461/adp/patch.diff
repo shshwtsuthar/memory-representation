@@ -1,0 +1,51 @@
+diff --git a/django/template/base.py b/django/template/base.py
+index 078be8b383..2260dc430e 100644
+--- a/django/template/base.py
++++ b/django/template/base.py
+@@ -262,6 +262,10 @@ class Template:
+         # string.
+         try:
+             message = str(exception.args[0])
++            # Escape SafeString to prevent XSS when the exception message
++            # contains HTML that was marked as safe.
++            if isinstance(message, SafeString):
++                message = escape(message)
+         except (IndexError, UnicodeDecodeError):
+             message = '(Could not get exception message)'
+ 
+diff --git a/tests/template_tests/tests.py b/tests/template_tests/tests.py
+index 8cc86bd44f..e9be2936da 100644
+--- a/tests/template_tests/tests.py
++++ b/tests/template_tests/tests.py
+@@ -192,6 +192,31 @@ class TemplateTestMixin:
+         for node in template.nodelist:
+             self.assertEqual(node.origin, template.origin)
+ 
++    def test_exception_message_escaped(self):
++        """
++        Exception messages containing HTML are escaped in the technical 500
++        page to prevent XSS when the exception message is a SafeString.
++        """
++        from django.utils.safestring import mark_safe
++
++        engine = self._engine()
++        safe_html = mark_safe('<script>alert(1)</script>')
++
++        def raise_safe_exception():
++            raise TemplateDoesNotExist(safe_html)
++
++        t = engine.from_string('{{ not_a_var }}')
++        c = Context({'not_a_var': raise_safe_exception})
++
++        with self.assertRaises(TemplateDoesNotExist) as cm:
++            t.render(c)
++
++        if self.debug_engine:
++            message = cm.exception.template_debug['message']
++            # The message should be escaped, not contain raw HTML
++            self.assertNotIn('<script>', message)
++            self.assertIn('&lt;script&gt;', message)
++
+ 
+ class TemplateTests(TemplateTestMixin, SimpleTestCase):
+     debug_engine = False

@@ -1,0 +1,326 @@
+diff --git a/sklearn/preprocessing/tests/test_data.py b/sklearn/preprocessing/tests/test_data.py
+index 5ca63e3d0..c126f1083 100644
+--- a/sklearn/preprocessing/tests/test_data.py
++++ b/sklearn/preprocessing/tests/test_data.py
+@@ -1814,6 +1814,44 @@ def test_maxabs_scaler_partial_fit():
+                                 n_samples_seen=scaler_incr.n_samples_seen_)
+ 
+ 
++
++
++def test_maxabs_scaler_dtype_preservation_with_dataframe():
++    # Check that MaxAbsScaler preserves float32 dtype when given a
++    # pandas DataFrame with float32 columns.
++    # Non-regression test for:
++    # https://github.com/scikit-learn/scikit-learn/issues/15093
++    try:
++        import pandas as pd
++    except ImportError:
++        raise SkipTest("Pandas not found")
++    
++    # Test with float32 DataFrame
++    df = pd.DataFrame({
++        'DOW': [0, 1, 2, 3, 4, 5, 6],
++        'Month': [3, 2, 4, 3, 2, 6, 7],
++        'Value': [3.4, 4., 8, 5, 3, 6, 4]
++    }).astype('float32')
++    
++    scaler = MaxAbsScaler()
++    scaled = scaler.fit_transform(df)
++    
++    assert scaled.dtype == np.float32, \
++        f"Expected float32, got {scaled.dtype}"
++    
++    # Test with float64 DataFrame (should also work)
++    df64 = pd.DataFrame({
++        'DOW': [0, 1, 2, 3, 4, 5, 6],
++        'Month': [3, 2, 4, 3, 2, 6, 7],
++        'Value': [3.4, 4., 8, 5, 3, 6, 4]
++    }).astype('float64')
++    
++    scaler64 = MaxAbsScaler()
++    scaled64 = scaler64.fit_transform(df64)
++    
++    assert scaled64.dtype == np.float64, \
++        f"Expected float64, got {scaled64.dtype}"
++
+ def test_normalizer_l1():
+     rng = np.random.RandomState(0)
+     X_dense = rng.randn(4, 5)
+diff --git a/sklearn/utils/tests/test_validation.py b/sklearn/utils/tests/test_validation.py
+index fc6fdec72..06eb561da 100644
+--- a/sklearn/utils/tests/test_validation.py
++++ b/sklearn/utils/tests/test_validation.py
+@@ -724,6 +724,45 @@ def test_check_dataframe_fit_attribute():
+         raise SkipTest("Pandas not found")
+ 
+ 
++def test_check_array_pandas_dtype_preservation():
++    # Check that check_array preserves float32 dtype when given a
++    # pandas DataFrame with float32 columns and dtype=FLOAT_DTYPES.
++    # Non-regression test for:
++    # https://github.com/scikit-learn/scikit-learn/issues/15093
++    try:
++        import pandas as pd
++    except ImportError:
++        raise SkipTest("Pandas not found")
++    
++    from sklearn.utils.validation import FLOAT_DTYPES
++    
++    # Test with float32 DataFrame
++    df32 = pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}).astype('float32')
++    result = check_array(df32, dtype=FLOAT_DTYPES)
++    assert result.dtype == np.float32, \
++        f"Expected float32, got {result.dtype}"
++    
++    # Test with float64 DataFrame
++    df64 = pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}).astype('float64')
++    result = check_array(df64, dtype=FLOAT_DTYPES)
++    assert result.dtype == np.float64, \
++        f"Expected float64, got {result.dtype}"
++    
++    # Test with float16 DataFrame
++    df16 = pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}).astype('float16')
++    result = check_array(df16, dtype=FLOAT_DTYPES)
++    assert result.dtype == np.float16, \
++        f"Expected float16, got {result.dtype}"
++    
++    # Test with mixed dtypes (float32 and int64) - should convert to float64
++    # (first dtype in FLOAT_DTYPES)
++    df_mixed = pd.DataFrame({'a': [1.0, 2.0], 'b': [3, 4]})
++    df_mixed = df_mixed.astype({'a': 'float32', 'b': 'int64'})
++    result = check_array(df_mixed, dtype=FLOAT_DTYPES)
++    assert result.dtype == np.float64, \
++        f"Expected float64 for mixed dtypes, got {result.dtype}"
++
++
+ def test_suppress_validation():
+     X = np.array([0, np.inf])
+     assert_raises(ValueError, assert_all_finite, X)
+diff --git a/sklearn/utils/validation.py b/sklearn/utils/validation.py
+index 4b953cd13..cdb288c55 100644
+--- a/sklearn/utils/validation.py
++++ b/sklearn/utils/validation.py
+@@ -465,6 +465,15 @@ def check_array(array, accept_sparse=False, accept_large_sparse=True,
+         if dtype_orig is not None and dtype_orig in dtype:
+             # no dtype conversion required
+             dtype = None
++        elif dtypes_orig is not None:
++            # For DataFrames, check if all column dtypes are in the allowed list
++            if all(d in dtype for d in dtypes_orig):
++                # All dtypes are acceptable, no conversion needed
++                dtype = None
++            else:
++                # dtype conversion required. Let's select the first element of the
++                # list of accepted types.
++                dtype = dtype[0]
+         else:
+             # dtype conversion required. Let's select the first element of the
+             # list of accepted types.
+diff --git a/test_comprehensive_dtype.py b/test_comprehensive_dtype.py
+new file mode 100644
+index 000000000..85725296c
+--- /dev/null
++++ b/test_comprehensive_dtype.py
+@@ -0,0 +1,126 @@
++"""Comprehensive test for dtype preservation in check_array with DataFrames."""
++import numpy as np
++import pandas as pd
++import warnings
++from sklearn.utils.validation import check_array, FLOAT_DTYPES
++from sklearn.preprocessing import MaxAbsScaler, StandardScaler, MinMaxScaler
++
++print("=" * 70)
++print("Testing check_array dtype preservation with pandas DataFrames")
++print("=" * 70)
++
++# Test 1: DataFrame with float32 dtype
++print("\n[Test 1] DataFrame with float32 dtype")
++df32 = pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}).astype('float32')
++result = check_array(df32, dtype=FLOAT_DTYPES)
++print(f"  Input dtype: {df32.dtypes['a']}")
++print(f"  Output dtype: {result.dtype}")
++assert result.dtype == np.float32, f"Expected float32, got {result.dtype}"
++print("  ✓ PASSED")
++
++# Test 2: DataFrame with float64 dtype
++print("\n[Test 2] DataFrame with float64 dtype")
++df64 = pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}).astype('float64')
++result = check_array(df64, dtype=FLOAT_DTYPES)
++print(f"  Input dtype: {df64.dtypes['a']}")
++print(f"  Output dtype: {result.dtype}")
++assert result.dtype == np.float64, f"Expected float64, got {result.dtype}"
++print("  ✓ PASSED")
++
++# Test 3: DataFrame with float16 dtype
++print("\n[Test 3] DataFrame with float16 dtype")
++df16 = pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}).astype('float16')
++result = check_array(df16, dtype=FLOAT_DTYPES)
++print(f"  Input dtype: {df16.dtypes['a']}")
++print(f"  Output dtype: {result.dtype}")
++assert result.dtype == np.float16, f"Expected float16, got {result.dtype}"
++print("  ✓ PASSED")
++
++# Test 4: NumPy array with float32 dtype (should still work)
++print("\n[Test 4] NumPy array with float32 dtype")
++arr32 = np.array([[1.0, 2.0], [3.0, 4.0]], dtype='float32')
++result = check_array(arr32, dtype=FLOAT_DTYPES)
++print(f"  Input dtype: {arr32.dtype}")
++print(f"  Output dtype: {result.dtype}")
++assert result.dtype == np.float32, f"Expected float32, got {result.dtype}"
++print("  ✓ PASSED")
++
++# Test 5: NumPy array with float64 dtype (should still work)
++print("\n[Test 5] NumPy array with float64 dtype")
++arr64 = np.array([[1.0, 2.0], [3.0, 4.0]], dtype='float64')
++result = check_array(arr64, dtype=FLOAT_DTYPES)
++print(f"  Input dtype: {arr64.dtype}")
++print(f"  Output dtype: {result.dtype}")
++assert result.dtype == np.float64, f"Expected float64, got {result.dtype}"
++print("  ✓ PASSED")
++
++# Test 6: DataFrame with mixed dtypes (float32 and int64) - should convert to float64
++print("\n[Test 6] DataFrame with mixed dtypes (float32 and int64)")
++df_mixed = pd.DataFrame({'a': [1.0, 2.0], 'b': [3, 4]})
++df_mixed = df_mixed.astype({'a': 'float32', 'b': 'int64'})
++with warnings.catch_warnings(record=True) as w:
++    warnings.simplefilter("always")
++    result = check_array(df_mixed, dtype=FLOAT_DTYPES)
++    print(f"  Input dtypes: {df_mixed.dtypes['a']}, {df_mixed.dtypes['b']}")
++    print(f"  Output dtype: {result.dtype}")
++    # Since int64 is not in FLOAT_DTYPES, it should convert to float64 (first in list)
++    assert result.dtype == np.float64, f"Expected float64, got {result.dtype}"
++print("  ✓ PASSED")
++
++# Test 7: MaxAbsScaler with float32 DataFrame
++print("\n[Test 7] MaxAbsScaler with float32 DataFrame")
++df = pd.DataFrame({
++    'DOW': [0, 1, 2, 3, 4, 5, 6],
++    'Month': [3, 2, 4, 3, 2, 6, 7],
++    'Value': [3.4, 4., 8, 5, 3, 6, 4]
++}).astype('float32')
++scaler = MaxAbsScaler()
++scaled = scaler.fit_transform(df)
++print(f"  Input dtype: float32")
++print(f"  Output dtype: {scaled.dtype}")
++assert scaled.dtype == np.float32, f"Expected float32, got {scaled.dtype}"
++print("  ✓ PASSED")
++
++# Test 8: StandardScaler with float32 DataFrame
++print("\n[Test 8] StandardScaler with float32 DataFrame")
++df = pd.DataFrame({
++    'a': [1.0, 2.0, 3.0],
++    'b': [4.0, 5.0, 6.0]
++}).astype('float32')
++scaler = StandardScaler()
++scaled = scaler.fit_transform(df)
++print(f"  Input dtype: float32")
++print(f"  Output dtype: {scaled.dtype}")
++assert scaled.dtype == np.float32, f"Expected float32, got {scaled.dtype}"
++print("  ✓ PASSED")
++
++# Test 9: MinMaxScaler with float32 DataFrame
++print("\n[Test 9] MinMaxScaler with float32 DataFrame")
++df = pd.DataFrame({
++    'a': [1.0, 2.0, 3.0],
++    'b': [4.0, 5.0, 6.0]
++}).astype('float32')
++scaler = MinMaxScaler()
++scaled = scaler.fit_transform(df)
++print(f"  Input dtype: float32")
++print(f"  Output dtype: {scaled.dtype}")
++assert scaled.dtype == np.float32, f"Expected float32, got {scaled.dtype}"
++print("  ✓ PASSED")
++
++# Test 10: DataFrame with all columns float32
++print("\n[Test 10] DataFrame with multiple float32 columns")
++df = pd.DataFrame({
++    'a': [1.0, 2.0],
++    'b': [3.0, 4.0],
++    'c': [5.0, 6.0],
++    'd': [7.0, 8.0]
++}).astype('float32')
++result = check_array(df, dtype=FLOAT_DTYPES)
++print(f"  Input dtypes: all float32")
++print(f"  Output dtype: {result.dtype}")
++assert result.dtype == np.float32, f"Expected float32, got {result.dtype}"
++print("  ✓ PASSED")
++
++print("\n" + "=" * 70)
++print("All tests PASSED!")
++print("=" * 70)
+diff --git a/test_issue_15093.py b/test_issue_15093.py
+new file mode 100644
+index 000000000..914db8731
+--- /dev/null
++++ b/test_issue_15093.py
+@@ -0,0 +1,30 @@
++"""Test that exactly reproduces the issue from scikit-learn#15093."""
++import pandas as pd
++from sklearn.preprocessing import MaxAbsScaler
++
++# Exact reproduction from the issue
++df = pd.DataFrame({
++    'DOW': [0, 1, 2, 3, 4, 5, 6],
++    'Month': [3, 2, 4, 3, 2, 6, 7],
++    'Value': [3.4, 4., 8, 5, 3, 6, 4]
++})
++df = df.astype('float32')
++print("Input DataFrame dtypes:")
++print(df.dtypes)
++
++a = MaxAbsScaler()
++scaled = a.fit_transform(df)  # providing df.values will produce correct response
++print('\nTransformed Type: ', scaled.dtype)
++
++# Expected result from the issue
++expected_dtype = 'float32'
++actual_dtype = str(scaled.dtype)
++
++print('\n' + '='*60)
++if actual_dtype == expected_dtype:
++    print(f"✓ SUCCESS: dtype is {actual_dtype} as expected!")
++    print("The issue has been FIXED.")
++else:
++    print(f"✗ FAILURE: dtype is {actual_dtype}, expected {expected_dtype}")
++    print("The issue is NOT fixed.")
++print('='*60)
+diff --git a/test_maxabs_scaler_dtype.py b/test_maxabs_scaler_dtype.py
+new file mode 100644
+index 000000000..cf11c9a42
+--- /dev/null
++++ b/test_maxabs_scaler_dtype.py
+@@ -0,0 +1,33 @@
++"""Test that MaxAbsScaler preserves float32 dtype for pandas DataFrames."""
++import numpy as np
++import pandas as pd
++
++# Test the issue
++df = pd.DataFrame({
++    'DOW': [0, 1, 2, 3, 4, 5, 6],
++    'Month': [3, 2, 4, 3, 2, 6, 7],
++    'Value': [3.4, 4., 8, 5, 3, 6, 4]
++})
++df = df.astype('float32')
++print("Input DataFrame dtypes:")
++print(df.dtypes)
++print()
++
++from sklearn.preprocessing import MaxAbsScaler
++
++a = MaxAbsScaler()
++scaled = a.fit_transform(df)
++
++print('Transformed Type:', scaled.dtype)
++print('Expected Type: float32')
++print('Test PASSED!' if scaled.dtype == np.float32 else 'Test FAILED!')
++print()
++
++# Also test with float64 to make sure we don't break that
++df64 = df.astype('float64')
++print("Input DataFrame dtypes (float64):")
++print(df64.dtypes)
++scaled64 = a.fit_transform(df64)
++print('Transformed Type (float64 input):', scaled64.dtype)
++print('Expected Type: float64')
++print('Test PASSED!' if scaled64.dtype == np.float64 else 'Test FAILED!')

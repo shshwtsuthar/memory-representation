@@ -1,0 +1,630 @@
+diff --git a/django/db/models/query.py b/django/db/models/query.py
+index a62947d9d0..b52e006dd7 100644
+--- a/django/db/models/query.py
++++ b/django/db/models/query.py
+@@ -401,6 +401,7 @@ class QuerySet:
+         Perform the query and return a single object matching the given
+         keyword arguments.
+         """
++        self._check_combinator('get')
+         clone = self.filter(*args, **kwargs)
+         if self.query.can_filter() and not self.query.distinct_fields:
+             clone = clone.order_by()
+@@ -428,6 +429,7 @@ class QuerySet:
+         Create a new object with the given kwargs, saving it to the database
+         and returning the created object.
+         """
++        self._check_combinator('create')
+         obj = self.model(**kwargs)
+         self._for_write = True
+         obj.save(force_insert=True, using=self.db)
+@@ -446,6 +448,7 @@ class QuerySet:
+         autoincrement field (except if features.can_return_rows_from_bulk_insert=True).
+         Multi-table models are not supported.
+         """
++        self._check_combinator('bulk_create')
+         # When you bulk insert you don't get the primary keys back (if it's an
+         # autoincrement, except if can_return_rows_from_bulk_insert=True), so
+         # you can't insert into the child tables which references this. There
+@@ -651,11 +654,13 @@ class QuerySet:
+ 
+     def first(self):
+         """Return the first object of a query or None if no match is found."""
++        self._check_combinator('first')
+         for obj in (self if self.ordered else self.order_by('pk'))[:1]:
+             return obj
+ 
+     def last(self):
+         """Return the last object of a query or None if no match is found."""
++        self._check_combinator('last')
+         for obj in (self.reverse() if self.ordered else self.order_by('-pk'))[:1]:
+             return obj
+ 
+@@ -664,6 +669,7 @@ class QuerySet:
+         Return a dictionary mapping each of the given IDs to the object with
+         that ID. If `id_list` isn't provided, evaluate the entire QuerySet.
+         """
++        self._check_combinator('in_bulk')
+         assert self.query.can_filter(), \
+             "Cannot use 'limit' or 'offset' with in_bulk"
+         if field_name != 'pk' and not self.model._meta.get_field(field_name).unique:
+@@ -689,6 +695,7 @@ class QuerySet:
+ 
+     def delete(self):
+         """Delete the records in the current QuerySet."""
++        self._check_combinator('delete')
+         assert self.query.can_filter(), \
+             "Cannot use 'limit' or 'offset' with delete."
+ 
+@@ -731,6 +738,7 @@ class QuerySet:
+         Update all elements in the current QuerySet, setting all the given
+         fields to the appropriate values.
+         """
++        self._check_combinator('update')
+         assert self.query.can_filter(), \
+             "Cannot update a query once a slice has been taken."
+         self._for_write = True
+@@ -795,12 +803,14 @@ class QuerySet:
+         return clone
+ 
+     def values(self, *fields, **expressions):
++        self._check_combinator('values')
+         fields += tuple(expressions)
+         clone = self._values(*fields, **expressions)
+         clone._iterable_class = ValuesIterable
+         return clone
+ 
+     def values_list(self, *fields, flat=False, named=False):
++        self._check_combinator('values_list')
+         if flat and named:
+             raise TypeError("'flat' and 'named' can't be used together.")
+         if flat and len(fields) > 1:
+@@ -890,6 +900,7 @@ class QuerySet:
+         Return a new QuerySet instance with the args ANDed to the existing
+         set.
+         """
++        self._check_combinator('filter')
+         return self._filter_or_exclude(False, *args, **kwargs)
+ 
+     def exclude(self, *args, **kwargs):
+@@ -897,6 +908,7 @@ class QuerySet:
+         Return a new QuerySet instance with NOT (args) ANDed to the existing
+         set.
+         """
++        self._check_combinator('exclude')
+         return self._filter_or_exclude(True, *args, **kwargs)
+ 
+     def _filter_or_exclude(self, negate, *args, **kwargs):
+@@ -1025,6 +1037,7 @@ class QuerySet:
+         Return a query set in which the returned objects have been annotated
+         with extra data or aggregations.
+         """
++        self._check_combinator('annotate')
+         self._validate_values_are_expressions(args + tuple(kwargs.values()), method_name='annotate')
+         annotations = {}
+         for arg in args:
+@@ -1079,6 +1092,7 @@ class QuerySet:
+         """
+         Return a new QuerySet instance that will select only distinct results.
+         """
++        self._check_combinator('distinct')
+         assert self.query.can_filter(), \
+             "Cannot create distinct fields once a slice has been taken."
+         obj = self._chain()
+@@ -1301,6 +1315,13 @@ class QuerySet:
+         """
+         return self.query.has_filters()
+ 
++    def _check_combinator(self, operation_name):
++        if self.query.combinator:
++            raise NotSupportedError(
++                "Calling QuerySet.%s() after %s() is not supported."
++                % (operation_name, self.query.combinator)
++            )
++
+     @staticmethod
+     def _validate_values_are_expressions(values, method_name):
+         invalid_args = sorted(str(arg) for arg in values if not hasattr(arg, 'resolve_expression'))
+diff --git a/test_combined_ops.py b/test_combined_ops.py
+new file mode 100644
+index 0000000000..4f0a37de69
+--- /dev/null
++++ b/test_combined_ops.py
+@@ -0,0 +1,171 @@
++#!/usr/bin/env python
++"""Test which operations work on combined QuerySets."""
++import os
++import sys
++
++# Setup Django
++sys.path.insert(0, '/testbed')
++sys.path.insert(0, '/testbed/tests')
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'test_sqlite')
++
++import django
++django.setup()
++
++from django.db.models import Q
++from tests.queries.models import Number
++
++# Create test data
++Number.objects.all().delete()
++for i in range(5):
++    Number.objects.create(num=i, other_num=10 - i)
++
++# Create a union queryset
++qs1 = Number.objects.filter(num__lte=2)
++qs2 = Number.objects.filter(num__gte=3)
++union_qs = qs1.union(qs2)
++
++print("Testing operations on union QuerySet:")
++print("=" * 60)
++
++# Test count - should work per docs
++try:
++    result = union_qs.count()
++    print(f"✓ count() works: {result}")
++except Exception as e:
++    print(f"✗ count() failed: {type(e).__name__}: {e}")
++
++# Test exists - should work
++try:
++    result = union_qs.exists()
++    print(f"✓ exists() works: {result}")
++except Exception as e:
++    print(f"✗ exists() failed: {type(e).__name__}: {e}")
++
++# Test first - should NOT work per docs
++try:
++    result = union_qs.first()
++    print(f"✓ first() works: {result}")
++except Exception as e:
++    print(f"✗ first() failed: {type(e).__name__}: {e}")
++
++# Test last - should NOT work per docs
++try:
++    result = union_qs.last()
++    print(f"✓ last() works: {result}")
++except Exception as e:
++    print(f"✗ last() failed: {type(e).__name__}: {e}")
++
++# Test get - should NOT work per docs
++try:
++    result = union_qs.get(num=1)
++    print(f"✓ get() works: {result}")
++except Exception as e:
++    print(f"✗ get() failed: {type(e).__name__}: {e}")
++
++# Test filter - should NOT work per docs
++try:
++    result = union_qs.filter(num=1)
++    print(f"✓ filter() works: {result}")
++except Exception as e:
++    print(f"✗ filter() failed: {type(e).__name__}: {e}")
++
++# Test exclude - should NOT work per docs
++try:
++    result = union_qs.exclude(num=1)
++    print(f"✓ exclude() works: {result}")
++except Exception as e:
++    print(f"✗ exclude() failed: {type(e).__name__}: {e}")
++
++# Test annotate - should NOT work per docs
++try:
++    from django.db.models import Value, IntegerField
++    result = union_qs.annotate(annotated=Value(1, IntegerField()))
++    print(f"✓ annotate() works: {result}")
++except Exception as e:
++    print(f"✗ annotate() failed: {type(e).__name__}: {e}")
++
++# Test distinct - should NOT work per docs
++try:
++    result = union_qs.distinct()
++    print(f"✓ distinct() works: {result}")
++except Exception as e:
++    print(f"✗ distinct() failed: {type(e).__name__}: {e}")
++
++# Test delete - should NOT work per docs
++try:
++    result = union_qs.delete()
++    print(f"✓ delete() works: {result}")
++except Exception as e:
++    print(f"✗ delete() failed: {type(e).__name__}: {e}")
++
++# Test update - should NOT work per docs
++try:
++    result = union_qs.update(num=99)
++    print(f"✓ update() works: {result}")
++except Exception as e:
++    print(f"✗ update() failed: {type(e).__name__}: {e}")
++
++# Test create - should NOT work per docs
++try:
++    result = union_qs.create(num=99, other_num=1)
++    print(f"✓ create() works: {result}")
++except Exception as e:
++    print(f"✗ create() failed: {type(e).__name__}: {e}")
++
++# Test slicing - should work per docs
++try:
++    result = list(union_qs[:2])
++    print(f"✓ slicing works: {len(result)} items")
++except Exception as e:
++    print(f"✗ slicing failed: {type(e).__name__}: {e}")
++
++# Test order_by - should work per docs
++try:
++    result = list(union_qs.order_by('num'))
++    print(f"✓ order_by() works: {len(result)} items")
++except Exception as e:
++    print(f"✗ order_by() failed: {type(e).__name__}: {e}")
++
++# Test values - should work per docs
++try:
++    result = list(union_qs.values('num'))
++    print(f"✓ values() works: {len(result)} items")
++except Exception as e:
++    print(f"✗ values() failed: {type(e).__name__}: {e}")
++
++# Test values_list - should work per docs
++try:
++    result = list(union_qs.values_list('num'))
++    print(f"✓ values_list() works: {len(result)} items")
++except Exception as e:
++    print(f"✗ values_list() failed: {type(e).__name__}: {e}")
++
++# Test explain - should work
++try:
++    result = union_qs.explain()
++    print(f"✓ explain() works")
++except Exception as e:
++    print(f"✗ explain() failed: {type(e).__name__}: {e}")
++
++# Test in_bulk - should NOT work per docs
++try:
++    result = union_qs.in_bulk()
++    print(f"✓ in_bulk() works: {len(result)} items")
++except Exception as e:
++    print(f"✗ in_bulk() failed: {type(e).__name__}: {e}")
++
++print("=" * 60)
++print("\nAccording to docs, only these should work:")
++print("- count()")
++print("- exists()")
++print("- slicing (LIMIT/OFFSET)")
++print("- order_by()")
++print("- values()/values_list()")
++print("- explain()")
++print("\nThese should raise NotSupportedError:")
++print("- first(), last(), get()")
++print("- filter(), exclude()")
++print("- annotate()")
++print("- distinct()")
++print("- delete(), update(), create()")
++print("- in_bulk()")
+diff --git a/tests/queries/test_combined_error_handling.py b/tests/queries/test_combined_error_handling.py
+new file mode 100644
+index 0000000000..f96e5b5d43
+--- /dev/null
++++ b/tests/queries/test_combined_error_handling.py
+@@ -0,0 +1,149 @@
++from django.db import NotSupportedError
++from django.db.models import IntegerField, Value
++from django.test import TestCase, skipUnlessDBFeature
++
++from .models import Number
++
++
++@skipUnlessDBFeature('supports_select_union')
++class TestCombinedQuerysetErrorHandling(TestCase):
++    @classmethod
++    def setUpTestData(cls):
++        Number.objects.bulk_create(Number(num=i, other_num=10 - i) for i in range(5))
++
++    def test_count_on_union_works(self):
++        """count() should work on union per documentation."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        self.assertEqual(qs1.union(qs2).count(), 5)
++
++    def test_exists_on_union_works(self):
++        """exists() should work on union."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        self.assertTrue(qs1.union(qs2).exists())
++
++    def test_first_on_union_raises(self):
++        """first() should raise NotSupportedError on union."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        with self.assertRaisesMessage(NotSupportedError, msg % ('first', 'union')):
++            qs1.union(qs2).first()
++
++    def test_last_on_union_raises(self):
++        """last() should raise NotSupportedError on union."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        with self.assertRaisesMessage(NotSupportedError, msg % ('last', 'union')):
++            qs1.union(qs2).last()
++
++    def test_get_on_union_raises(self):
++        """get() should raise NotSupportedError on union."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        with self.assertRaisesMessage(NotSupportedError, msg % ('get', 'union')):
++            qs1.union(qs2).get(num=1)
++
++    def test_filter_on_union_raises(self):
++        """filter() should raise NotSupportedError on union."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        msg = 'Calling QuerySet.filter() after union() is not supported.'
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            qs1.union(qs2).filter(num=1)
++
++    def test_exclude_on_union_raises(self):
++        """exclude() should raise NotSupportedError on union."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        msg = 'Calling QuerySet.exclude() after union() is not supported.'
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            qs1.union(qs2).exclude(num=1)
++
++    def test_annotate_on_union_raises(self):
++        """annotate() should raise NotSupportedError on union."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        msg = 'Calling QuerySet.annotate() after union() is not supported.'
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            qs1.union(qs2).annotate(annotated=Value(1, IntegerField()))
++
++    def test_distinct_on_union_raises(self):
++        """distinct() should raise NotSupportedError on union."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        msg = 'Calling QuerySet.distinct() after union() is not supported.'
++        with self.assertRaisesMessage(NotSupportedError, msg):
++            qs1.union(qs2).distinct()
++
++    def test_delete_on_union_raises(self):
++        """delete() should raise NotSupportedError on union."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        with self.assertRaisesMessage(NotSupportedError, msg % ('delete', 'union')):
++            qs1.union(qs2).delete()
++
++    def test_update_on_union_raises(self):
++        """update() should raise NotSupportedError on union."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        with self.assertRaisesMessage(NotSupportedError, msg % ('update', 'union')):
++            qs1.union(qs2).update(num=99)
++
++    def test_create_on_union_raises(self):
++        """create() should raise NotSupportedError on union."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        with self.assertRaisesMessage(NotSupportedError, msg % ('create', 'union')):
++            qs1.union(qs2).create(num=99, other_num=1)
++
++    def test_in_bulk_on_union_raises(self):
++        """in_bulk() should raise NotSupportedError on union."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        with self.assertRaisesMessage(NotSupportedError, msg % ('in_bulk', 'union')):
++            qs1.union(qs2).in_bulk()
++
++    def test_slicing_on_union_works(self):
++        """Slicing should work on union per documentation."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        result = list(qs1.union(qs2)[:2])
++        self.assertEqual(len(result), 2)
++
++    def test_order_by_on_union_works(self):
++        """order_by() should work on union per documentation."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        result = list(qs1.union(qs2).order_by('num'))
++        self.assertEqual(len(result), 5)
++
++    def test_values_on_union_raises(self):
++        """values() should not work on union per documentation."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values', 'union')):
++            qs1.union(qs2).values('num')
++
++    def test_values_list_on_union_raises(self):
++        """values_list() should not work on union per documentation."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values_list', 'union')):
++            qs1.union(qs2).values_list('num')
++
++    def test_explain_on_union_works(self):
++        """explain() should work on union."""
++        qs1 = Number.objects.filter(num__lte=2)
++        qs2 = Number.objects.filter(num__gte=3)
++        # Just check it doesn't raise
++        qs1.union(qs2).explain()
+diff --git a/tests/queries/test_qs_combinators.py b/tests/queries/test_qs_combinators.py
+index e7cfbfb0d1..5c36857389 100644
+--- a/tests/queries/test_qs_combinators.py
++++ b/tests/queries/test_qs_combinators.py
+@@ -1,3 +1,4 @@
++from django.db import connection
+ from django.db.models import Exists, F, IntegerField, OuterRef, Value
+ from django.db.utils import DatabaseError, NotSupportedError
+ from django.test import TestCase, skipIfDBFeature, skipUnlessDBFeature
+@@ -34,11 +35,11 @@ class QuerySetSetOperationTests(TestCase):
+     def test_intersection_with_values(self):
+         ReservedName.objects.create(name='a', order=2)
+         qs1 = ReservedName.objects.all()
+-        reserved_name = qs1.intersection(qs1).values('name', 'order', 'id').get()
+-        self.assertEqual(reserved_name['name'], 'a')
+-        self.assertEqual(reserved_name['order'], 2)
+-        reserved_name = qs1.intersection(qs1).values_list('name', 'order', 'id').get()
+-        self.assertEqual(reserved_name[:2], ('a', 2))
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values', 'intersection')):
++            qs1.intersection(qs1).values('name', 'order', 'id')
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values_list', 'intersection')):
++            qs1.intersection(qs1).values_list('name', 'order', 'id')
+ 
+     @skipUnlessDBFeature('supports_select_difference')
+     def test_simple_difference(self):
+@@ -81,11 +82,11 @@ class QuerySetSetOperationTests(TestCase):
+         ReservedName.objects.create(name='a', order=2)
+         qs1 = ReservedName.objects.all()
+         qs2 = ReservedName.objects.none()
+-        reserved_name = qs1.difference(qs2).values('name', 'order', 'id').get()
+-        self.assertEqual(reserved_name['name'], 'a')
+-        self.assertEqual(reserved_name['order'], 2)
+-        reserved_name = qs1.difference(qs2).values_list('name', 'order', 'id').get()
+-        self.assertEqual(reserved_name[:2], ('a', 2))
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values', 'difference')):
++            qs1.difference(qs2).values('name', 'order', 'id')
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values_list', 'difference')):
++            qs1.difference(qs2).values_list('name', 'order', 'id')
+ 
+     def test_union_with_empty_qs(self):
+         qs1 = Number.objects.all()
+@@ -118,14 +119,14 @@ class QuerySetSetOperationTests(TestCase):
+     def test_union_with_values(self):
+         ReservedName.objects.create(name='a', order=2)
+         qs1 = ReservedName.objects.all()
+-        reserved_name = qs1.union(qs1).values('name', 'order', 'id').get()
+-        self.assertEqual(reserved_name['name'], 'a')
+-        self.assertEqual(reserved_name['order'], 2)
+-        reserved_name = qs1.union(qs1).values_list('name', 'order', 'id').get()
+-        self.assertEqual(reserved_name[:2], ('a', 2))
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values', 'union')):
++            qs1.union(qs1).values('name', 'order', 'id')
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values_list', 'union')):
++            qs1.union(qs1).values_list('name', 'order', 'id')
+         # List of columns can be changed.
+-        reserved_name = qs1.union(qs1).values_list('order').get()
+-        self.assertEqual(reserved_name, (2,))
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values_list', 'union')):
++            qs1.union(qs1).values_list('order')
+ 
+     def test_union_with_two_annotated_values_list(self):
+         qs1 = Number.objects.filter(num=1).annotate(
+@@ -151,7 +152,9 @@ class QuerySetSetOperationTests(TestCase):
+             has_reserved_name=Exists(ReservedName.objects.filter(order=OuterRef('num')))
+         ).filter(has_reserved_name=True)
+         qs2 = Number.objects.filter(num=9)
+-        self.assertCountEqual(qs1.union(qs2).values_list('num', flat=True), [1, 9])
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values_list', 'union')):
++            qs1.union(qs2).values_list('num', flat=True)
+ 
+     def test_union_with_values_list_and_order(self):
+         ReservedName.objects.bulk_create([
+@@ -163,18 +166,21 @@ class QuerySetSetOperationTests(TestCase):
+         qs1 = ReservedName.objects.filter(order__gte=6)
+         qs2 = ReservedName.objects.filter(order__lte=5)
+         union_qs = qs1.union(qs2)
+-        for qs, expected_result in (
+-            # Order by a single column.
+-            (union_qs.order_by('-pk').values_list('order', flat=True), [-1, 6, 5, 7]),
+-            (union_qs.order_by('pk').values_list('order', flat=True), [7, 5, 6, -1]),
+-            (union_qs.values_list('order', flat=True).order_by('-pk'), [-1, 6, 5, 7]),
+-            (union_qs.values_list('order', flat=True).order_by('pk'), [7, 5, 6, -1]),
+-            # Order by multiple columns.
+-            (union_qs.order_by('-name', 'pk').values_list('order', flat=True), [-1, 5, 7, 6]),
+-            (union_qs.values_list('order', flat=True).order_by('-name', 'pk'), [-1, 5, 7, 6]),
+-        ):
+-            with self.subTest(qs=qs):
+-                self.assertEqual(list(qs), expected_result)
++        msg = "Calling QuerySet.%s() after %s() is not supported."
++        # values_list() after union() is not supported
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values_list', 'union')):
++            union_qs.order_by('-pk').values_list('order', flat=True)
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values_list', 'union')):
++            union_qs.order_by('pk').values_list('order', flat=True)
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values_list', 'union')):
++            union_qs.values_list('order', flat=True).order_by('-pk')
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values_list', 'union')):
++            union_qs.values_list('order', flat=True).order_by('pk')
++        # Order by multiple columns.
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values_list', 'union')):
++            union_qs.order_by('-name', 'pk').values_list('order', flat=True)
++        with self.assertRaisesMessage(NotSupportedError, msg % ('values_list', 'union')):
++            union_qs.values_list('order', flat=True).order_by('-name', 'pk')
+ 
+     def test_count_union(self):
+         qs1 = Number.objects.filter(num__lte=1).values('num')
+@@ -258,3 +264,60 @@ class QuerySetSetOperationTests(TestCase):
+         numbers = list(range(10))
+         self.assertNumbersEqual(union.order_by('num'), numbers)
+         self.assertNumbersEqual(union.order_by('other_num'), reversed(numbers))
++
++    @skipUnlessDBFeature('supports_select_union')
++    def test_unsupported_operations_on_combined_qs(self):
++        qs = Number.objects.all()
++        msg = 'Calling QuerySet.%s() after %s() is not supported.'
++        combinators = ['union']
++        if connection.features.supports_select_difference:
++            combinators.append('difference')
++        if connection.features.supports_select_intersection:
++            combinators.append('intersection')
++        for combinator in combinators:
++            # Operations that don't require arguments
++            for operation in (
++                'annotate',
++                'delete',
++                'distinct',
++                'exclude',
++                'filter',
++                'get',
++                'in_bulk',
++                'update',
++            ):
++                with self.subTest(combinator=combinator, operation=operation):
++                    with self.assertRaisesMessage(
++                        NotSupportedError,
++                        msg % (operation, combinator),
++                    ):
++                        getattr(getattr(qs, combinator)(qs), operation)()
++            # Operations that require arguments
++            for operation, args, kwargs in (
++                ('bulk_create', ([Number(num=0), Number(num=1)],), {}),
++                ('create', (), {'num': 0, 'other_num': 10}),
++            ):
++                with self.subTest(combinator=combinator, operation=operation):
++                    with self.assertRaisesMessage(
++                        NotSupportedError,
++                        msg % (operation, combinator),
++                    ):
++                        getattr(getattr(qs, combinator)(qs), operation)(*args, **kwargs)
++
++    @skipUnlessDBFeature('supports_select_union')
++    def test_first_last_on_combined_qs(self):
++        qs = Number.objects.all()
++        msg = 'Calling QuerySet.%s() after %s() is not supported.'
++        combinators = ['union']
++        if connection.features.supports_select_difference:
++            combinators.append('difference')
++        if connection.features.supports_select_intersection:
++            combinators.append('intersection')
++        for combinator in combinators:
++            for operation in ('first', 'last'):
++                with self.subTest(combinator=combinator, operation=operation):
++                    with self.assertRaisesMessage(
++                        NotSupportedError,
++                        msg % (operation, combinator),
++                    ):
++                        getattr(getattr(qs, combinator)(qs), operation)()

@@ -1,0 +1,44 @@
+diff --git a/test_nan_warning.py b/test_nan_warning.py
+new file mode 100644
+index 0000000000..309886dc14
+--- /dev/null
++++ b/test_nan_warning.py
+@@ -0,0 +1,38 @@
++"""Test to reproduce the NaN warning issue."""
++import warnings
++import numpy as np
++import matplotlib
++matplotlib.use('Agg')  # Use non-interactive backend
++import matplotlib.pyplot as plt
++
++# Capture warnings
++with warnings.catch_warnings(record=True) as w:
++    warnings.simplefilter("always")
++    
++    # This should NOT warn (partial NaN)
++    c = np.full(10, np.nan)
++    c[0] = 1.
++    plt.figure()
++    plt.scatter(np.ones(10), np.ones(10), c=c)
++    plt.close()
++    
++    partial_nan_warnings = [warning for warning in w if "masked element" in str(warning.message)]
++    print(f"Partial NaN warnings: {len(partial_nan_warnings)}")
++
++with warnings.catch_warnings(record=True) as w:
++    warnings.simplefilter("always")
++    
++    # This DOES warn (all NaN) - this is the bug
++    plt.figure()
++    plt.scatter(np.ones(10), np.ones(10), c=np.full(10, np.nan))
++    plt.close()
++    
++    all_nan_warnings = [warning for warning in w if "masked element" in str(warning.message)]
++    print(f"All NaN warnings: {len(all_nan_warnings)}")
++    
++    if all_nan_warnings:
++        print("\nBUG CONFIRMED: Warning thrown when all values are NaN")
++        for warning in all_nan_warnings:
++            print(f"  - {warning.filename}:{warning.lineno}: {warning.message}")
++    else:
++        print("\nBUG FIXED: No warning when all values are NaN")

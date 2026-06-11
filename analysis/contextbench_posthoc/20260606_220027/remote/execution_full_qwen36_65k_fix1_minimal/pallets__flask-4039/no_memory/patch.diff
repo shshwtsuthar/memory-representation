@@ -1,0 +1,334 @@
+diff --git a/debug_blueprint.py b/debug_blueprint.py
+new file mode 100644
+index 00000000..fff4cb18
+--- /dev/null
++++ b/debug_blueprint.py
+@@ -0,0 +1,87 @@
++"""Debug script to understand blueprint name handling."""
++from flask import Blueprint, Flask
++
++app = Flask(__name__)
++
++# Test 1: Blueprint with period in name
++ui = Blueprint("app.ui", __name__, url_prefix="/ui")
++api = Blueprint("app.api", __name__, url_prefix="/api")
++
++@ui.errorhandler(Exception)
++def ui_error_handler(error):
++    return str(error)
++
++@ui.get("/")
++def ui_index():
++    raise Exception("ui error")
++
++@api.errorhandler(Exception)
++def api_error_handler(error):
++    return str(error)
++
++@api.get("/")
++def api_index():
++    raise Exception("api error")
++
++app.register_blueprint(ui)
++app.register_blueprint(api)
++
++print("=== Blueprint error_handler_spec ===")
++for key, value in app.error_handler_spec.items():
++    print(f"  {key!r}: {dict(value)}")
++
++print("\n=== Testing with request context ===")
++with app.test_client() as client:
++    # Test UI endpoint
++    print("\n--- UI endpoint ---")
++    response = client.get("/ui/")
++    print(f"Status: {response.status_code}")
++    print(f"Data: {response.data[:100]}")
++    
++    # Test API endpoint
++    print("\n--- API endpoint ---")
++    response = client.get("/api/")
++    print(f"Status: {response.status_code}")
++    print(f"Data: {response.data[:100]}")
++
++# Test 2: Nested blueprints (without periods in name)
++print("\n\n=== Test 2: Nested blueprints ===")
++app2 = Flask(__name__)
++parent = Blueprint("parent", __name__)
++child = Blueprint("child", __name__)
++
++@parent.errorhandler(403)
++def parent_forbidden(e):
++    return "Parent no", 403
++
++@parent.route("/no")
++def parent_no():
++    from flask import abort
++    abort(403)
++
++@child.errorhandler(403)
++def child_forbidden(e):
++    return "Child no", 403
++
++@child.route("/no")
++def child_no():
++    from flask import abort
++    abort(403)
++
++child.register_blueprint(parent, url_prefix="/parent")
++app2.register_blueprint(child, url_prefix="/child")
++
++print("=== Blueprint error_handler_spec ===")
++for key, value in app2.error_handler_spec.items():
++    print(f"  {key!r}: {dict(value)}")
++
++with app2.test_client() as client:
++    print("\n--- Parent endpoint ---")
++    response = client.get("/child/parent/no")
++    print(f"Status: {response.status_code}")
++    print(f"Data: {response.data}")
++    
++    print("\n--- Child endpoint ---")
++    response = client.get("/child/no")
++    print(f"Status: {response.status_code}")
++    print(f"Data: {response.data}")
+diff --git a/debug_blueprint2.py b/debug_blueprint2.py
+new file mode 100644
+index 00000000..01497d61
+--- /dev/null
++++ b/debug_blueprint2.py
+@@ -0,0 +1,87 @@
++"""Debug script to understand the blueprint hierarchy."""
++from flask import Blueprint, Flask, request
++
++# Test nested blueprints
++app = Flask(__name__)
++parent = Blueprint("parent", __name__)
++child = Blueprint("child", __name__)
++
++@parent.route("/no")
++def parent_no():
++    from flask import abort
++    abort(403)
++
++@child.route("/no")
++def child_no():
++    from flask import abort
++    abort(403)
++
++@parent.errorhandler(403)
++def parent_forbidden(e):
++    return "Parent no", 403
++
++@child.errorhandler(403)
++def child_forbidden(e):
++    return "Child no", 403
++
++child.register_blueprint(parent, url_prefix="/parent")
++app.register_blueprint(child, url_prefix="/child")
++
++print("=== error_handler_spec keys ===")
++for key in app.error_handler_spec.keys():
++    print(f"  {key!r}")
++
++print("\n=== Testing with request context ===")
++with app.test_client() as client:
++    # Test parent endpoint
++    print("\n--- Parent endpoint ---")
++    response = client.get("/child/parent/no")
++    print(f"Status: {response.status_code}")
++    
++    # Test child endpoint
++    print("\n--- Child endpoint ---")
++    response = client.get("/child/no")
++    print(f"Status: {response.status_code}")
++
++# Test blueprints with dots
++print("\n\n=== Blueprints with dots ===")
++app2 = Flask(__name__)
++ui = Blueprint("app.ui", __name__, url_prefix="/ui")
++api = Blueprint("app.api", __name__, url_prefix="/api")
++
++@ui.route("/")
++def ui_index():
++    from flask import abort
++    abort(403)
++
++@api.route("/")
++def api_index():
++    from flask import abort
++    abort(403)
++
++@ui.errorhandler(403)
++def ui_forbidden(e):
++    return "UI no", 403
++
++@api.errorhandler(403)
++def api_forbidden(e):
++    return "API no", 403
++
++app2.register_blueprint(ui)
++app2.register_blueprint(api)
++
++print("=== error_handler_spec keys ===")
++for key in app2.error_handler_spec.keys():
++    print(f"  {key!r}")
++
++print("\n=== Testing with request context ===")
++with app2.test_client() as client:
++    # Test ui endpoint
++    print("\n--- UI endpoint ---")
++    response = client.get("/ui/")
++    print(f"Status: {response.status_code}")
++    
++    # Test api endpoint
++    print("\n--- API endpoint ---")
++    response = client.get("/api/")
++    print(f"Status: {response.status_code}")
+diff --git a/debug_nested3.py b/debug_nested3.py
+new file mode 100644
+index 00000000..97c25876
+--- /dev/null
++++ b/debug_nested3.py
+@@ -0,0 +1,52 @@
++"""Debug nested blueprint hierarchy - check error_handler_spec details."""
++from flask import Blueprint, Flask
++
++app = Flask(__name__)
++parent = Blueprint("parent", __name__)
++child = Blueprint("child", __name__)
++grandchild = Blueprint("grandchild", __name__)
++
++@parent.errorhandler(403)
++def forbidden(e):
++    return "Parent no", 403
++
++@parent.route("/")
++def parent_index():
++    return "Parent yes"
++
++@parent.route("/no")
++def parent_no():
++    from flask import abort
++    abort(403)
++
++@child.route("/")
++def child_index():
++    return "Child yes"
++
++@child.route("/no")
++def child_no():
++    from flask import abort
++    abort(403)
++
++@grandchild.errorhandler(403)
++def grandchild_forbidden(e):
++    return "Grandchild no", 403
++
++@grandchild.route("/")
++def grandchild_index():
++    return "Grandchild yes"
++
++@grandchild.route("/no")
++def grandchild_no():
++    from flask import abort
++    abort(403)
++
++child.register_blueprint(grandchild, url_prefix="/grandchild")
++parent.register_blueprint(child, url_prefix="/child")
++app.register_blueprint(parent, url_prefix="/parent")
++
++print("=== error_handler_spec details ===")
++for key, value in app.error_handler_spec.items():
++    print(f"  {key!r}:")
++    for code, handlers in value.items():
++        print(f"    {code}: {list(handlers.keys())}")
+diff --git a/debug_nested4.py b/debug_nested4.py
+new file mode 100644
+index 00000000..ef29fa77
+--- /dev/null
++++ b/debug_nested4.py
+@@ -0,0 +1,62 @@
++"""Debug nested blueprint hierarchy - check blueprint names."""
++from flask import Blueprint, Flask
++
++app = Flask(__name__)
++parent = Blueprint("parent", __name__)
++child = Blueprint("child", __name__)
++grandchild = Blueprint("grandchild", __name__)
++
++@parent.errorhandler(403)
++def forbidden(e):
++    return "Parent no", 403
++
++@parent.route("/")
++def parent_index():
++    return "Parent yes"
++
++@parent.route("/no")
++def parent_no():
++    from flask import abort
++    abort(403)
++
++@child.route("/")
++def child_index():
++    return "Child yes"
++
++@child.route("/no")
++def child_no():
++    from flask import abort
++    abort(403)
++
++@grandchild.errorhandler(403)
++def grandchild_forbidden(e):
++    return "Grandchild no", 403
++
++@grandchild.route("/")
++def grandchild_index():
++    return "Grandchild yes"
++
++@grandchild.route("/no")
++def grandchild_no():
++    from flask import abort
++    abort(403)
++
++print("Before registration:")
++print(f"  parent.name: {parent.name!r}")
++print(f"  child.name: {child.name!r}")
++print(f"  grandchild.name: {grandchild.name!r}")
++
++child.register_blueprint(grandchild, url_prefix="/grandchild")
++parent.register_blueprint(child, url_prefix="/child")
++app.register_blueprint(parent, url_prefix="/parent")
++
++print("\nAfter registration:")
++print(f"  parent.name: {parent.name!r}")
++print(f"  child.name: {child.name!r}")
++print(f"  grandchild.name: {grandchild.name!r}")
++
++print("\n=== error_handler_spec details ===")
++for key, value in app.error_handler_spec.items():
++    print(f"  {key!r}:")
++    for code, handlers in value.items():
++        print(f"    {code}: {list(handlers.keys())}")
+diff --git a/src/flask/app.py b/src/flask/app.py
+index f0f31486..7d56d294 100644
+--- a/src/flask/app.py
++++ b/src/flask/app.py
+@@ -2073,4 +2073,16 @@ class Flask(Scaffold):
+         if _request_ctx_stack.top.request.blueprint is None:
+             return []
+         else:
+-            return reversed(_request_ctx_stack.top.request.blueprint.split("."))
++            bp = _request_ctx_stack.top.request.blueprint
++            parts = bp.split(".")
++            if len(parts) > 1:
++                # Include the blueprint's own name (last component) for error
++                # handler lookup, as handlers are registered under the
++                # blueprint's own name, not the full dotted path. The
++                # blueprint's own name is checked before parent prefixes so
++                # it takes priority.
++                return [
++                    ".".join(parts[: i + 1]) for i in range(len(parts) - 1, 0, -1)
++                ] + [parts[-1]] + [parts[0]]
++            else:
++                return [bp]

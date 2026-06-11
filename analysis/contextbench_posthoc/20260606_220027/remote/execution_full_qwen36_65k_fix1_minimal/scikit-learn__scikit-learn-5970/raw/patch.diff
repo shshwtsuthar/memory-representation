@@ -1,0 +1,40 @@
+diff --git a/sklearn/decomposition/kernel_pca.py b/sklearn/decomposition/kernel_pca.py
+index bb91d0cbb..39768e927 100644
+--- a/sklearn/decomposition/kernel_pca.py
++++ b/sklearn/decomposition/kernel_pca.py
+@@ -198,8 +198,13 @@ class KernelPCA(BaseEstimator, TransformerMixin, _UnstableOn32BitMixin):
+             eigen_solver = self.eigen_solver
+ 
+         if eigen_solver == 'dense':
+-            self.lambdas_, self.alphas_ = linalg.eigh(
+-                K, eigvals=(K.shape[0] - n_components, K.shape[0] - 1))
++            # Always compute all eigenvalues to ensure deterministic output
++            # regardless of n_components value. Using eigvals parameter can
++            # produce different numerical results due to different LAPACK routines.
++            self.lambdas_, self.alphas_ = linalg.eigh(K)
++            # Select the top n_components eigenvalues (largest first)
++            self.lambdas_ = self.lambdas_[-n_components:]
++            self.alphas_ = self.alphas_[:, -n_components:]
+         elif eigen_solver == 'arpack':
+             random_state = check_random_state(self.random_state)
+             # initialize with [-1,1] as in ARPACK
+diff --git a/sklearn/decomposition/tests/test_kernel_pca.py b/sklearn/decomposition/tests/test_kernel_pca.py
+index 4e4c5cb2b..0795e4070 100644
+--- a/sklearn/decomposition/tests/test_kernel_pca.py
++++ b/sklearn/decomposition/tests/test_kernel_pca.py
+@@ -231,3 +231,15 @@ def test_nested_circles():
+     # The data is perfectly linearly separable in that space
+     train_score = Perceptron(max_iter=5).fit(X_kpca, y).score(X_kpca, y)
+     assert_equal(train_score, 1.0)
++
++
++def test_kernel_pca_consistent_eigenvalues():
++    # Check that specifying n_components produces the same eigenvalues
++    # and eigenvectors as not specifying n_components (all components).
++    # Regression test for https://github.com/scikit-learn/scikit-learn/issues/5970
++    X_circle, y_circle = make_circles(400, random_state=0, factor=0.3, noise=0.15)
++    kpca = KernelPCA(random_state=0).fit(X_circle)
++    kpca2 = KernelPCA(n_components=53, random_state=0).fit(X_circle)
++
++    assert_array_almost_equal(kpca.lambdas_[:50], kpca2.lambdas_[:50])
++    assert_array_almost_equal(kpca.alphas_[:2, :10], kpca2.alphas_[:2, :10])

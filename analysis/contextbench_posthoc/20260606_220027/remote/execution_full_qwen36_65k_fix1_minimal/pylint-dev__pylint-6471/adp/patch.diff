@@ -1,0 +1,61 @@
+diff --git a/pylint/lint/pylinter.py b/pylint/lint/pylinter.py
+index 53345a6b..5831667c 100644
+--- a/pylint/lint/pylinter.py
++++ b/pylint/lint/pylinter.py
+@@ -564,21 +564,53 @@ class PyLinter(
+             if not msg.may_be_emitted():
+                 self._msgs_state[msg.msgid] = False
+ 
+-    @staticmethod
+-    def _discover_files(files_or_modules: Sequence[str]) -> Iterator[str]:
++    def _discover_files(self, files_or_modules: Sequence[str]) -> Iterator[str]:
+         """Discover python modules and packages in sub-directory.
+ 
+         Returns iterator of paths to discovered modules and packages.
+         """
++        # Get ignore patterns from config
++        ignore_list = self.config.ignore
++        ignore_pattern_re = self.config.ignore_patterns
++        ignore_paths_re = self.config.ignore_paths
++
+         for something in files_or_modules:
+             if os.path.isdir(something) and not os.path.isfile(
+                 os.path.join(something, "__init__.py")
+             ):
+                 skip_subtrees: list[str] = []
+-                for root, _, files in os.walk(something):
++                for root, dirs, files in os.walk(something):
+                     if any(root.startswith(s) for s in skip_subtrees):
+                         # Skip subtree of already discovered package.
+                         continue
++
++                    # Check if directory should be ignored
++                    basename = os.path.basename(root)
++                    if basename in ignore_list:
++                        skip_subtrees.append(root)
++                        continue
++                    if any(pat.match(basename) for pat in ignore_pattern_re):
++                        skip_subtrees.append(root)
++                        continue
++                    if any(pat.search(root) for pat in ignore_paths_re):
++                        skip_subtrees.append(root)
++                        continue
++
++                    # Filter out ignored subdirectories from dirs to prevent os.walk
++                    # from descending into them
++                    dirs[:] = [
++                        d
++                        for d in dirs
++                        if not os.path.basename(os.path.join(root, d)) in ignore_list
++                        and not any(
++                            pat.match(os.path.basename(os.path.join(root, d)))
++                            for pat in ignore_pattern_re
++                        )
++                        and not any(
++                            pat.search(os.path.join(root, d)) for pat in ignore_paths_re
++                        )
++                    ]
++
+                     if "__init__.py" in files:
+                         skip_subtrees.append(root)
+                         yield root

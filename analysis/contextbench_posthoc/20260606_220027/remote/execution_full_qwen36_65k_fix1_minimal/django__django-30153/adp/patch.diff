@@ -1,0 +1,217 @@
+diff --git a/test_issue.py b/test_issue.py
+new file mode 100644
+index 0000000000..31ee930d90
+--- /dev/null
++++ b/test_issue.py
+@@ -0,0 +1,211 @@
++"""
++Test case for issue: ModelAdmin with custom widgets, inlines, and filter_horizontal 
++can merge media in broken order.
++
++When a ModelAdmin has an inline with a field that has its own media JS (no jquery),
++and has a one-to-many field showing filter_horizontal, the problem appears.
++There will be MediaOrderConflictWarning and inlines.js loads before jquery.
++"""
++import os
++import sys
++import warnings
++
++# Add testbed to path
++sys.path.insert(0, '/testbed')
++
++from django.forms import Media
++from django.forms.widgets import MediaOrderConflictWarning
++
++print("=" * 70)
++print("TEST: The core issue - merge with partial overlap")
++print("=" * 70)
++
++# The core issue: when list2 has elements that are NOT in list1,
++# they are inserted at the wrong position.
++
++# Example: ModelAdmin media (with filter_horizontal)
++modeladmin_js = [
++    'admin/js/vendor/jquery/jquery.js',
++    'admin/js/jquery.init.js',
++    'admin/js/core.js',
++    'admin/js/SelectBox.js',
++    'admin/js/SelectFilter2.js',
++]
++
++# InlineModelAdmin media (with filter_horizontal)
++inline_js = [
++    'admin/js/vendor/jquery/jquery.js',
++    'admin/js/jquery.init.js',
++    'admin/js/inlines.js',
++    'admin/js/SelectBox.js',
++    'admin/js/SelectFilter2.js',
++]
++
++print("\nModelAdmin JS:", modeladmin_js)
++print("Inline JS:", inline_js)
++
++# Merge them
++result = Media.merge(modeladmin_js, inline_js)
++print("\nMerged result:", result)
++
++# Check order
++jquery_idx = result.index('admin/js/vendor/jquery/jquery.js')
++jquery_init_idx = result.index('admin/js/jquery.init.js')
++inlines_idx = result.index('admin/js/inlines.js')
++selectbox_idx = result.index('admin/js/SelectBox.js')
++selectfilter_idx = result.index('admin/js/SelectFilter2.js')
++
++print(f"\njquery index: {jquery_idx}")
++print(f"jquery.init index: {jquery_init_idx}")
++print(f"inlines index: {inlines_idx}")
++print(f"SelectBox index: {selectbox_idx}")
++print(f"SelectFilter2 index: {selectfilter_idx}")
++
++# The expected order is: jquery, jquery.init, core, SelectBox, SelectFilter2, inlines
++# But the actual order might be: jquery, jquery.init, core, inlines, SelectBox, SelectFilter2
++# This is WRONG because inlines.js should come after SelectFilter2.js!
++
++if inlines_idx > selectfilter_idx:
++    print("\nPASS: inlines.js comes after SelectFilter2.js")
++else:
++    print(f"\nFAIL: inlines.js should come after SelectFilter2.js, but it comes before it!")
++    print("This is the bug! inlines.js should come after all elements from list1 that are also in list2.")
++
++# Now test with widget media
++print("\n" + "=" * 70)
++print("TEST: With widget media (no jquery)")
++print("=" * 70)
++
++widget_js = ['admin/js/custom-widget.js']
++
++print("\nWidget JS:", widget_js)
++
++# Merge modeladmin + inline + widget
++result2 = Media.merge(modeladmin_js, Media.merge(inline_js, widget_js))
++print("\nMerged result:", result2)
++
++# Check order
++jquery_idx2 = result2.index('admin/js/vendor/jquery/jquery.js')
++jquery_init_idx2 = result2.index('admin/js/jquery.init.js')
++inlines_idx2 = result2.index('admin/js/inlines.js')
++custom_idx2 = result2.index('admin/js/custom-widget.js')
++
++print(f"\njquery index: {jquery_idx2}")
++print(f"jquery.init index: {jquery_init_idx2}")
++print(f"inlines index: {inlines_idx2}")
++print(f"custom-widget index: {custom_idx2}")
++
++if inlines_idx2 > jquery_init_idx2:
++    print("\nPASS: inlines.js comes after jquery.init.js")
++else:
++    print(f"\nFAIL: inlines.js should come after jquery.init.js!")
++
++# Test the actual problematic scenario
++print("\n" + "=" * 70)
++print("TEST: The actual problematic scenario")
++print("=" * 70)
++
++# Scenario: 
++# 1. ModelAdmin has filter_horizontal (which adds SelectBox.js and SelectFilter2.js)
++# 2. Inline has its own media (jquery, jquery.init, inlines.js, SelectBox.js, SelectFilter2.js)
++# 3. Inline form has a field with custom widget media (no jquery)
++
++# The order of operations in admin/options.py:
++# media = self.media + adminForm.media
++# for inline_formset in inline_formsets:
++#     media = media + inline_formset.media
++
++# But the inline_formset.media includes:
++# - InlineModelAdmin.media (jquery, jquery.init, inlines.js, SelectBox.js, SelectFilter2.js)
++# - Formset.media (from form fields' widgets)
++
++# So the merge is:
++# ModelAdmin.media + InlineModelAdmin.media + widget_media
++
++# Let's simulate this:
++modeladmin_media = Media(js=[
++    'admin/js/vendor/jquery/jquery.js',
++    'admin/js/jquery.init.js',
++    'admin/js/core.js',
++    'admin/js/SelectBox.js',
++    'admin/js/SelectFilter2.js',
++])
++
++inline_media = Media(js=[
++    'admin/js/vendor/jquery/jquery.js',
++    'admin/js/jquery.init.js',
++    'admin/js/inlines.js',
++    'admin/js/SelectBox.js',
++    'admin/js/SelectFilter2.js',
++])
++
++widget_media = Media(js=[
++    'admin/js/custom-widget.js',
++])
++
++print("\nModelAdmin media:", modeladmin_media._js)
++print("Inline media:", inline_media._js)
++print("Widget media:", widget_media._js)
++
++# Merge them
++with warnings.catch_warnings(record=True) as w:
++    warnings.simplefilter("always")
++    result3 = modeladmin_media + inline_media + widget_media
++    if w:
++        print("\nWarnings:")
++        for warning in w:
++            print(f"  - {warning.message}")
++    else:
++        print("\nNo warnings")
++
++print("\nMerged result:", result3._js)
++
++# Check order
++jquery_idx3 = result3._js.index('admin/js/vendor/jquery/jquery.js')
++jquery_init_idx3 = result3._js.index('admin/js/jquery.init.js')
++inlines_idx3 = result3._js.index('admin/js/inlines.js')
++custom_idx3 = result3._js.index('admin/js/custom-widget.js')
++
++print(f"\njquery index: {jquery_idx3}")
++print(f"jquery.init index: {jquery_init_idx3}")
++print(f"inlines index: {inlines_idx3}")
++print(f"custom-widget index: {custom_idx3}")
++
++if inlines_idx3 > jquery_init_idx3:
++    print("\nPASS: inlines.js comes after jquery.init.js")
++else:
++    print("\nFAIL: inlines.js comes BEFORE jquery.init.js!")
++
++# Test the reverse order
++print("\n" + "=" * 70)
++print("TEST: Reverse order (widget + inline)")
++print("=" * 70)
++
++# Merge widget + inline first, then with modeladmin
++with warnings.catch_warnings(record=True) as w:
++    warnings.simplefilter("always")
++    result4 = modeladmin_media + widget_media + inline_media
++    if w:
++        print("\nWarnings:")
++        for warning in w:
++            print(f"  - {warning.message}")
++    else:
++        print("\nNo warnings")
++
++print("\nMerged result:", result4._js)
++
++# Check order
++jquery_idx4 = result4._js.index('admin/js/vendor/jquery/jquery.js')
++jquery_init_idx4 = result4._js.index('admin/js/jquery.init.js')
++inlines_idx4 = result4._js.index('admin/js/inlines.js')
++custom_idx4 = result4._js.index('admin/js/custom-widget.js')
++
++print(f"\njquery index: {jquery_idx4}")
++print(f"jquery.init index: {jquery_init_idx4}")
++print(f"inlines index: {inlines_idx4}")
++print(f"custom-widget index: {custom_idx4}")
++
++if inlines_idx4 > jquery_init_idx4:
++    print("\nPASS: inlines.js comes after jquery.init.js")
++else:
++    print("\nFAIL: inlines.js comes BEFORE jquery.init.js!")

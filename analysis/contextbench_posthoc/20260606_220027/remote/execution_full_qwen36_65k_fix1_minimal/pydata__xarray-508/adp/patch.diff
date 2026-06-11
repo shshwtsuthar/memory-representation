@@ -1,0 +1,202 @@
+diff --git a/test_issue.py b/test_issue.py
+new file mode 100644
+index 00000000..90bccb4a
+--- /dev/null
++++ b/test_issue.py
+@@ -0,0 +1,49 @@
++"""Test for concatenating datasets with different variables."""
++import numpy as np
++import xarray as xr
++
++# Test 1: Basic case - datasets with different variables
++print("Test 1: Concatenating datasets with different variables...")
++ds1 = xr.Dataset({"a": (("x", "y"), [[1, 2, 3]])})
++ds2 = xr.Dataset({"b": (("x", "y"), [[4, 5, 6]])})
++
++try:
++    result = xr.concat([ds1, ds2], dim='x')
++    print(f"Success! Result has variables: {list(result.data_vars)}")
++    print(f"Variable 'a' values:\n{result['a'].values}")
++    print(f"Variable 'b' values:\n{result['b'].values}")
++except Exception as e:
++    print(f"Concatenation failed with error: {e}")
++
++# Test 2: With join='inner' - should exclude variables not in all datasets
++print("\nTest 2: Testing with join='inner'...")
++try:
++    result = xr.concat([ds1, ds2], dim='x', join='inner')
++    print(f"Success! Result has variables: {list(result.data_vars)}")
++except Exception as e:
++    print(f"Failed with error: {e}")
++
++# Test 3: With one dataset having an extra variable
++print("\nTest 3: One dataset with extra variable...")
++ds3 = xr.Dataset({"a": (("x", "y"), [[1, 2, 3]]), "c": (("x", "y"), [[7, 8, 9]])})
++ds4 = xr.Dataset({"a": (("x", "y"), [[10, 11, 12]])})
++
++try:
++    result = xr.concat([ds3, ds4], dim='x')
++    print(f"Success! Result has variables: {list(result.data_vars)}")
++    print(f"Variable 'a' values:\n{result['a'].values}")
++    print(f"Variable 'c' values:\n{result['c'].values}")
++except Exception as e:
++    print(f"Failed with error: {e}")
++
++# Test 4: Verify NaN fill values
++print("\nTest 4: Verifying NaN fill values...")
++ds5 = xr.Dataset({"a": (("x", "y"), [[1, 2, 3]])})
++ds6 = xr.Dataset({"a": (("x", "y"), [[4, 5, 6]])})
++
++try:
++    result = xr.concat([ds5, ds6], dim='x')
++    print(f"Success! Result has variables: {list(result.data_vars)}")
++    print(f"Variable 'a' values:\n{result['a'].values}")
++except Exception as e:
++    print(f"Failed with error: {e}")
+diff --git a/xarray/core/concat.py b/xarray/core/concat.py
+index 2eea2ecb..85f00d5c 100644
+--- a/xarray/core/concat.py
++++ b/xarray/core/concat.py
+@@ -2,6 +2,7 @@ from __future__ import annotations
+ 
+ from typing import TYPE_CHECKING, Any, Hashable, Iterable, cast, overload
+ 
++import numpy as np
+ import pandas as pd
+ 
+ from xarray.core import dtypes, utils
+@@ -557,10 +558,59 @@ def _dataset_concat(
+     # n.b. this loop preserves variable order, needed for groupby.
+     for name in datasets[0].variables:
+         if name in concat_over and name not in result_indexes:
+-            try:
+-                vars = ensure_common_dims([ds[name].variable for ds in datasets])
+-            except KeyError:
+-                raise ValueError(f"{name!r} is not present in all datasets.")
++            # Check which datasets have this variable
++            vars_by_dataset = []
++            datasets_with_var = []
++            for i, ds in enumerate(datasets):
++                if name in ds.variables:
++                    vars_by_dataset.append(ds[name].variable)
++                    datasets_with_var.append(i)
++            
++            # Handle missing variables based on join parameter
++            if len(datasets_with_var) < len(datasets):
++                if join == 'exact':
++                    absent_datasets = [i for i in range(len(datasets)) if i not in datasets_with_var]
++                    raise ValueError(
++                        f"{name!r} is not present in all datasets (missing in datasets {absent_datasets})."
++                    )
++                elif join == 'inner':
++                    # Skip variables not present in all datasets for inner join
++                    continue
++                else:
++                    # For outer/left/right join, create dummy variables for missing datasets
++                    # Get the reference variable from the first dataset that has this variable
++                    ref_ds_idx = datasets_with_var[0]
++                    ref_var = vars_by_dataset[0]
++                    
++                    # Get the fill value for this variable's dtype
++                    if isinstance(fill_value, dict):
++                        ref_fill = fill_value.get(name, dtypes.get_fill_value(ref_var.dtype))
++                    else:
++                        ref_fill = fill_value
++                    
++                    # Create dummy variables for datasets that don't have this variable
++                    full_vars = []
++                    for i, ds in enumerate(datasets):
++                        if name in ds.variables:
++                            full_vars.append(ds[name].variable)
++                        else:
++                            # Create a dummy variable with the appropriate shape and fill value
++                            # Use the promoted dtype that can hold the fill value
++                            common_dims = tuple(pd.unique([d for v in vars_by_dataset for d in v.dims]))
++                            if dim not in common_dims:
++                                common_dims = (dim,) + common_dims
++                            common_shape = tuple(dims_sizes.get(d, concat_dim_lengths[i]) for d in common_dims)
++                            promoted_dtype, fill = dtypes.maybe_promote(ref_var.dtype)
++                            dummy_data = np.full(common_shape, fill, dtype=promoted_dtype)
++                            dummy_var = Variable(common_dims, dummy_data, attrs=ref_var.attrs)
++                            full_vars.append(dummy_var)
++                    
++                    vars = ensure_common_dims(full_vars)
++                    combined_var = concat_vars(vars, dim, positions, combine_attrs=combine_attrs)
++                    result_vars[name] = combined_var
++                    continue
++            
++            vars = ensure_common_dims(vars_by_dataset)
+ 
+             # Try concatenate the indexes, concatenate the variables when no index
+             # is found on all datasets.
+@@ -595,6 +645,70 @@ def _dataset_concat(
+             # preserves original variable order
+             result_vars[name] = result_vars.pop(name)
+ 
++    # Handle variables that are present in some datasets but not in the first dataset
++    # These need to be included for outer/left/right join
++    all_var_names = set()
++    for ds in datasets:
++        all_var_names.update(ds.variables.keys())
++    
++    for name in all_var_names:
++        if name not in datasets[0].variables and name not in result_vars and name not in result_indexes:
++            # Check if this variable should be concatenated
++            if name in concat_over:
++                # Get all datasets that have this variable
++                vars_by_dataset = []
++                datasets_with_var = []
++                for i, ds in enumerate(datasets):
++                    if name in ds.variables:
++                        vars_by_dataset.append(ds[name].variable)
++                        datasets_with_var.append(i)
++                
++                if len(datasets_with_var) < len(datasets):
++                    if join == 'exact':
++                        absent_datasets = [i for i in range(len(datasets)) if i not in datasets_with_var]
++                        raise ValueError(
++                            f"{name!r} is not present in all datasets (missing in datasets {absent_datasets})."
++                        )
++                    elif join == 'inner':
++                        # Skip variables not present in all datasets for inner join
++                        continue
++                    else:
++                        # For outer/left/right join, create dummy variables for missing datasets
++                        ref_ds_idx = datasets_with_var[0]
++                        ref_var = vars_by_dataset[0]
++                        
++                        # Get the fill value for this variable's dtype
++                        if isinstance(fill_value, dict):
++                            ref_fill = fill_value.get(name, dtypes.get_fill_value(ref_var.dtype))
++                        else:
++                            ref_fill = fill_value
++                        
++                        # Create dummy variables for datasets that don't have this variable
++                        full_vars = []
++                        for i, ds in enumerate(datasets):
++                            if name in ds.variables:
++                                full_vars.append(ds[name].variable)
++                            else:
++                                # Create a dummy variable with the appropriate shape and fill value
++                                common_dims = tuple(pd.unique([d for v in vars_by_dataset for d in v.dims]))
++                                if dim not in common_dims:
++                                    common_dims = (dim,) + common_dims
++                                common_shape = tuple(dims_sizes.get(d, concat_dim_lengths[i]) for d in common_dims)
++                                promoted_dtype, fill = dtypes.maybe_promote(ref_var.dtype)
++                                dummy_data = np.full(common_shape, fill, dtype=promoted_dtype)
++                                dummy_var = Variable(common_dims, dummy_data, attrs=ref_var.attrs)
++                                full_vars.append(dummy_var)
++                        
++                        vars = ensure_common_dims(full_vars)
++                        combined_var = concat_vars(vars, dim, positions, combine_attrs=combine_attrs)
++                        result_vars[name] = combined_var
++                        result_indexes[name] = None  # No index for this variable
++                else:
++                    # Variable is present in all datasets, concatenate normally
++                    vars = ensure_common_dims(vars_by_dataset)
++                    combined_var = concat_vars(vars, dim, positions, combine_attrs=combine_attrs)
++                    result_vars[name] = combined_var
++
+     result = type(datasets[0])(result_vars, attrs=result_attrs)
+ 
+     absent_coord_names = coord_names - set(result.variables)

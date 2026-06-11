@@ -1,0 +1,134 @@
+diff --git a/test_issue.py b/test_issue.py
+new file mode 100644
+index 00000000..c2ff01e1
+--- /dev/null
++++ b/test_issue.py
+@@ -0,0 +1,110 @@
++"""Test for Dataset constructor with DataArray triggering computation issue."""
++import numpy as np
++import xarray as xr
++
++try:
++    import dask.array as da
++    HAS_DASK = True
++except ImportError:
++    HAS_DASK = False
++
++
++def test_dataset_constructor_with_dataarray_and_dims_tuple():
++    """Test that Dataset(dict(a=(('x', 'y'), da))) preserves dask arrays."""
++    if not HAS_DASK:
++        print("SKIP: dask not available")
++        return
++    
++    # Create a chunked dask array
++    x = da.random.randint(1, 10, size=(100, 25))
++    assert hasattr(x, 'chunks'), "x should be a chunked dask array"
++    
++    # Create a DataArray with the dask array
++    da_arr = xr.DataArray(x, dims=('x', 'y'))
++    
++    # Now create a Dataset with explicit dims tuple - this is the problematic case
++    ds = xr.Dataset(dict(a=(('x', 'y'), da_arr)))
++    
++    # Check that the data is still a dask array (not computed)
++    result_data = ds['a'].data
++    assert hasattr(result_data, 'chunks'), f"Expected dask array with chunks, got {type(result_data)}"
++    
++    print("PASS: Dataset constructor preserves dask arrays when dims tuple is used")
++
++
++def test_dataset_constructor_with_dataarray_directly():
++    """Test that Dataset(dict(a=da)) preserves dask arrays (should already work)."""
++    if not HAS_DASK:
++        print("SKIP: dask not available")
++        return
++    
++    x = da.random.randint(1, 10, size=(100, 25))
++    da_arr = xr.DataArray(x, dims=('x', 'y'))
++    
++    # Create Dataset with DataArray directly (not as tuple)
++    ds = xr.Dataset(dict(a=da_arr))
++    
++    result_data = ds['a'].data
++    assert hasattr(result_data, 'chunks'), f"Expected dask array with chunks, got {type(result_data)}"
++    
++    print("PASS: Dataset constructor preserves dask arrays when DataArray is used directly")
++
++
++def test_variable_from_dataarray_with_explicit_dims():
++    """Test that Variable(dims, DataArray) preserves dask arrays."""
++    if not HAS_DASK:
++        print("SKIP: dask not available")
++        return
++    
++    x = da.random.randint(1, 10, size=(100, 25))
++    da_arr = xr.DataArray(x, dims=('x', 'y'))
++    
++    from xarray.core.variable import Variable
++    
++    # This is what happens internally when you pass (dims, DataArray) tuple
++    var = Variable(('x', 'y'), da_arr)
++    
++    result_data = var._data
++    assert hasattr(result_data, 'chunks'), f"Expected dask array with chunks, got {type(result_data)}"
++    
++    print("PASS: Variable constructor preserves dask arrays from DataArray")
++
++
++def test_regular_numpy_arrays_still_work():
++    """Test that regular numpy arrays still work correctly."""
++    np_data = np.random.randn(10, 5)
++    da_arr = xr.DataArray(np_data, dims=('x', 'y'))
++    
++    ds = xr.Dataset(dict(a=(('x', 'y'), da_arr)))
++    
++    result_data = ds['a'].data
++    assert isinstance(result_data, np.ndarray), f"Expected numpy array, got {type(result_data)}"
++    
++    print("PASS: Regular numpy arrays still work correctly")
++
++
++if __name__ == '__main__':
++    print("Testing Dataset constructor with DataArray and dims tuple...")
++    print("=" * 60)
++    
++    try:
++        test_dataset_constructor_with_dataarray_directly()
++    except AssertionError as e:
++        print(f"FAIL: test_dataset_constructor_with_dataarray_directly - {e}")
++    
++    try:
++        test_variable_from_dataarray_with_explicit_dims()
++    except AssertionError as e:
++        print(f"FAIL: test_variable_from_dataarray_with_explicit_dims - {e}")
++    
++    try:
++        test_dataset_constructor_with_dataarray_and_dims_tuple()
++    except AssertionError as e:
++        print(f"FAIL: test_dataset_constructor_with_dataarray_and_dims_tuple - {e}")
++    
++    try:
++        test_regular_numpy_arrays_still_work()
++    except AssertionError as e:
++        print(f"FAIL: test_regular_numpy_arrays_still_work - {e}")
++    
++    print("=" * 60)
+diff --git a/xarray/core/variable.py b/xarray/core/variable.py
+index 64c1895d..168163f6 100644
+--- a/xarray/core/variable.py
++++ b/xarray/core/variable.py
+@@ -204,6 +204,13 @@ def as_compatible_data(data, fastpath=False):
+     if isinstance(data, Variable):
+         return data.data
+ 
++    # Handle DataArray by extracting its underlying data without triggering
++    # computation (e.g., for dask arrays, .values would compute the array)
++    from .dataarray import DataArray
++
++    if isinstance(data, DataArray):
++        return data.variable._data
++
+     if isinstance(data, NON_NUMPY_SUPPORTED_ARRAY_TYPES):
+         return _maybe_wrap_data(data)
+ 

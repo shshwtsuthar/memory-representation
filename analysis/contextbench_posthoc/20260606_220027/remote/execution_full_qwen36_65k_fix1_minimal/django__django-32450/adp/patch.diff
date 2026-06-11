@@ -1,0 +1,89 @@
+diff --git a/django/db/models/query_utils.py b/django/db/models/query_utils.py
+index c2623f099f..61d4b6b984 100644
+--- a/django/db/models/query_utils.py
++++ b/django/db/models/query_utils.py
+@@ -26,6 +26,31 @@ def subclasses(cls):
+         yield from subclasses(subclass)
+ 
+ 
++def _get_children(args, kwargs):
++    """
++    Convert non-pickleable iterables (e.g., dict_keys, dict_values, dict_items)
++    to tuples to avoid issues when Q objects are combined with | or & operators.
++    """
++    children = []
++    for arg in args:
++        if isinstance(arg, (dict_keys, dict_values, dict_items)):
++            children.append(tuple(arg))
++        else:
++            children.append(arg)
++    for key, value in sorted(kwargs.items()):
++        if isinstance(value, (dict_keys, dict_values, dict_items)):
++            children.append((key, tuple(value)))
++        else:
++            children.append((key, value))
++    return children
++
++
++# dict view types that cannot be pickled
++dict_keys = dict.keys({}).__class__
++dict_values = dict.values({}).__class__
++dict_items = dict.items({}).__class__
++
++
+ class Q(tree.Node):
+     """
+     Encapsulate filters as objects that can then be combined logically (using
+@@ -38,7 +63,11 @@ class Q(tree.Node):
+     conditional = True
+ 
+     def __init__(self, *args, _connector=None, _negated=False, **kwargs):
+-        super().__init__(children=[*args, *sorted(kwargs.items())], connector=_connector, negated=_negated)
++        super().__init__(
++            children=_get_children(args, kwargs),
++            connector=_connector,
++            negated=_negated,
++        )
+ 
+     def _combine(self, other, conn):
+         if not isinstance(other, Q):
+diff --git a/tests/queries/test_q.py b/tests/queries/test_q.py
+index 9adff07ef2..9f35cf5325 100644
+--- a/tests/queries/test_q.py
++++ b/tests/queries/test_q.py
+@@ -103,3 +103,35 @@ class QTests(SimpleTestCase):
+         q = q1 & q2
+         path, args, kwargs = q.deconstruct()
+         self.assertEqual(Q(*args, **kwargs), q)
++
++    def test_combine_with_non_pickleable_iterable(self):
++        # dict_keys, dict_values, and dict_items cannot be pickled
++        # but should work with Q objects and the | and & operators
++        empty_dict = {}
++        q_with_dict_keys = Q(x__in=empty_dict.keys())
++        q_with_dict_values = Q(x__in=empty_dict.values())
++        q_with_dict_items = Q(x__in=empty_dict.items())
++
++        # Test | operator
++        self.assertEqual(Q() | q_with_dict_keys, q_with_dict_keys)
++        self.assertEqual(q_with_dict_keys | Q(), q_with_dict_keys)
++        self.assertEqual(Q() | q_with_dict_values, q_with_dict_values)
++        self.assertEqual(q_with_dict_values | Q(), q_with_dict_values)
++        self.assertEqual(Q() | q_with_dict_items, q_with_dict_items)
++        self.assertEqual(q_with_dict_items | Q(), q_with_dict_items)
++
++        # Test & operator
++        self.assertEqual(Q() & q_with_dict_keys, q_with_dict_keys)
++        self.assertEqual(q_with_dict_keys & Q(), q_with_dict_keys)
++        self.assertEqual(Q() & q_with_dict_values, q_with_dict_values)
++        self.assertEqual(q_with_dict_values & Q(), q_with_dict_values)
++        self.assertEqual(Q() & q_with_dict_items, q_with_dict_items)
++        self.assertEqual(q_with_dict_items & Q(), q_with_dict_items)
++
++        # Test combining two Q objects with non-pickleable iterables
++        q1 = Q(x__in=empty_dict.keys())
++        q2 = Q(y__in=empty_dict.values())
++        combined_or = q1 | q2
++        combined_and = q1 & q2
++        self.assertIsNotNone(combined_or)
++        self.assertIsNotNone(combined_and)

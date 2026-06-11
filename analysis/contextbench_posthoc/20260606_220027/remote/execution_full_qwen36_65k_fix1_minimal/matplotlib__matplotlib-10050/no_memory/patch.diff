@@ -1,0 +1,101 @@
+diff --git a/lib/matplotlib/legend.py b/lib/matplotlib/legend.py
+index 60b6075a8..3d65688a0 100644
+--- a/lib/matplotlib/legend.py
++++ b/lib/matplotlib/legend.py
+@@ -32,6 +32,7 @@ from matplotlib import rcParams
+ from matplotlib import docstring
+ from matplotlib.artist import Artist, allow_rasterization
+ from matplotlib.cbook import silent_list, is_hashable
++from matplotlib.cbook.deprecation import MatplotlibDeprecationWarning, warn_deprecated
+ import matplotlib.colors as colors
+ from matplotlib.font_manager import FontProperties
+ from matplotlib.lines import Line2D
+@@ -1110,6 +1111,36 @@ class Legend(Artist):
+     def contains(self, event):
+         return self.legendPatch.contains(event)
+ 
++    def get_draggable(self):
++        """
++        Return the draggable state of the legend.
++
++        Returns
++        -------
++        None or `.DraggableLegend`
++            None if the legend is not draggable, otherwise a
++            `.DraggableLegend` instance.
++        """
++        return self._draggable
++
++    def set_draggable(self, state):
++        """
++        Set the draggable state of the legend.
++
++        Parameters
++        ----------
++        state : bool
++            If True, make the legend draggable. If False, make the legend
++            not draggable.
++        """
++        if state:
++            if self._draggable is None:
++                self._draggable = DraggableLegend(self, update="loc")
++        else:
++            if self._draggable is not None:
++                self._draggable.disconnect()
++            self._draggable = None
++
+     def draggable(self, state=None, use_blit=False, update="loc"):
+         """
+         Set the draggable state -- if state is
+@@ -1127,7 +1158,15 @@ class Legend(Artist):
+         The update parameter control which parameter of the legend changes
+         when dragged. If update is "loc", the *loc* parameter of the legend
+         is changed. If "bbox", the *bbox_to_anchor* parameter is changed.
++
++        .. deprecated:: 3.3
++            The *use_blit* and *update* arguments are deprecated.
++            Use :meth:`set_draggable` instead.
+         """
++        warn_deprecated('3.3',
++                        name='Legend.draggable',
++                        alternative='Legend.set_draggable',
++                        obj_type='method')
+         is_draggable = self._draggable is not None
+ 
+         # if state is None we'll toggle
+diff --git a/lib/matplotlib/tests/test_legend.py b/lib/matplotlib/tests/test_legend.py
+index 1308770d3..606f77afa 100644
+--- a/lib/matplotlib/tests/test_legend.py
++++ b/lib/matplotlib/tests/test_legend.py
+@@ -511,3 +511,31 @@ def test_legend_title_fontsize():
+     ax.plot(range(10))
+     leg = ax.legend(title='Aardvark', title_fontsize=22)
+     assert leg.get_title().get_fontsize() == 22
++
++
++def test_legend_draggable_api():
++    # Test the new Legend.set_draggable and Legend.get_draggable API
++    fig, ax = plt.subplots()
++    ax.plot(range(10), label='test')
++    leg = ax.legend()
++
++    # Initially, draggable should be None
++    assert leg.get_draggable() is None
++
++    # Set draggable to True
++    leg.set_draggable(True)
++    assert leg.get_draggable() is not None
++
++    # Set draggable to False
++    leg.set_draggable(False)
++    assert leg.get_draggable() is None
++
++
++def test_legend_draggable_deprecated():
++    # Test that Legend.draggable() is deprecated
++    fig, ax = plt.subplots()
++    ax.plot(range(10), label='test')
++    leg = ax.legend()
++
++    with pytest.warns(mpl.cbook.deprecation.MatplotlibDeprecationWarning):
++        leg.draggable(True)

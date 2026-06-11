@@ -1,0 +1,266 @@
+diff --git a/lib/matplotlib/cbook.py b/lib/matplotlib/cbook.py
+index 1a64331e20..cfe471e6b2 100644
+--- a/lib/matplotlib/cbook.py
++++ b/lib/matplotlib/cbook.py
+@@ -786,61 +786,63 @@ class Grouper:
+     """
+ 
+     def __init__(self, init=()):
+-        self._mapping = {weakref.ref(x): [weakref.ref(x)] for x in init}
++        self._mapping = weakref.WeakKeyDictionary()
++        self._keys = []  # Keep strong references to keys
++        for x in init:
++            self._mapping[x] = weakref.WeakSet([x])
++            self._keys.append(x)
+ 
+     def __getstate__(self):
+         return {
+-            **vars(self),
+-            # Convert weak refs to strong ones.
+-            "_mapping": {k(): [v() for v in vs] for k, vs in self._mapping.items()},
++            "_mapping": {k: list(v) for k, v in self._mapping.items()},
++            "_keys": self._keys,
+         }
+ 
+     def __setstate__(self, state):
+-        vars(self).update(state)
+-        # Convert strong refs to weak ones.
+-        self._mapping = {weakref.ref(k): [*map(weakref.ref, vs)]
+-                         for k, vs in self._mapping.items()}
++        self._mapping = weakref.WeakKeyDictionary()
++        self._keys = state["_keys"]
++        for k, vs in state["_mapping"].items():
++            self._mapping[k] = weakref.WeakSet(vs)
+ 
+     def __contains__(self, item):
+-        return weakref.ref(item) in self._mapping
+-
+-    def clean(self):
+-        """Clean dead weak references from the dictionary."""
+-        mapping = self._mapping
+-        to_drop = [key for key in mapping if key() is None]
+-        for key in to_drop:
+-            val = mapping.pop(key)
+-            val.remove(key)
++        return item in self._mapping
+ 
+     def join(self, a, *args):
+         """
+         Join given arguments into the same set.  Accepts one or more arguments.
+         """
+         mapping = self._mapping
+-        set_a = mapping.setdefault(weakref.ref(a), [weakref.ref(a)])
++
++        if a not in mapping:
++            mapping[a] = weakref.WeakSet([a])
++            self._keys.append(a)
++        set_a = mapping[a]
+ 
+         for arg in args:
+-            set_b = mapping.get(weakref.ref(arg), [weakref.ref(arg)])
++            if arg not in mapping:
++                mapping[arg] = weakref.WeakSet([arg])
++                self._keys.append(arg)
++            set_b = mapping[arg]
+             if set_b is not set_a:
+                 if len(set_b) > len(set_a):
+                     set_a, set_b = set_b, set_a
+-                set_a.extend(set_b)
+-                for elem in set_b:
+-                    mapping[elem] = set_a
+-
+-        self.clean()
++                # Move all items from set_b to set_a
++                items_b = list(set_b)
++                for item in items_b:
++                    set_a.add(item)
++                    mapping[item] = set_a
++                set_b.clear()
+ 
+     def joined(self, a, b):
+         """Return whether *a* and *b* are members of the same set."""
+-        self.clean()
+-        return (self._mapping.get(weakref.ref(a), object())
+-                is self._mapping.get(weakref.ref(b)))
++        if a not in self._mapping or b not in self._mapping:
++            return False
++        return self._mapping[a] is self._mapping[b]
+ 
+     def remove(self, a):
+-        self.clean()
+-        set_a = self._mapping.pop(weakref.ref(a), None)
++        set_a = self._mapping.pop(a, None)
+         if set_a:
+-            set_a.remove(weakref.ref(a))
++            set_a.clear()
+ 
+     def __iter__(self):
+         """
+@@ -848,16 +850,15 @@ class Grouper:
+ 
+         The iterator is invalid if interleaved with calls to join().
+         """
+-        self.clean()
+         unique_groups = {id(group): group for group in self._mapping.values()}
+         for group in unique_groups.values():
+-            yield [x() for x in group]
++            yield list(group)
+ 
+     def get_siblings(self, a):
+         """Return all of the items joined with *a*, including itself."""
+-        self.clean()
+-        siblings = self._mapping.get(weakref.ref(a), [weakref.ref(a)])
+-        return [x() for x in siblings]
++        if a in self._mapping:
++            return list(self._mapping[a])
++        return [a]
+ 
+ 
+ class GrouperView:
+diff --git a/lib/matplotlib/tests/test_cbook.py b/lib/matplotlib/tests/test_cbook.py
+index aa5c999b70..da9c187a32 100644
+--- a/lib/matplotlib/tests/test_cbook.py
++++ b/lib/matplotlib/tests/test_cbook.py
+@@ -1,7 +1,6 @@
+ import itertools
+ import pickle
+ 
+-from weakref import ref
+ from unittest.mock import patch, Mock
+ 
+ from datetime import datetime, date, timedelta
+@@ -590,11 +589,11 @@ def test_grouper_private():
+     mapping = g._mapping
+ 
+     for o in objs:
+-        assert ref(o) in mapping
++        assert o in mapping
+ 
+-    base_set = mapping[ref(objs[0])]
++    base_set = mapping[objs[0]]
+     for o in objs[1:]:
+-        assert mapping[ref(o)] is base_set
++        assert mapping[o] is base_set
+ 
+ 
+ def test_flatiter():
+diff --git a/test_grouper_pickle.py b/test_grouper_pickle.py
+new file mode 100644
+index 0000000000..d275bec4d2
+--- /dev/null
++++ b/test_grouper_pickle.py
+@@ -0,0 +1,114 @@
++"""Test that Grouper can be pickled and unpickled correctly."""
++import pickle
++import weakref
++from matplotlib.cbook import Grouper
++
++
++class Foo:
++    def __init__(self, s):
++        self.s = s
++
++    def __repr__(self):
++        return self.s
++
++
++def test_grouper_pickle():
++    """Test that Grouper can be pickled and unpickled."""
++    a, b, c, d, e = [Foo(x) for x in 'abcde']
++    grp = Grouper()
++    grp.join(a, b)
++    grp.join(b, c)
++    grp.join(d, e)
++
++    # Check groups before pickling
++    groups_before = [list(g) for g in grp]
++    print(f"Groups before pickling: {groups_before}")
++    assert len(groups_before) == 2
++
++    # Pickle and unpickle
++    pickled = pickle.dumps(grp)
++    grp2 = pickle.loads(pickled)
++
++    # Check groups after unpickling
++    groups_after = [list(g) for g in grp2]
++    print(f"Groups after unpickling: {groups_after}")
++    assert len(groups_after) == 2
++
++    # Check that grouping is preserved
++    assert grp2.joined(a, b) is True
++    assert grp2.joined(a, c) is True
++    assert grp2.joined(a, d) is False
++    assert grp2.joined(d, e) is True
++
++    # Check that the objects are the same (not new objects)
++    assert grp2.joined(a, a) is True
++
++    print("SUCCESS: Grouper pickled and unpickled correctly!")
++
++
++def test_grouper_weakref_behavior():
++    """Test that dead weak references are automatically cleaned up."""
++    grp = Grouper()
++    
++    class Foo:
++        def __init__(self, s):
++            self.s = s
++        def __repr__(self):
++            return self.s
++    
++    a = Foo('a')
++    b = Foo('b')
++    grp.join(a, b)
++    
++    # Check that a and b are joined
++    assert grp.joined(a, b) is True
++    
++    # Delete a
++    del a
++    
++    # b should still be in the grouper (weakref to b is still valid)
++    # but the group should be empty or contain only b
++    groups = list(grp)
++    print(f"Groups after deleting a: {groups}")
++    
++    # The group should still exist but with only b
++    assert len(groups) == 1
++    assert len(groups[0]) == 1
++    assert groups[0][0].s == 'b'
++    
++    print("SUCCESS: Weak reference cleanup works correctly!")
++
++
++def test_figure_align_labels_pickle():
++    """Test that figures with align_labels can be pickled."""
++    import matplotlib.pyplot as plt
++    
++    fig = plt.figure()
++    ax1 = fig.add_subplot(211)
++    ax2 = fig.add_subplot(212)
++    time = [0, 1, 2, 3, 4]
++    speed = [40000, 4300, 4500, 4700, 4800]
++    acc = [10, 11, 12, 13, 14]
++    ax1.plot(time, speed)
++    ax1.set_ylabel('speed')
++    ax2.plot(time, acc)
++    ax2.set_ylabel('acc')
++    
++    fig.align_labels()
++    
++    # This should not raise TypeError
++    pickled = pickle.dumps(fig)
++    fig2 = pickle.loads(pickled)
++    
++    assert len(fig2.axes) == 2
++    print("SUCCESS: Figure with align_labels can be pickled!")
++    
++    plt.close(fig)
++    plt.close(fig2)
++
++
++if __name__ == '__main__':
++    test_grouper_pickle()
++    test_grouper_weakref_behavior()
++    test_figure_align_labels_pickle()
++    print("\n=== ALL TESTS PASSED! ===")

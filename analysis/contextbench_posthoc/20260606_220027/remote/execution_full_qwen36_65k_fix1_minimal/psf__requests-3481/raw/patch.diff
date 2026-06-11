@@ -1,0 +1,27 @@
+diff --git a/requests/utils.py b/requests/utils.py
+index 6a3ed90e..a34c616d 100644
+--- a/requests/utils.py
++++ b/requests/utils.py
+@@ -369,8 +369,20 @@ def stream_decode_response_unicode(iterator, r):
+     """Stream decodes a iterator."""
+ 
+     if r.encoding is None:
+-        for item in iterator:
+-            yield item
++        # If encoding is None, use apparent_encoding (detected by chardet)
++        if r.apparent_encoding is not None:
++            decoder = codecs.getincrementaldecoder(r.apparent_encoding)(errors='replace')
++            for chunk in iterator:
++                rv = decoder.decode(chunk)
++                if rv:
++                    yield rv
++            rv = decoder.decode(b'', final=True)
++            if rv:
++                yield rv
++        else:
++            # If we can't detect encoding, just pass through
++            for item in iterator:
++                yield item
+         return
+ 
+     decoder = codecs.getincrementaldecoder(r.encoding)(errors='replace')

@@ -1,0 +1,121 @@
+diff --git a/sympy/sets/fancysets.py b/sympy/sets/fancysets.py
+index 1940d80ac6..05540a3fda 100644
+--- a/sympy/sets/fancysets.py
++++ b/sympy/sets/fancysets.py
+@@ -425,10 +425,17 @@ def _contains(self, other):
+                     msgset = dom
+                     other = e - o
+                     dom = dom.intersection(solveset(e - o, x, domain=dom))
+-                    if not dom:
++                    if dom is S.EmptySet:
+                         # there is no solution in common
+                         return False
+-                return not isinstance(dom, Intersection)
++                if dom is S.EmptySet:
++                    return False
++                elif isinstance(dom, Intersection):
++                    # dom is an Intersection, so we can't determine
++                    # if the element is in the set without further
++                    # analysis (e.g., unk elements might be in dom)
++                    return
++                return True
+         for soln in solns:
+             try:
+                 if soln in self.base_set:
+diff --git a/sympy/sets/sets.py b/sympy/sets/sets.py
+index be1900fc54..2f6439368c 100644
+--- a/sympy/sets/sets.py
++++ b/sympy/sets/sets.py
+@@ -1385,17 +1385,31 @@ def _handle_finite_sets(args):
+                 *symbolic_s_list, evaluate=False)
+             while fs_args:
+                 v = fs_args.pop()
++                # Get symbolic elements of v
++                symbolic_v_list = [x for x in v if x.has(Symbol)]
++                # Find additional symbolic elements in v that are not in s
++                additional_symbolic = [sym for sym in symbolic_v_list
++                    if sym not in symbolic_s_list]
+                 if all(i == j for i, j in zip_longest(
+                         symbolic_s_list,
+                         (x for x in v if x.has(Symbol)))):
+-                    # all the symbolic elements of `v` are the same
+-                    # as in `s` so remove the non-symbol containing
+-                    # expressions from `unk`, since they cannot be
+-                    # contained
+-                    for x in non_symbolic_s:
+-                        if x in unk:
+-                            unk.remove(x)
++                    # all the symbolic elements of `v` include those of `s`
++                    # but v might have additional symbolic elements
++                    if additional_symbolic:
++                        # Add the additional symbolic elements to other
++                        # so unk elements can be checked against them
++                        other.append(FiniteSet(
++                            *additional_symbolic, evaluate=False))
++                    else:
++                        # No additional symbolic elements, so check if
++                        # non-symbolic elements are definitely not in v
++                        for x in non_symbolic_s:
++                            if x in unk:
++                                # Only remove if we know for sure x is not in v
++                                if fuzzy_bool(v.contains(x)) is False:
++                                    unk.remove(x)
+                 else:
++                    # v has different symbolic elements than s
+                     # if only a subset of elements in `s` are
+                     # contained in `v` then remove them from `v`
+                     # and add this as a new arg
+@@ -1405,8 +1419,12 @@ def _handle_finite_sets(args):
+                         other.append(
+                             v - FiniteSet(
+                             *contained, evaluate=False))
+-                    else:
+-                        pass  # for coverage
++                    elif additional_symbolic:
++                        # All symbolic elements of s are in v, but v
++                        # has additional symbolic elements that could
++                        # contain unk elements
++                        other.append(FiniteSet(
++                            *additional_symbolic, evaluate=False))
+ 
+             other_sets = Intersection(*other)
+             if not other_sets:
+diff --git a/sympy/sets/tests/test_sets.py b/sympy/sets/tests/test_sets.py
+index 331f210a6b..e9a3fbfb37 100644
+--- a/sympy/sets/tests/test_sets.py
++++ b/sympy/sets/tests/test_sets.py
+@@ -393,6 +393,34 @@ def test_intersection():
+     assert Intersection({1}, {1}, {x}) == Intersection({1}, {x})
+ 
+ 
++def test_issue_16342():
++    # Intersection should not incorrectly simplify when
++    # non-symbolic elements could be equal to symbolic
++    # elements in other sets
++    x, y = symbols('x y')
++    # {1, 2, x} ∩ {2, 3, x, y} = {2, x} ∪ ({1} ∩ {y})
++    # because 1 is in the first set and in the second iff 1==x or 1==y,
++    # but x is already in the intersection so we only need to check 1==y
++    result = Intersection(FiniteSet(1, 2, x), FiniteSet(2, 3, x, y))
++    assert result == Union(FiniteSet(2, x), Intersection(FiniteSet(1), FiniteSet(y)))
++
++    # {1, 2, x} ∩ {1, 3, x, y} = {1, x} ∪ ({2} ∩ {y})
++    # because 1 is in both sets unconditionally, x is in both sets unconditionally,
++    # and 2 is in the first set and in the second iff 2==1, 2==x, or 2==y,
++    # but 2!=1 and x is already in the intersection so we only need to check 2==y
++    result = Intersection(FiniteSet(1, 2, x), FiniteSet(1, 3, x, y))
++    assert result == Union(FiniteSet(1, x), Intersection(FiniteSet(2), FiniteSet(y)))
++
++    # When there are no additional symbolic elements, non-symbolic
++    # elements should be removed from unk
++    result = Intersection(FiniteSet(1, x), FiniteSet(1, x))
++    assert result == FiniteSet(1, x)
++
++    # When sets have no common symbolic elements, result should be unevaluated
++    result = Intersection(FiniteSet(1, x), FiniteSet(2, y))
++    assert result == Intersection(FiniteSet(1, x), FiniteSet(2, y), evaluate=False)
++
++
+ def test_issue_9623():
+     n = Symbol('n')
+ 

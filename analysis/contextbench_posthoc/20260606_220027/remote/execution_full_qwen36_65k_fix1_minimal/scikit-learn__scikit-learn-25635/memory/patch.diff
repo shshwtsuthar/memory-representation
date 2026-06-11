@@ -1,0 +1,26 @@
+diff --git a/sklearn/utils/multiclass.py b/sklearn/utils/multiclass.py
+index 5eaef2fde..2de951db9 100644
+--- a/sklearn/utils/multiclass.py
++++ b/sklearn/utils/multiclass.py
+@@ -342,7 +342,20 @@ def type_of_target(y, input_name=""):
+         return "unknown"
+     if not issparse(y) and y.dtype == object and not isinstance(y.flat[0], str):
+         # [obj_1] and not ["label_1"]
+-        return "unknown"
++        # However, if the object array contains numeric values (e.g., from
++        # nullable pandas dtypes like Int64, Float64, boolean), try to convert
++        # to a numeric dtype and continue with normal type detection.
++        try:
++            y_numeric = np.asarray(y, dtype=np.float64)
++            # Check if the conversion was successful (no NaN values introduced
++            # by the conversion, which would indicate non-numeric data)
++            if not np.any(np.isnan(y_numeric)):
++                y = y_numeric
++            else:
++                return "unknown"
++        except (ValueError, TypeError):
++            # Cannot convert to float64, so it's truly non-numeric object data
++            return "unknown"
+ 
+     # Check if multioutput
+     if y.ndim == 2 and y.shape[1] > 1:

@@ -1,0 +1,270 @@
+diff --git a/lib/matplotlib/axes/_axes.py b/lib/matplotlib/axes/_axes.py
+index 84944e8967..6c5055fbe9 100644
+--- a/lib/matplotlib/axes/_axes.py
++++ b/lib/matplotlib/axes/_axes.py
+@@ -2179,12 +2179,12 @@ class Axes(_AxesBase):
+             # removes the units from unit packages like `pint` that
+             # wrap numpy arrays.
+             try:
+-                x0 = cbook._safe_first_non_none(x0)
++                x0 = cbook._safe_first_non_none(x0, skip_nan=True)
+             except (TypeError, IndexError, KeyError):
+                 pass
+ 
+             try:
+-                x = cbook._safe_first_non_none(xconv)
++                x = cbook._safe_first_non_none(xconv, skip_nan=True)
+             except (TypeError, IndexError, KeyError):
+                 x = xconv
+ 
+diff --git a/lib/matplotlib/cbook/__init__.py b/lib/matplotlib/cbook/__init__.py
+index ccd5df0b36..86439d9eca 100644
+--- a/lib/matplotlib/cbook/__init__.py
++++ b/lib/matplotlib/cbook/__init__.py
+@@ -1706,7 +1706,15 @@ def safe_first_element(obj):
+     return _safe_first_non_none(obj, skip_none=False)
+ 
+ 
+-def _safe_first_non_none(obj, skip_none=True):
++def _is_nan(val):
++    """Check if a value is NaN."""
++    try:
++        return np.isnan(val)
++    except (TypeError, ValueError):
++        return False
++
++
++def _safe_first_non_none(obj, skip_none=True, skip_nan=True):
+     """
+     Return the first non-None element in *obj*.
+     This is a method for internal use.
+@@ -1714,6 +1722,7 @@ def _safe_first_non_none(obj, skip_none=True):
+     This is an type-independent way of obtaining the first non-None element,
+     supporting both index access and the iterator protocol.
+     The first non-None element will be obtained when skip_none is True.
++    When skip_nan is True, NaN values will also be skipped.
+     """
+     if skip_none is False:
+         if isinstance(obj, collections.abc.Iterator):
+@@ -1735,7 +1744,11 @@ def _safe_first_non_none(obj, skip_none=True):
+         raise RuntimeError("matplotlib does not "
+                            "support generators as input")
+     else:
+-        return next(val for val in obj if val is not None)
++        if skip_nan:
++            return next(val for val in obj
++                        if val is not None and not _is_nan(val))
++        else:
++            return next(val for val in obj if val is not None)
+ 
+ 
+ def sanitize_sequence(data):
+diff --git a/test_bug.py b/test_bug.py
+new file mode 100644
+index 0000000000..0c68ca60d0
+--- /dev/null
++++ b/test_bug.py
+@@ -0,0 +1,82 @@
++import numpy as np
++import matplotlib
++matplotlib.use('Agg')  # non-interactive backend
++import matplotlib.pyplot as plt
++
++# Test case from the bug report
++barx = np.arange(3, dtype=float)
++barheights = np.array([0.5, 1.5, 2.0])
++barstarts = np.array([0.77] * 3)
++
++barx[[0, 2]] = np.NaN
++
++fig, ax = plt.subplots()
++try:
++    ax.bar(barx, barheights, bottom=barstarts)
++    print("Test 1 (bar with NaN at x[0] and x[2]): SUCCESS - no error raised")
++    # Check how many patches were created
++    patches = ax.patches
++    print(f"  Number of patches: {len(patches)}")
++    if len(patches) > 0:
++        for i, p in enumerate(patches):
++            print(f"  Patch {i}: x={p.get_x()}, height={p.get_height()}, bottom={p.get_y()}")
++    else:
++        print("  BUG: No patches were created!")
++except Exception as e:
++    print(f"Test 1 (bar with NaN at x[0] and x[2]): FAILED - {type(e).__name__}: {e}")
++
++plt.close(fig)
++
++# Test case 2: NaN at bottom extremities
++fig, ax = plt.subplots()
++barstarts2 = np.array([np.NaN, 0.77, np.NaN])
++try:
++    ax.bar(np.arange(3), barheights, bottom=barstarts2)
++    print("Test 2 (bar with NaN at bottom[0] and bottom[2]): SUCCESS - no error raised")
++    patches = ax.patches
++    print(f"  Number of patches: {len(patches)}")
++    if len(patches) > 0:
++        for i, p in enumerate(patches):
++            print(f"  Patch {i}: x={p.get_x()}, height={p.get_height()}, bottom={p.get_y()}")
++    else:
++        print("  BUG: No patches were created!")
++except Exception as e:
++    print(f"Test 2 (bar with NaN at bottom[0] and bottom[2]): FAILED - {type(e).__name__}: {e}")
++
++plt.close(fig)
++
++# Test case 3: barh with NaN at left extremities
++fig, ax = plt.subplots()
++try:
++    ax.barh(barx, barheights, left=barstarts)
++    print("Test 3 (barh with NaN at x[0] and x[2]): SUCCESS - no error raised")
++    patches = ax.patches
++    print(f"  Number of patches: {len(patches)}")
++    if len(patches) > 0:
++        for i, p in enumerate(patches):
++            print(f"  Patch {i}: y={p.get_y()}, width={p.get_width()}, left={p.get_x()}")
++    else:
++        print("  BUG: No patches were created!")
++except Exception as e:
++    print(f"Test 3 (barh with NaN at x[0] and x[2]): FAILED - {type(e).__name__}: {e}")
++
++plt.close(fig)
++
++# Test case 4: NaN only in heights (should work)
++fig, ax = plt.subplots()
++try:
++    ax.bar(np.arange(3), np.array([np.NaN, 1, np.NaN]), bottom=np.array([0.2, 0.3, 0.4]))
++    print("Test 4 (bar with NaN only in heights): SUCCESS - no error raised")
++    patches = ax.patches
++    print(f"  Number of patches: {len(patches)}")
++    if len(patches) > 0:
++        for i, p in enumerate(patches):
++            print(f"  Patch {i}: x={p.get_x()}, height={p.get_height()}, bottom={p.get_y()}")
++    else:
++        print("  BUG: No patches were created!")
++except Exception as e:
++    print(f"Test 4 (bar with NaN only in heights): FAILED - {type(e).__name__}: {e}")
++
++plt.close(fig)
++
++print("\n=== All tests completed ===")
+diff --git a/test_nan_bar_fix.py b/test_nan_bar_fix.py
+new file mode 100644
+index 0000000000..c281c72292
+--- /dev/null
++++ b/test_nan_bar_fix.py
+@@ -0,0 +1,115 @@
++"""Test script for the barplot NaN bug fix."""
++import sys
++sys.path.insert(0, '/testbed/lib')
++
++import numpy as np
++import matplotlib
++matplotlib.use('Agg')  # Use non-interactive backend
++import matplotlib.pyplot as plt
++
++def test_bar_with_nan_at_extremes():
++    """Test that bars are shown when x or bottom have NaN at extremities."""
++    print("Test 1: bar() with NaN at x extremities")
++    barx = np.arange(3, dtype=float)
++    barheights = np.array([0.5, 1.5, 2.0])
++    barstarts = np.array([0.77] * 3)
++    barx[[0, 2]] = np.NaN
++    
++    fig, ax = plt.subplots()
++    try:
++        bars = ax.bar(barx, barheights, bottom=barstarts)
++        # Check that bars were created
++        rects = bars.get_paths()
++        print(f"  Created {len(rects)} rectangles")
++        # Count non-NaN bars
++        non_nan_count = sum(1 for r in rects if not np.isnan(r.vertices).any())
++        print(f"  Non-NaN bars: {non_nan_count}")
++        if non_nan_count > 0:
++            print("  SUCCESS: Bars were drawn!")
++        else:
++            print("  FAILURE: No bars were drawn!")
++    except Exception as e:
++        print(f"  ERROR: {type(e).__name__}: {e}")
++    plt.close(fig)
++    
++    print("\nTest 2: barh() with NaN at x extremities")
++    fig, ax = plt.subplots()
++    try:
++        bars = ax.barh(barx, barheights, left=barstarts)
++        rects = bars.get_paths()
++        print(f"  Created {len(rects)} rectangles")
++        non_nan_count = sum(1 for r in rects if not np.isnan(r.vertices).any())
++        print(f"  Non-NaN bars: {non_nan_count}")
++        if non_nan_count > 0:
++            print("  SUCCESS: Bars were drawn!")
++        else:
++            print("  FAILURE: No bars were drawn!")
++    except Exception as e:
++        print(f"  ERROR: {type(e).__name__}: {e}")
++    plt.close(fig)
++    
++    print("\nTest 3: bar() with NaN at bottom extremities")
++    barx2 = np.arange(3, dtype=float)
++    barheights2 = np.array([0.5, 1.5, 2.0])
++    barstarts2 = np.array([0.77] * 3)
++    barstarts2[[0, 2]] = np.NaN
++    
++    fig, ax = plt.subplots()
++    try:
++        bars = ax.bar(barx2, barheights2, bottom=barstarts2)
++        rects = bars.get_paths()
++        print(f"  Created {len(rects)} rectangles")
++        non_nan_count = sum(1 for r in rects if not np.isnan(r.vertices).any())
++        print(f"  Non-NaN bars: {non_nan_count}")
++        if non_nan_count > 0:
++            print("  SUCCESS: Bars were drawn!")
++        else:
++            print("  FAILURE: No bars were drawn!")
++    except Exception as e:
++        print(f"  ERROR: {type(e).__name__}: {e}")
++    plt.close(fig)
++    
++    print("\nTest 4: bar() with NaN only in heights (should still work)")
++    fig, ax = plt.subplots()
++    try:
++        bars = ax.bar(np.arange(3), np.array([np.NaN, 1, np.NaN]), 
++                      bottom=np.array([0.2, 0.3, 0.4]))
++        rects = bars.get_paths()
++        print(f"  Created {len(rects)} rectangles")
++        non_nan_count = sum(1 for r in rects if not np.isnan(r.vertices).any())
++        print(f"  Non-NaN bars: {non_nan_count}")
++        if non_nan_count > 0:
++            print("  SUCCESS: Bars were drawn!")
++        else:
++            print("  FAILURE: No bars were drawn!")
++    except Exception as e:
++        print(f"  ERROR: {type(e).__name__}: {e}")
++    plt.close(fig)
++    
++    print("\nTest 5: bar() with all NaN x values (edge case)")
++    fig, ax = plt.subplots()
++    try:
++        bars = ax.bar([np.nan, np.nan, np.nan], [1, 2, 3])
++        print("  No exception raised")
++    except Exception as e:
++        print(f"  ERROR: {type(e).__name__}: {e}")
++    plt.close(fig)
++    
++    print("\nTest 6: bar() with normal data (regression test)")
++    fig, ax = plt.subplots()
++    try:
++        bars = ax.bar([1, 2, 3], [4, 5, 6])
++        rects = bars.get_paths()
++        print(f"  Created {len(rects)} rectangles")
++        if len(rects) == 3:
++            print("  SUCCESS: All bars drawn!")
++        else:
++            print("  FAILURE: Wrong number of bars!")
++    except Exception as e:
++        print(f"  ERROR: {type(e).__name__}: {e}")
++    plt.close(fig)
++    
++    print("\n=== All tests completed ===")
++
++if __name__ == '__main__':
++    test_bar_with_nan_at_extremes()

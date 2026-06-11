@@ -1,0 +1,199 @@
+diff --git a/django/core/checks/model_checks.py b/django/core/checks/model_checks.py
+index 2397fe3bb2..6be2f45024 100644
+--- a/django/core/checks/model_checks.py
++++ b/django/core/checks/model_checks.py
+@@ -152,3 +152,40 @@ def _check_lazy_references(apps, ignore=None):
+ @register(Tags.models)
+ def check_lazy_references(app_configs=None, **kwargs):
+     return _check_lazy_references(apps)
++
++
++@register(Tags.models)
++def check_duplicate_db_table(app_configs=None, **kwargs):
++    """
++    Check that no two models have the same db_table.
++    """
++    errors = []
++    if app_configs is None:
++        model_list = apps.get_models()
++    else:
++        model_list = chain.from_iterable(app_config.get_models() for app_config in app_configs)
++
++    # Only check concrete, managed models
++    model_list = [
++        model for model in model_list
++        if not model._meta.proxy and not model._meta.abstract and model._meta.managed
++    ]
++
++    db_table_map = {}
++    for model in model_list:
++        db_table = model._meta.db_table
++        if db_table in db_table_map:
++            errors.append(
++                Error(
++                    "The model '%s' has the same db_table as '%s'." % (
++                        model._meta.label,
++                        db_table_map[db_table],
++                    ),
++                    obj=model,
++                    id='models.E034',
++                )
++            )
++        else:
++            db_table_map[db_table] = model._meta.label
++
++    return errors
+diff --git a/tests/invalid_models_tests/test_models.py b/tests/invalid_models_tests/test_models.py
+index 5b7042e127..d23e630eaf 100644
+--- a/tests/invalid_models_tests/test_models.py
++++ b/tests/invalid_models_tests/test_models.py
+@@ -1032,3 +1032,149 @@ class ConstraintsTests(SimpleTestCase):
+         )
+         expected = [] if connection.features.supports_table_check_constraints else [warn, warn]
+         self.assertCountEqual(errors, expected)
++
++
++@isolate_apps('invalid_models_tests', attr_name='apps')
++class DuplicateDbTableTests(SimpleTestCase):
++    def test_duplicate_db_table(self):
++        """Two models with the same custom db_table should raise an error."""
++        from django.core.checks.model_checks import check_duplicate_db_table
++
++        class FirstModel(models.Model):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                db_table = 'my_table'
++
++        class SecondModel(models.Model):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                db_table = 'my_table'
++
++        errors = check_duplicate_db_table(app_configs=[self.apps.get_app_config('invalid_models_tests')])
++        self.assertEqual(errors, [
++            Error(
++                "The model 'invalid_models_tests.SecondModel' has the same db_table as 'invalid_models_tests.FirstModel'.",
++                obj=SecondModel,
++                id='models.E034',
++            )
++        ])
++
++    def test_duplicate_db_table_with_app_configs(self):
++        """Two models with the same custom db_table should raise an error when using app_configs."""
++        from django.core.checks.model_checks import check_duplicate_db_table
++
++        class FirstModel(models.Model):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                db_table = 'my_table'
++
++        class SecondModel(models.Model):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                db_table = 'my_table'
++
++        app_config = self.apps.get_app_config('invalid_models_tests')
++        errors = check_duplicate_db_table(app_configs=[app_config])
++        self.assertEqual(errors, [
++            Error(
++                "The model 'invalid_models_tests.SecondModel' has the same db_table as 'invalid_models_tests.FirstModel'.",
++                obj=SecondModel,
++                id='models.E034',
++            )
++        ])
++
++    def test_no_duplicate_db_table(self):
++        """Models with different db_table should not raise an error."""
++        from django.core.checks.model_checks import check_duplicate_db_table
++
++        class FirstModel(models.Model):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                db_table = 'first_table'
++
++        class SecondModel(models.Model):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                db_table = 'second_table'
++
++        errors = check_duplicate_db_table(app_configs=[self.apps.get_app_config('invalid_models_tests')])
++        self.assertEqual(errors, [])
++
++    def test_duplicate_db_table_default_table_name(self):
++        """Models with the same default db_table should raise an error."""
++        from django.core.checks.model_checks import check_duplicate_db_table
++
++        class FirstModel(models.Model):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                db_table = 'invalid_models_tests_firstmodel'
++
++        class SecondModel(models.Model):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                db_table = 'invalid_models_tests_firstmodel'
++
++        errors = check_duplicate_db_table(app_configs=[self.apps.get_app_config('invalid_models_tests')])
++        self.assertEqual(errors, [
++            Error(
++                "The model 'invalid_models_tests.SecondModel' has the same db_table as 'invalid_models_tests.FirstModel'.",
++                obj=SecondModel,
++                id='models.E034',
++            )
++        ])
++
++    def test_duplicate_db_table_unmanaged_model(self):
++        """Unmanaged models should not be checked for duplicate db_table."""
++        from django.core.checks.model_checks import check_duplicate_db_table
++
++        class FirstModel(models.Model):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                db_table = 'my_table'
++                managed = False
++
++        class SecondModel(models.Model):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                db_table = 'my_table'
++
++        # SecondModel should not raise an error because FirstModel is unmanaged
++        errors = check_duplicate_db_table(app_configs=[self.apps.get_app_config('invalid_models_tests')])
++        self.assertEqual(errors, [])
++
++    def test_duplicate_db_table_proxy_model(self):
++        """Proxy models should not be checked for duplicate db_table."""
++        from django.core.checks.model_checks import check_duplicate_db_table
++
++        class FirstModel(models.Model):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                db_table = 'my_table'
++
++        class ProxyModel(FirstModel):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                proxy = True
++
++        # ProxyModel should not raise an error because it's a proxy model
++        errors = check_duplicate_db_table(app_configs=[self.apps.get_app_config('invalid_models_tests')])
++        self.assertEqual(errors, [])
++
++    def test_duplicate_db_table_abstract_model(self):
++        """Abstract models should not be checked for duplicate db_table."""
++        from django.core.checks.model_checks import check_duplicate_db_table
++
++        class FirstModel(models.Model):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                abstract = True
++                db_table = 'my_table'
++
++        class SecondModel(models.Model):
++            class Meta:
++                app_label = 'invalid_models_tests'
++                db_table = 'my_table'
++
++        # SecondModel should not raise an error because FirstModel is abstract
++        errors = check_duplicate_db_table(app_configs=[self.apps.get_app_config('invalid_models_tests')])
++        self.assertEqual(errors, [])

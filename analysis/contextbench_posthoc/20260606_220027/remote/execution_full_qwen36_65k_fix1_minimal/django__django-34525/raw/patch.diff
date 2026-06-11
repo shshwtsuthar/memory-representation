@@ -1,0 +1,264 @@
+diff --git a/django/db/migrations/operations/models.py b/django/db/migrations/operations/models.py
+index b89b6b511b..b6504a06a3 100644
+--- a/django/db/migrations/operations/models.py
++++ b/django/db/migrations/operations/models.py
+@@ -183,6 +183,36 @@ class CreateModel(ModelOperation):
+                     managers=operation.managers,
+                 ),
+             ]
++        elif (
++            isinstance(operation, AlterIndexTogether)
++            and self.name_lower == operation.name_lower
++        ):
++            # Convert index_together to indexes to avoid deprecation warnings.
++            options = self.options.copy()
++            # Remove any existing index_together.
++            options.pop("index_together", None)
++            # Convert the new index_together value to indexes.
++            if operation.option_value:
++                indexes = [
++                    models.Index(fields=list(fields), name="%s_%s" % (self.name.lower(), "_".join(fields)))
++                    for fields in operation.option_value
++                ]
++                existing_indexes = options.get("indexes", [])
++                if existing_indexes:
++                    if isinstance(existing_indexes, (list, tuple)):
++                        indexes = list(existing_indexes) + indexes
++                    else:
++                        indexes = [existing_indexes] + indexes
++                options["indexes"] = indexes
++            return [
++                CreateModel(
++                    self.name,
++                    fields=self.fields,
++                    options=options,
++                    bases=self.bases,
++                    managers=self.managers,
++                ),
++            ]
+         elif (
+             isinstance(operation, AlterTogetherOptionOperation)
+             and self.name_lower == operation.name_lower
+@@ -647,6 +677,86 @@ class AlterIndexTogether(AlterTogetherOptionOperation):
+     def __init__(self, name, index_together):
+         super().__init__(name, index_together)
+ 
++    def reduce(self, operation, app_label):
++        if isinstance(operation, AlterIndexTogether) and self.name_lower == operation.name_lower:
++            # Convert to AddIndex/RemoveIndex operations to avoid deprecation
++            # warnings.
++            result = []
++            # Remove indexes that are no longer in index_together.
++            if self.option_value:
++                new_fields = operation.option_value or set()
++                for fields in self.option_value:
++                    if fields not in new_fields:
++                        # Generate a name for the index to remove.
++                        index_name = "%s_%s_%s" % (
++                            self.name_lower,
++                            self.option_name,
++                            "_".join(sorted(fields)),
++                        )
++                        result.append(
++                            RemoveIndex(self.name, index_name)
++                        )
++            # Add indexes that are new in index_together.
++            if operation.option_value:
++                old_fields = self.option_value or set()
++                for fields in operation.option_value:
++                    if fields not in old_fields:
++                        # Generate a name for the new index.
++                        index_name = "%s_%s_%s" % (
++                            self.name_lower,
++                            self.option_name,
++                            "_".join(sorted(fields)),
++                        )
++                        result.append(
++                            AddIndex(
++                                self.name,
++                                models.Index(
++                                    fields=list(fields),
++                                    name=index_name,
++                                ),
++                            )
++                        )
++            return result if result else [operation]
++        elif isinstance(operation, AddIndex) and self.name_lower == operation.model_name_lower:
++            # Check if the AddIndex is adding an index that's in index_together.
++            if self.option_value:
++                # Check if any index in index_together matches the AddIndex fields.
++                for fields in self.option_value:
++                    if set(fields) == set(operation.index.fields):
++                        # The AddIndex is redundant, remove the AlterIndexTogether
++                        # and keep only the AddIndex.
++                        return [operation]
++            # The AddIndex is adding a new index, keep both.
++            return super().reduce(operation, app_label)
++        elif isinstance(operation, RemoveIndex) and self.name_lower == operation.model_name_lower:
++            # Check if the RemoveIndex is removing an index that's in index_together.
++            if self.option_value:
++                # Find the index being removed.
++                index_name_lower = operation.name.lower()
++                # Build the expected index name for each index in index_together.
++                for fields in self.option_value:
++                    expected_name = "%s_%s_%s" % (
++                        self.name_lower,
++                        self.option_name,
++                        "_".join(sorted(fields)),
++                    )
++                    if expected_name.lower() == index_name_lower:
++                        # Remove this index from index_together.
++                        new_option_value = set(
++                            f for f in self.option_value if f != tuple(sorted(fields))
++                        )
++                        if new_option_value:
++                            # Create a new AlterIndexTogether without this index.
++                            return [
++                                AlterIndexTogether(self.name, new_option_value)
++                            ]
++                        else:
++                            # All indexes removed, return empty list.
++                            return []
++            # The RemoveIndex is removing an index not in index_together, keep both.
++            return super().reduce(operation, app_label)
++        return super().reduce(operation, app_label)
++
+ 
+ class AlterOrderWithRespectTo(ModelOptionOperation):
+     """Represent a change with the order_with_respect_to option."""
+diff --git a/test_issue.py b/test_issue.py
+new file mode 100644
+index 0000000000..923ee728b4
+--- /dev/null
++++ b/test_issue.py
+@@ -0,0 +1,130 @@
++#!/usr/bin/env python3
++import os
++import sys
++sys.path.insert(0, '/testbed')
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tests.test_sqlite')
++
++import django
++django.setup()
++
++from django.db import migrations, models
++from django.db.migrations.optimizer import MigrationOptimizer
++
++def optimize(operations, app_label="migrations"):
++    optimizer = MigrationOptimizer()
++    return optimizer.optimize(operations, app_label), optimizer._iterations
++
++# Test 1: CreateModel with index_together + AlterIndexTogether
++print("=" * 70)
++print("Test 1: CreateModel with index_together + AlterIndexTogether")
++print("=" * 70)
++
++operations = [
++    migrations.CreateModel(
++        "Author",
++        [("name", models.CharField(max_length=30))],
++        options={"index_together": [["name"]]},
++    ),
++    migrations.AlterIndexTogether("Author", []),
++]
++
++result, iterations = optimize(operations)
++print(f"Original operations ({len(operations)}):")
++for i, op in enumerate(operations):
++    print(f"  {i+1}. {type(op).__name__}")
++    if hasattr(op, 'options'):
++        print(f"     options: {op.options}")
++    if hasattr(op, 'option_value'):
++        print(f"     option_value: {op.option_value}")
++
++print(f"\nOptimized operations ({len(result)}):")
++for i, op in enumerate(result):
++    print(f"  {i+1}. {type(op).__name__}")
++    if hasattr(op, 'options'):
++        print(f"     options: {op.options}")
++    if hasattr(op, 'index_together'):
++        print(f"     index_together: {op.index_together}")
++    if hasattr(op, 'option_value'):
++        print(f"     option_value: {op.option_value}")
++
++# Check if index_together is still present
++has_index_together = False
++for op in result:
++    if isinstance(op, migrations.CreateModel) and 'index_together' in op.options:
++        has_index_together = True
++        print(f"\nFAIL: index_together still present in CreateModel!")
++
++if not has_index_together:
++    print(f"\nPASS: No index_together in optimized operations")
++
++# Test 2: AlterIndexTogether + AlterIndexTogether
++print("\n" + "=" * 70)
++print("Test 2: AlterIndexTogether + AlterIndexTogether")
++print("=" * 70)
++
++operations2 = [
++    migrations.AlterIndexTogether("Foo", [["a", "b"]]),
++    migrations.AlterIndexTogether("Foo", [["c", "d"]]),
++]
++
++result2, iterations2 = optimize(operations2)
++print(f"Original operations ({len(operations2)}):")
++for i, op in enumerate(operations2):
++    print(f"  {i+1}. {type(op).__name__}")
++
++print(f"\nOptimized operations ({len(result2)}):")
++for i, op in enumerate(result2):
++    print(f"  {i+1}. {type(op).__name__}")
++    if hasattr(op, 'option_value'):
++        print(f"     option_value: {op.option_value}")
++
++# Check if we got AddIndex/RemoveIndex instead of AlterIndexTogether
++has_alter_index = any(isinstance(op, migrations.AlterIndexTogether) for op in result2)
++has_add_index = any(isinstance(op, migrations.AddIndex) for op in result2)
++has_remove_index = any(isinstance(op, migrations.RemoveIndex) for op in result2)
++
++if has_alter_index:
++    print(f"\nFAIL: AlterIndexTogether still present!")
++else:
++    print(f"\nPASS: No AlterIndexTogether in optimized operations")
++    if has_add_index or has_remove_index:
++        print(f"   (Converted to AddIndex/RemoveIndex)")
++
++# Test 3: AlterIndexTogether + AddIndex
++print("\n" + "=" * 70)
++print("Test 3: AlterIndexTogether + AddIndex")
++print("=" * 70)
++
++operations3 = [
++    migrations.AlterIndexTogether("Foo", [["a", "b"]]),
++    migrations.AddIndex(
++        "Foo",
++        models.Index(fields=["a", "b"], name="idx_foo_ab")
++    ),
++]
++
++result3, iterations3 = optimize(operations3)
++print(f"Original operations ({len(operations3)}):")
++for i, op in enumerate(operations3):
++    print(f"  {i+1}. {type(op).__name__}")
++
++print(f"\nOptimized operations ({len(result3)}):")
++for i, op in enumerate(result3):
++    print(f"  {i+1}. {type(op).__name__}")
++    if hasattr(op, 'option_value'):
++        print(f"     option_value: {op.option_value}")
++    if hasattr(op, 'index'):
++        print(f"     index: {op.index}")
++
++has_alter_index3 = any(isinstance(op, migrations.AlterIndexTogether) for op in result3)
++if has_alter_index3:
++    print(f"\nFAIL: AlterIndexTogether still present!")
++else:
++    print(f"\nPASS: No AlterIndexTogether in optimized operations")
++
++print("\n" + "=" * 70)
++print("Summary")
++print("=" * 70)
++print(f"Test 1 (CreateModel + AlterIndexTogether): {'FAIL' if has_index_together else 'PASS'}")
++print(f"Test 2 (AlterIndexTogether + AlterIndexTogether): {'FAIL' if has_alter_index else 'PASS'}")
++print(f"Test 3 (AlterIndexTogether + AddIndex): {'FAIL' if has_alter_index3 else 'PASS'}")

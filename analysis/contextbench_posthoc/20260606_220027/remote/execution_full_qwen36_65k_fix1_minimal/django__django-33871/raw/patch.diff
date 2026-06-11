@@ -1,0 +1,204 @@
+diff --git a/django/db/models/fields/json.py b/django/db/models/fields/json.py
+index c0242bd7be..b37fde2f1b 100644
+--- a/django/db/models/fields/json.py
++++ b/django/db/models/fields/json.py
+@@ -132,6 +132,7 @@ class JSONField(CheckFieldDefaultMixin, Field):
+                 "form_class": forms.JSONField,
+                 "encoder": self.encoder,
+                 "decoder": self.decoder,
++                "show_hidden_initial": False,
+                 **kwargs,
+             }
+         )
+diff --git a/test_jsonfield_issue.py b/test_jsonfield_issue.py
+new file mode 100644
+index 0000000000..735da869a2
+--- /dev/null
++++ b/test_jsonfield_issue.py
+@@ -0,0 +1,155 @@
++"""
++Test to reproduce the JSONField with default not being detected as changed
++when invalidated in inlines.
++"""
++import os
++import sys
++import django
++
++# Setup Django
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tests.settings')
++sys.path.insert(0, '/testbed')
++django.setup()
++
++from django import forms
++from django.db import models
++from django.contrib.postgres.forms import SimpleArrayField
++from django.test import TestCase
++
++
++# Define test models
++class Question(models.Model):
++    text = models.CharField(max_length=100)
++    
++    class Meta:
++        app_label = 'test_app'
++
++
++class Answer(models.Model):
++    question = models.ForeignKey(Question, on_delete=models.CASCADE)
++    text = models.CharField(max_length=100)
++    data = models.JSONField(default=dict)
++    
++    class Meta:
++        app_label = 'test_app'
++
++
++# Test 1: Check if JSONField with callable default sets show_hidden_initial
++print("=" * 60)
++print("Test 1: JSONField with callable default")
++print("=" * 60)
++
++question_field = models.JSONField(default=dict)
++form_field = question_field.formfield()
++print(f"Model field default: {question_field.default}")
++print(f"Form field initial: {form_field.initial}")
++print(f"Form field show_hidden_initial: {form_field.show_hidden_initial}")
++print(f"Form field has_changed initial vs data: {form_field.has_changed(form_field.initial, '{}')}")
++print()
++
++# Test 2: Check if JSONField with non-callable default sets show_hidden_initial
++print("=" * 60)
++print("Test 2: JSONField with non-callable default")
++print("=" * 60)
++
++question_field2 = models.JSONField(default={})
++form_field2 = question_field2.formfield()
++print(f"Model field default: {question_field2.default}")
++print(f"Form field initial: {form_field2.initial}")
++print(f"Form field show_hidden_initial: {form_field2.show_hidden_initial}")
++print()
++
++# Test 3: Simulate the inline form scenario
++print("=" * 60)
++print("Test 3: Simulate inline form scenario")
++print("=" * 60)
++
++class AnswerForm(forms.ModelForm):
++    class Meta:
++        model = Answer
++        fields = ['text', 'data']
++
++# Create an unbound form (new instance)
++form = AnswerForm()
++print(f"Unbound form - data field initial: {form.fields['data'].initial}")
++print(f"Unbound form - data field show_hidden_initial: {form.fields['data'].show_hidden_initial}")
++
++# Simulate binding the form with data
++bound_form = AnswerForm(data={'text': 'test', 'data': '{"test": "test"}'})
++print(f"\nBound form (first submission) - is_valid: {bound_form.is_valid()}")
++if not bound_form.is_valid():
++    print(f"Errors: {bound_form.errors}")
++
++# Simulate re-rendering after validation error
++# The form would be re-rendered with the submitted data
++# and the hidden input would still contain the original initial value
++print(f"\nBound form - data field value: {bound_form['data'].value()}")
++print(f"Bound form - data field initial: {bound_form['data'].initial}")
++
++# Simulate the _has_changed comparison
++# When show_hidden_initial=True, the initial value comes from the hidden input
++# which contains the original default value
++data_field = bound_form.fields['data']
++if data_field.show_hidden_initial:
++    # The hidden input contains the original initial value
++    hidden_initial = data_field.initial  # This is the callable 'dict'
++    if callable(hidden_initial):
++        hidden_initial = hidden_initial()  # This becomes {}
++    print(f"\nHidden input initial value: {hidden_initial}")
++    
++    # The submitted data
++    submitted_data = '{"test": "test"}'
++    
++    # The has_changed comparison
++    has_changed = data_field.has_changed(hidden_initial, submitted_data)
++    print(f"has_changed(hidden_initial={hidden_initial}, data={submitted_data}): {has_changed}")
++
++# Now simulate the second submission (after validation error, user submits again)
++# The user changes the data field to '{"test": "test 123"}'
++# But the hidden input still contains the original initial value
++print("\n" + "=" * 60)
++print("Test 4: Second submission after validation error")
++print("=" * 60)
++
++# User changes the data field to '{"test": "test 123"}'
++# The hidden input still contains the original initial value ({} or dict)
++bound_form2 = AnswerForm(data={'text': 'test', 'data': '{"test": "test 123"}'})
++print(f"Bound form (second submission) - data field value: {bound_form2['data'].value()}")
++print(f"Bound form (second submission) - data field initial: {bound_form2['data'].initial}")
++
++# The has_changed comparison
++data_field2 = bound_form2.fields['data']
++if data_field2.show_hidden_initial:
++    hidden_initial = data_field2.initial
++    if callable(hidden_initial):
++        hidden_initial = hidden_initial()
++    submitted_data = '{"test": "test 123"}'
++    has_changed = data_field2.has_changed(hidden_initial, submitted_data)
++    print(f"has_changed(hidden_initial={hidden_initial}, data={submitted_data}): {has_changed}")
++
++# Test 5: Check the actual has_changed behavior
++print("\n" + "=" * 60)
++print("Test 5: Actual has_changed behavior")
++print("=" * 60)
++
++# Create a form with initial value
++form_with_initial = AnswerForm(initial={'data': {'original': 'value'}})
++print(f"Form with initial - data field initial: {form_with_initial.fields['data'].initial}")
++
++# Bind the form with data that matches the initial
++bound_form3 = AnswerForm(data={'text': 'test', 'data': '{"original": "value"}'}, initial={'data': {'original': 'value'}})
++print(f"Bound form (matching initial) - is_valid: {bound_form3.is_valid()}")
++print(f"Bound form (matching initial) - has_changed: {bound_form3.has_changed()}")
++
++# Check individual field has_changed
++data_field3 = bound_form3.fields['data']
++print(f"Data field has_changed: {bound_form3['data'].has_changed()}")
++
++print("\n" + "=" * 60)
++print("Summary")
++print("=" * 60)
++print("The issue is that JSONField with callable default sets show_hidden_initial=True")
++print("This causes the hidden input to contain the original default value")
++print("When the form is re-rendered after a validation error, the hidden input")
++print("still contains the original default value, not the submitted value.")
++print("This causes the has_changed comparison to be incorrect.")
+diff --git a/tests/model_fields/test_jsonfield.py b/tests/model_fields/test_jsonfield.py
+index 277e8aaa3c..da26de59cf 100644
+--- a/tests/model_fields/test_jsonfield.py
++++ b/tests/model_fields/test_jsonfield.py
+@@ -140,6 +140,26 @@ class TestFormField(SimpleTestCase):
+         self.assertIs(form_field.encoder, DjangoJSONEncoder)
+         self.assertIs(form_field.decoder, CustomJSONDecoder)
+ 
++    def test_formfield_show_hidden_initial_false(self):
++        """
++        JSONField.formfield() doesn't set show_hidden_initial even when
++        the model field has a callable default.
++        """
++        # Callable default
++        model_field = models.JSONField(default=dict)
++        form_field = model_field.formfield()
++        self.assertFalse(form_field.show_hidden_initial)
++
++        # Non-callable default
++        model_field2 = models.JSONField(default={})
++        form_field2 = model_field2.formfield()
++        self.assertFalse(form_field2.show_hidden_initial)
++
++        # No default
++        model_field3 = models.JSONField()
++        form_field3 = model_field3.formfield()
++        self.assertFalse(form_field3.show_hidden_initial)
++
+ 
+ class TestSerialization(SimpleTestCase):
+     test_data = (

@@ -1,0 +1,132 @@
+diff --git a/django/forms/formsets.py b/django/forms/formsets.py
+index eafe35720..088e0f677 100644
+--- a/django/forms/formsets.py
++++ b/django/forms/formsets.py
+@@ -54,7 +54,7 @@ class BaseFormSet(object):
+     A collection of instances of the same Form class.
+     """
+     def __init__(self, data=None, files=None, auto_id='id_%s', prefix=None,
+-                 initial=None, error_class=ErrorList):
++                 initial=None, error_class=ErrorList, form_kwargs=None):
+         self.is_bound = data is not None or files is not None
+         self.prefix = prefix or self.get_default_prefix()
+         self.auto_id = auto_id
+@@ -62,6 +62,7 @@ class BaseFormSet(object):
+         self.files = files or {}
+         self.initial = initial
+         self.error_class = error_class
++        self.form_kwargs = form_kwargs if form_kwargs is not None else {}
+         self._errors = None
+         self._non_form_errors = None
+ 
+@@ -139,7 +140,8 @@ class BaseFormSet(object):
+         Instantiate forms at first property access.
+         """
+         # DoS protection is included in total_form_count()
+-        forms = [self._construct_form(i) for i in range(self.total_form_count())]
++        forms = [self._construct_form(i, **dict(list(self.form_kwargs.items()) + list(self._kwargs_for_form(i).items())))
++                 for i in range(self.total_form_count())]
+         return forms
+ 
+     def _construct_form(self, i, **kwargs):
+@@ -374,6 +376,13 @@ class BaseFormSet(object):
+     def add_prefix(self, index):
+         return '%s-%s' % (self.prefix, index)
+ 
++    def _kwargs_for_form(self, i):
++        """
++        Returns the kwargs dict to be merged with self.form_kwargs for the
++        i-th form. Override this method to customize kwargs per form.
++        """
++        return {}
++
+     def is_multipart(self):
+         """
+         Returns True if the formset needs to be multipart, i.e. it
+diff --git a/tests/forms_tests/tests/test_formsets.py b/tests/forms_tests/tests/test_formsets.py
+index 0bd28111e..e20b88557 100644
+--- a/tests/forms_tests/tests/test_formsets.py
++++ b/tests/forms_tests/tests/test_formsets.py
+@@ -1221,3 +1221,82 @@ class TestEmptyFormSet(SimpleTestCase):
+         class FileForm(Form):
+             file = FileField()
+         self.assertTrue(formset_factory(FileForm, extra=0)().is_multipart())
++
++
++class TestFormKwargs(SimpleTestCase):
++    """Test form_kwargs and _kwargs_for_form functionality."""
++
++    def test_form_kwargs_passed_to_forms(self):
++        """form_kwargs passed to formset constructor should be passed to each form."""
++        class CustomForm(Form):
++            name = CharField()
++
++            def __init__(self, *args, custom_arg=None, **kwargs):
++                self.custom_arg = custom_arg
++                super(CustomForm, self).__init__(*args, **kwargs)
++
++        class CustomFormSet(BaseFormSet):
++            form = CustomForm
++
++        CustomFormSetFormSet = formset_factory(CustomForm, formset=CustomFormSet, extra=1)
++        formset = CustomFormSetFormSet(form_kwargs={'custom_arg': 'test_value'})
++        for form in formset.forms:
++            self.assertEqual(form.custom_arg, 'test_value')
++
++    def test_form_kwargs_default_empty_dict(self):
++        """form_kwargs defaults to empty dict when not provided."""
++        formset = ChoiceFormSet()
++        self.assertEqual(formset.form_kwargs, {})
++
++    def test_form_kwargs_none_defaults_to_empty_dict(self):
++        """form_kwargs=None defaults to empty dict."""
++        formset = ChoiceFormSet(form_kwargs=None)
++        self.assertEqual(formset.form_kwargs, {})
++
++    def test_kwargs_for_form_can_be_overridden(self):
++        """_kwargs_for_form can be overridden to provide per-form kwargs."""
++        class CustomForm(Form):
++            name = CharField()
++
++            def __init__(self, *args, custom_arg=None, **kwargs):
++                self.custom_arg = custom_arg
++                super(CustomForm, self).__init__(*args, **kwargs)
++
++        class CustomFormSet(BaseFormSet):
++            form = CustomForm
++
++            def _kwargs_for_form(self, i):
++                return {'custom_arg': 'form_%d' % i}
++
++        CustomFormSetFormSet = formset_factory(CustomForm, formset=CustomFormSet, extra=2)
++        formset = CustomFormSetFormSet()
++        self.assertEqual(formset.forms[0].custom_arg, 'form_0')
++        self.assertEqual(formset.forms[1].custom_arg, 'form_1')
++
++    def test_form_kwargs_and_kwargs_for_form_merged(self):
++        """form_kwargs and _kwargs_for_form should be merged, with _kwargs_for_form taking precedence."""
++        class CustomForm(Form):
++            name = CharField()
++
++            def __init__(self, *args, custom_arg=None, another_arg=None, **kwargs):
++                self.custom_arg = custom_arg
++                self.another_arg = another_arg
++                super(CustomForm, self).__init__(*args, **kwargs)
++
++        class CustomFormSet(BaseFormSet):
++            form = CustomForm
++
++            def _kwargs_for_form(self, i):
++                return {'custom_arg': 'overridden_%d' % i}
++
++        CustomFormSetFormSet = formset_factory(CustomForm, formset=CustomFormSet, extra=1)
++        formset = CustomFormSetFormSet(form_kwargs={'custom_arg': 'base_value', 'another_arg': 'another_value'})
++        # _kwargs_for_form should override form_kwargs
++        self.assertEqual(formset.forms[0].custom_arg, 'overridden_0')
++        # another_arg from form_kwargs should still be present
++        self.assertEqual(formset.forms[0].another_arg, 'another_value')
++
++    def test_kwargs_for_form_default_empty_dict(self):
++        """_kwargs_for_form defaults to empty dict."""
++        formset = ChoiceFormSet()
++        self.assertEqual(formset._kwargs_for_form(0), {})

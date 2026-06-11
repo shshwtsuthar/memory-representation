@@ -1,0 +1,645 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: memory
+
+The following is deterministic extractive memory from an officially related prior issue.
+
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: 2e53916a-ff50-465d-8015-dbe470924fa6
+- repo: sympy/sympy
+- instance_id: sympy__sympy-12419
+- base_commit: 479939f8c65c8c2908bbedc959549a257a7c0b0b
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Sum of the elements of an identity matrix is zero
+I think this is a bug.
+
+I created a matrix by M.T * M under an assumption that M is orthogonal.  SymPy successfully recognized that the result is an identity matrix.  I tested its identity-ness by element-wise, queries, and sum of the diagonal elements and received expected results.
+
+However, when I attempt to evaluate the total sum of the elements the result was 0 while 'n' is expected.
+
+```
+from sympy import *
+from sympy import Q as Query
+
+n = Symbol('n', integer=True, positive=True)
+i, j = symbols('i j', integer=True)
+M = MatrixSymbol('M', n, n)
+
+e = None
+with assuming(Query.orthogonal(M)):
+    e = refine((M.T * M).doit())
+
+# Correct: M.T * M is an identity matrix.
+print(e, e[0, 0], e[0, 1], e[1, 0], e[1, 1])
+
+# Correct: The output is True True
+print(ask(Query.diagonal(e)), ask(Query.integer_elements(e)))
+
+# Correct: The sum of the diagonal elements is n
+print(Sum(e[i, i], (i, 0, n-1)).doit())
+
+# So far so good
+# Total sum of the elements is expected to be 'n' but the answer is 0!
+print(Sum(Sum(e[i, j], (i, 0, n-1)), (j, 0, n-1)).doit())
+```
+
+FILES INSPECTED
+---------------
+- sympy/matrices/expressions/matexpr.py [Read: 2, Grep: 1]
+- sympy/concrete/summations.py [Read: 3]
+- sympy/matrices/expressions [Grep: 1]
+
+SEARCH ANCHORS
+--------------
+- [4] Grep pattern='class Identity' path='testbed'
+- [5] Grep pattern='class Identity'
+- [7] Glob glob='**/matrices/**/*.py'
+- [11] Grep pattern='_eval_sum'
+- [17] Grep pattern='class MatrixElement' path='sympy/matrices/expressions'
+- [18] Grep pattern='class MatrixElement'
+- [24] Grep pattern='from.*KroneckerDelta'
+- [26] Grep pattern='class KroneckerDelta'
+- [28] Grep pattern='KroneckerDelta' path='sympy/matrices/expressions/matexpr.py'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [test] cd testbed && python3 ../test_issue.py
+- [diagnostic] cd testbed && find . -name "*.py" -type f | grep -i identity | head -20
+- [diagnostic] find . -name "*.py" -path "*/concrete/*" | head -10
+- [test] cd ./swebench_9_15 && python3 debug_test.py
+- [diagnostic] grep -n "KroneckerDelta" ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py
+- [test] python3 test_issue.py
+- [test] python3 test_simplification.py
+- [diagnostic] grep -A 30 "def deltasummation" ./swebench_9_15/testbed/sympy/concrete/delta.py
+- [test] python3 test_kronecker.py
+- [test] python3 test_concrete.py
+- [test] python3 test_issue.py
+- [test] python3 test_doit_multiple.py
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- E       assert N == Sum(Piecewise((1, (1 <= n) & (n <= N)), (0, True)), (n, 1, N))
+- E        +  where N = doit()
+- E        +    where doit = Sum(Piecewise((1, (1 <= n) & (n <= N)), (0, True)), (n, 1, N)).doit
+- E        +      where Sum(Piecewise((1, (1 <= n) & (n <= N)), (0, True)), (n, 1, N)) = Sum(Piecewise((1, (1 <= n) & (n <= N)), (0, True)), (n, 1, N))
+- E        +  and   Sum(Piecewise((1, (1 <= n) & (n <= N)), (0, True)), (n, 1, N)) = Sum(Piecewise((1, (1 <= n) & (n <= N)), (0, True)), (n, 1, N))
+- ERROR: file or directory not found: sympy/concrete/tests/test_sums_products.py::test_Sum_doit
+- FAILED sympy/concrete/tests/test_sums_products.py::test_Sum_doit - assert N =...
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Test Output after action #1]
+  e, e[0, 0], e[0, 1], e[1, 0], e[1, 1]:
+  I 1 0 0 1
+
+  ask(Query.diagonal(e)), ask(Query.integer_elements(e)):
+  True True
+
+  Sum(e[i, i], (i, 0, n-1)).doit():
+  n
+
+  Sum(Sum(e[i, j], (i, 0, n-1)), (j, 0, n-1)).doit():
+  0
+
+  Expected: n
+  Got: 0
+  Bug: True
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Mapping
+  ./swebench_9_15/testbed/sympy/solvers/diophantine.py:3188: SyntaxWarning: "is" with a literal. Did you mean "=="?
+    if feasible is 1:  # it's prime and k == 2
+  ./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from '
+  [... truncated ...]
+- [Grep Result after action #5]
+  Found 5 files
+  sympy/physics/quantum/operator.py
+  sympy/physics/quantum/gate.py
+  sympy/matrices/expressions/matexpr.py
+  sympy/functions/elementary/miscellaneous.py
+  sympy/categories/baseclasses.py
+- [Glob Result after action #7]
+  ./swebench_9_15/testbed/sympy/matrices/benchmarks/__init__.py
+  ./swebench_9_15/testbed/sympy/matrices/expressions/tests/__init__.py
+  ./swebench_9_15/testbed/sympy/matrices/expressions/tests/test_adjoint.py
+  ./swebench_9_15/testbed/sympy/matrices/tests/__init__.py
+  ./swebench_9_15/testbed/sympy/matrices/__init__.py
+  ./swebench_9_15/testbed/sympy/matrices/benchmarks/bench_matrix.py
+  ./swebench_9_15/testbed/sympy/matrices/dense.py
+  ./swebench_9_15/testbed/sympy/matrices/densearith.py
+  ./swebench_9_15/testbed/sympy/matrices/densesolve.py
+  ./swebench_9_15/testbed/sympy/matrices/densetools.py
+  ./swebench_9_15/testbed/sympy/matrices/expressions/__init__.py
+  ./swebench_9_15/testbed/sympy/matrices/expressions/adjoint.py
+  ./swebench_9_15/testbed/sympy/matrices/expressions/blockmatrix.py
+  ./swebench_9_15/testbed/sympy/matrices/expressions/determinant.py
+  ./swebench_9_15/testbed/sympy/matrices/expressions/diagonal.py
+  ./swebench_9_15/testbed/sympy/matrices/expressions/dotproduct.py
+  ./swebench_9_15/testbed/sympy/matrices/expressions/factorizations.py
+  ./swebench_9_15/testbed/sympy/matrices/expressions/fourier.py
+  ./swebench_9_15/testbed/sympy/matrices/expressions/funcmatrix.py
+  ./swebench_9_15/testbed/sympy/matr
+  [... truncated ...]
+- [Read Result after action #9]
+       1→from __future__ import print_function, division
+       2→
+       3→from functools import wraps
+       4→
+       5→from sympy.core import S, Symbol, Tuple, Integer, Basic, Expr
+       6→from sympy.core.decorators import call_highest_priority
+       7→from sympy.core.compatibility import range
+       8→from sympy.core.sympify import SympifyError, sympify
+       9→from sympy.functions import conjugate, adjoint
+      10→from sympy.matrices import ShapeError
+      11→from sympy.simplify import simplify
+      12→
+      13→
+      14→def _sympifyit(arg, retval=None):
+      15→    # This version of _sympifyit sympifies MutableMatrix objects
+      16→    def deco(func):
+      17→        @wraps(func)
+      18→        def __sympifyit_wrapper(a, b):
+      19→            try:
+      20→                b = sympify(b, strict=True)
+      21→                return func(a, b)
+      22→            except SympifyError:
+      23→                return retval
+      24→
+      25→        return __sympifyit_wrapper
+      26→
+      27→    return deco
+      28→
+      29→
+      30→class MatrixExpr(Basic):
+      31→    """ Superclass for Matrix Expressions
+      32→
+      33→    MatrixExprs represent abstract matrices, linear transformations represented
+      34→    wit
+  [... truncated ...]
+- [Grep Result after action #11]
+  Found 1 file
+  sympy/concrete/summations.py
+- [Diagnostic Output after action #13]
+  ./sympy/concrete/summations.py
+  ./sympy/concrete/guess.py
+  ./sympy/concrete/expr_with_limits.py
+  ./sympy/concrete/tests/test_products.py
+  ./sympy/concrete/tests/test_sums_products.py
+  ./sympy/concrete/tests/test_delta.py
+  ./sympy/concrete/tests/__init__.py
+  ./sympy/concrete/tests/test_guess.py
+  ./sympy/concrete/tests/test_gosper.py
+  ./sympy/concrete/__init__.py
+- [Read Result after action #15]
+       1→from __future__ import print_function, division
+       2→
+       3→from sympy.concrete.expr_with_limits import AddWithLimits
+       4→from sympy.concrete.expr_with_intlimits import ExprWithIntLimits
+       5→from sympy.core.function import Derivative
+       6→from sympy.core.relational import Eq
+       7→from sympy.core.singleton import S
+       8→from sympy.core.symbol import Dummy, Wild, Symbol
+       9→from sympy.core.add import Add
+      10→from sympy.calculus.singularities import is_decreasing
+      11→from sympy.concrete.gosper import gosper_sum
+      12→from sympy.functions.special.zeta_functions import zeta
+      13→from sympy.functions.elementary.piecewise import Piecewise
+      14→from sympy.logic.boolalg import And
+      15→from sympy.polys import apart, PolynomialError
+      16→from sympy.solvers import solve
+      17→from sympy.series.limits import limit
+      18→from sympy.series.order import O
+      19→from sympy.core.compatibility import range
+      20→from sympy.tensor.indexed import Idx
+      21→
+      22→
+      23→class Sum(AddWithLimits, ExprWithIntLimits):
+      24→    r"""Represents unevaluated summation.
+      25→
+      26→    ``Sum`` represents a finite or infinite series, with the first argument
+
+  [... truncated ...]
+- [Grep Result after action #18]
+  sympy/matrices/expressions/matexpr.py:342:class MatrixElement(Expr):
+  sympy/matrices/expressions/matexpr.py-343-    parent = property(lambda self: self.args[0])
+  sympy/matrices/expressions/matexpr.py-344-    i = property(lambda self: self.args[1])
+  sympy/matrices/expressions/matexpr.py-345-    j = property(lambda self: self.args[2])
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-346-    _diff_wrt = True
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-347-    is_symbol = True
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-348-    is_commutative = True
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-349-
+  sympy/matrices/expressions/matexpr.py-350-    def __new__(cls, name, n, m):
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-351-        n, m = map(sympify, (n, m))
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-352-        from sympy import MatrixBase
+  sympy/matrices/expressions/matexpr.py-353-        if isinstance(name, (MatrixBase,)):
+  sympy/matrices/expressions/matexpr.py-354-            if n.is_Integer and m.is_Integer:
+  ./swebench_9_15/testbed/sympy/matrices/expressions/matexpr.py-355-
+  [... truncated ...]
+- [Test Output after action #20]
+  Identity matrix I:
+  I
+
+  I[0, 0]: 1
+  I[0, 1]: 0
+  I[i, i]: 1
+  I[i, j]: 0
+
+  Inner sum Sum(I[i, j], (i, 0, n-1)):
+  Sum(0, (i, 0, n - 1))
+
+  Inner sum evaluated:
+  0
+
+  Outer sum Sum(inner_sum_result, (j, 0, n-1)):
+  Sum(0, (j, 0, n - 1))
+
+  Outer sum evaluated:
+  0
+
+  Double sum Sum(Sum(I[i, j], (i, 0, n-1)), (j, 0, n-1)):
+  Sum(0, (i, 0, n - 1), (j, 0, n - 1))
+
+  Double sum evaluated:
+  0
+
+  Expected: n
+  Got: 0
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Mapping
+  ./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc
+  [... truncated ...]
+- [Read Result after action #22]
+     478→    def _entry(self, i, j):
+     479→        if i == j:
+     480→            return S.One
+     481→        else:
+     482→            return S.Zero
+     483→
+     484→    def _eval_determinant(self):
+     485→        return S.One
+     486→
+     487→
+
+- [Grep Result after action #24]
+  Found 23 files
+  testbed/sympy/tensor/tests/test_indexed.py
+  testbed/sympy/tensor/indexed.py
+  testbed/sympy/printing/tests/test_latex.py
+  testbed/sympy/printing/pretty/tests/test_pretty.py
+  testbed/sympy/physics/secondquant.py
+  testbed/sympy/physics/quantum/tests/test_sho1d.py
+  testbed/sympy/physics/quantum/tests/test_piab.py
+  testbed/sympy/physics/quantum/tests/test_cg.py
+  testbed/sympy/physics/quantum/spin.py
+  testbed/sympy/physics/quantum/sho1d.py
+  testbed/sympy/physics/quantum/piab.py
+  testbed/sympy/physics/quantum/pauli.py
+  testbed/sympy/physics/quantum/fermion.py
+  testbed/sympy/physics/quantum/cg.py
+  testbed/sympy/physics/quantum/boson.py
+  testbed/sympy/matrices/expressions/tests/test_matexpr.py
+  testbed/sympy/matrices/expressions/matexpr.py
+  testbed/sympy/functions/special/tensor_functions.py
+  testbed/sympy/core/tests/test_args.py
+  testbed/sympy/concrete/tests/test_delta.py
+  testbed/sympy/concrete/summations.py
+  testbed/sympy/concrete/products.py
+  testbed/sympy/concrete/delta.py
+- [Grep Result after action #26]
+  Found 1 file
+  testbed/sympy/functions/special/tensor_functions.py
+- [Diagnostic Output after action #29]
+  378:        from sympy import KroneckerDelta
+  379:        return KroneckerDelta(self.args[1], v.args[1])*KroneckerDelta(self.args[2], v.args[2])
+- [Test Output after action #32]
+  e, e[0, 0], e[0, 1], e[1, 0], e[1, 1]:
+  I 1 0 0 1
+
+  ask(Query.diagonal(e)), ask(Query.integer_elements(e)):
+  True True
+
+  Sum(e[i, i], (i, 0, n-1)).doit():
+  n
+
+  Sum(Sum(e[i, j], (i, 0, n-1)), (j, 0, n-1)).doit():
+  Sum(Piecewise((1, (0 <= j) & (j <= n - 1)), (0, True)), (j, 0, n - 1))
+
+  Expected: n
+  Got: Sum(Piecewise((1, (0 <= j) & (j <= n - 1)), (0, True)), (j, 0, n - 1))
+  Bug: False
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Mapping
+  ./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is
+  [... truncated ...]
+- [Test Output after action #35]
+  Result: Sum(Piecewise((1, (0 <= j) & (j <= n - 1)), (0, True)), (j, 0, n - 1))
+
+  Simplified: Sum(Piecewise((1, (0 <= j) & (j <= n - 1)), (0, True)), (j, 0, n - 1))
+
+  With n=5: Sum(Piecewise((1, (0 <= j) & (j <= 4)), (0, True)), (j, 0, 4))
+  Evaluated: 5
+
+  Expected: n
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Mapping
+  ./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Callable
+  ./swebench_9_15/te
+  [... truncated ...]
+- [Read Result after action #37]
+     857→    if isinstance(f, Piecewise):
+     858→        if not any(i in arg.args[1].free_symbols for arg in f.args):
+     859→            # Piecewise conditions do not depend on the dummy summation variable,
+     860→            # therefore we can fold:     Sum(Piecewise((e, c), ...), limits)
+     861→            #                        --> Piecewise((Sum(e, limits), c), ...)
+     862→            newargs = []
+     863→            for arg in f.args:
+     864→                newexpr = eval_sum(arg.expr, limits)
+     865→                if newexpr is None:
+     866→                    return None
+     867→                newargs.append((newexpr, arg.cond))
+     868→            return f.func(*newargs)
+     869→
+     870→    if f.has(KroneckerDelta) and _has_simple_delta(f, limits[0]):
+     871→        return deltasummation(f, limits)
+     872→
+     873→    dif = b - a
+     874→    definite = dif.is_Integer
+     875→    # Doing it directly may be faster if there are very few terms.
+     876→    if definite and (dif < 100):
+     877→        return eval_sum_direct(f, (i, a, b))
+     878→    if isinstance(f, Piecewise):
+     879→        return None
+     880→    # Try to do it symbolically. Even when the number of terms is known,
+
+  [... truncated ...]
+- [Diagnostic Output after action #39]
+  def deltasummation(f, limit, no_piecewise=False):
+      """
+      Handle summations containing a KroneckerDelta.
+
+      The idea for summation is the following:
+
+      - If we are dealing with a KroneckerDelta expression, i.e. KroneckerDelta(g(x), j),
+        we try to simplify it.
+
+        If we could simplify it, then we sum the resulting expression.
+        We already know we can sum a simplified expression, because only
+        simple KroneckerDelta expressions are involved.
+
+        If we couldn't simplify it, there are two cases:
+
+        1) The expression is a simple expression: we return the summation,
+           taking care if we are dealing with a Derivative or with a proper
+           KroneckerDelta.
+
+        2) The expression is not simple (i.e. KroneckerDelta(cos(x))): we can do
+           nothing at all.
+
+      - If the expr is a multiplication expr having a KroneckerDelta term:
+
+        First we expand it.
+
+        If the expansion did work, then we try to sum the expansion.
+
+        If not, we try to extract a simple KroneckerDelta term, then we have two
+        cases:
+- [Test Output after action #42]
+  KroneckerDelta(i, j): KroneckerDelta(i, j)
+
+  Sum(KroneckerDelta(i, j), (i, 0, n-1)): Sum(KroneckerDelta(i, j), (i, 0, n - 1))
+
+  Result: Piecewise((1, (0 <= j) & (j <= n - 1)), (0, True))
+
+  With n=5, j=2: 1
+
+  Simplified: Piecewise((1, (0 <= j) & (j <= n - 1)), (0, True))
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Mapping
+  ./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Callable
+- [Test Output after action #45]
+  I[0, 0]: 1
+  I[0, 1]: 0
+  I[1, 0]: 0
+  I[1, 1]: 1
+  I[2, 2]: 1
+
+  Type of I[0, 0]: <class 'sympy.core.numbers.One'>
+  Type of I[0, 1]: <class 'sympy.core.numbers.Zero'>
+
+  I[0, 0] == 1: True
+  I[0, 1] == 0: True
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Mapping
+  ./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Callable
+- [Test Output after action #47]
+  e, e[0, 0], e[0, 1], e[1, 0], e[1, 1]:
+  I 1 0 0 1
+
+  ask(Query.diagonal(e)), ask(Query.integer_elements(e)):
+  True True
+
+  Sum(e[i, i], (i, 0, n-1)).doit():
+  n
+
+  Sum(Sum(e[i, j], (i, 0, n-1)), (j, 0, n-1)).doit():
+  Sum(Piecewise((1, (0 <= j) & (j <= n - 1)), (0, True)), (j, 0, n - 1))
+
+  Expected: n
+  Got: Sum(Piecewise((1, (0 <= j) & (j <= n - 1)), (0, True)), (j, 0, n - 1))
+  Bug: False
+  Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+    Traceback (most recent call last):
+      File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+        exec(line)
+      File "<string>", line 1, in <module>
+      File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+    AttributeError: 'NoneType' object has no attribute 'loader'
+
+  Remainder of file ignored
+  ./swebench_9_15/testbed/sympy/core/basic.py:3: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is deprecated since Python 3.3, and in 3.9 it will stop working
+    from collections import Mapping
+  ./swebench_9_15/testbed/sympy/plotting/plot.py:28: DeprecationWarning: Using or importing the ABCs from 'collections' instead of from 'collections.abc' is
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- sympy/matrices/expressions/matexpr.py
+  Tool: Edit action #31
+  old_text_sha256: daf354b1410a9ab3f88322c0e04c5a181fda71d57b0c9aae497a249e934455d6
+  new_text_sha256: d490a26ee1cd0cc25b2defe83970a5eb7e5a60126a25b5724eb088c430dc5598
+- sympy/concrete/summations.py
+  Tool: Edit action #56
+  old_text_sha256: dd58a78b9889c9d35719503f1573e5f526819f09145af104c60b61408770ccdc
+  new_text_sha256: 57b66ed6fea33acf2c1e9980e7173db071043509112fc2ed7f39082e96eaa6e4
+- sympy/concrete/summations.py
+  Tool: Edit action #65
+  old_text_sha256: f2c453e91fbb7c3823b2fdc3a8ead88b6766f5231aa9f0041f293df405ef9769
+  new_text_sha256: 3fc7e3ba8afa86063bf10dd23472a940dbc572305fabdea92840863ec7c03e60
+- sympy/concrete/summations.py
+  Tool: Edit action #72
+  old_text_sha256: d29c344da6184feab87bf83a2500ca79eff4e9a0921a8c2d2e3bce218ab6d278
+  new_text_sha256: 03abbff8f9ca0d9708bc498fc6df083e9c57e5ae9d630d3aa1e5e35c57698534
+- swebench_9_15/test_simplification.py
+  Tool: Write action #34
+  new_text_sha256: 8ebd3eb1e4c24eefcc17baf03e8a530786f6908395b059d7ffb2e35e2267b7ea
+- swebench_9_15/test_kronecker.py
+  Tool: Write action #41
+  new_text_sha256: 81cbfa30593403d98d84d54cfcfdc333826ba79e8bc5186623226251aff63727
+- swebench_9_15/test_concrete.py
+  Tool: Write action #44
+  new_text_sha256: 872edd8dfb0d2c33a37bebb99ddff1a06bd6c2d1ad21bc3ea1a45dd9a0788649
+- swebench_9_15/test_doit_multiple.py
+  Tool: Write action #49
+  new_text_sha256: dded51a0ad231ac714e10dac92cba97d2bbaa817874689150b37debf034ac103
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: sympy/sympy
+Base commit: d3fcdb72bfcbb560eb45264ac1c03f359436edef
+Instance ID: sympy__sympy-12427
+
+CURRENT_ISSUE
+DiagonalMatrix assumes shape is square
+`DiagonalMatrix` assumes its shape is (row x row):
+
+```
+>>> a=DiagonalMatrix(MatrixSymbol('x', 2, 3))
+>>> b=DiagonalMatrix(MatrixSymbol('x', 3, 2))
+>>> a.shape, b.shape
+((2, 2), (3, 3))
+```
+
+So it is not surprising that the multiplication may fail;
+
+```
+>>> a*b
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "sympy\matrices\expressions\matexpr.py", line 21, in __sympifyit_wrapper
+    b = sympify(b, strict=True)
+  File "sympy\core\decorators.py", line 119, in binary_op_wrapper
+    return func(self, other)
+  File "sympy\matrices\expressions\matexpr.py", line 106, in __mul__
+    def __mul__(self, other):
+  File "sympy\matrices\expressions\matmul.py", line 38, in __new__
+    validate(*matrices)
+  File "sympy\matrices\expressions\matmul.py", line 136, in validate
+    raise ShapeError("Matrices %s and %s are not aligned"%(A, B))
+sympy.matrices.matrices.ShapeError: Matrices DiagonalMatrix(x) and DiagonalMatri
+x(x) are not aligned
+```
+
+But non-square matrices should be allowed:
+
+```
+>>> Matrix(2,3,(1,0,0,0,2,0)) * Matrix(3,2,(4,0,0,5,0,0))
+Matrix([
+[4,  0],
+[0, 10]])
+```
+
+The effective matrix size should be the minimum of the given dimensions. When any dimension is symbolic, there should be a way to indicate which one is the smaller. Or if one is symbolic and the other definite then (maybe) the definite one could be taken to be the limiting one. If both are symbolic there should either be an error or else a way to select the smaller of the two dimensions.
+
+A **related issue** is that `DiagonalOf` assumes its shape is (row, 1):
+
+```
+>>> DiagonalOf(MatrixSymbol('x', 3, 2)).shape
+(3, 1)  <------- that should be (2, 1)
+```
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

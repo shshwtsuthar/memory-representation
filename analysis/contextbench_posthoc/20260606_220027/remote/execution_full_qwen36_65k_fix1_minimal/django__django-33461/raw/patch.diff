@@ -1,0 +1,67 @@
+diff --git a/django/views/templates/technical_500.html b/django/views/templates/technical_500.html
+index 7801289b78..9d65346847 100644
+--- a/django/views/templates/technical_500.html
++++ b/django/views/templates/technical_500.html
+@@ -190,7 +190,7 @@
+ <div id="template">
+    <h2>Error during template rendering</h2>
+    <p>In template <code>{{ template_info.name }}</code>, error at line <strong>{{ template_info.line }}</strong></p>
+-   <h3>{{ template_info.message }}</h3>
++   <h3>{{ template_info.message|force_escape }}</h3>
+    <table class="source{% if template_info.top %} cut-top{% endif %}
+       {% if template_info.bottom != template_info.total %} cut-bottom{% endif %}">
+    {% for source_line in template_info.source_lines %}
+@@ -316,7 +316,7 @@ Using engine {{ entry.backend.name }}:
+ {% endif %}{% endif %}{% if template_info %}
+ Template error:
+ In template {{ template_info.name }}, error at line {{ template_info.line }}
+-   {{ template_info.message }}
++   {{ template_info.message|force_escape }}
+ {% for source_line in template_info.source_lines %}{% if source_line.0 == template_info.line %}   {{ source_line.0 }} : {{ template_info.before }} {{ template_info.during }} {{ template_info.after }}{% else %}   {{ source_line.0 }} : {{ source_line.1 }}{% endif %}{% endfor %}{% endif %}
+ 
+ Traceback (most recent call last):{% for frame in frames %}
+diff --git a/tests/view_tests/tests/test_debug.py b/tests/view_tests/tests/test_debug.py
+index 591013be36..f300276b09 100644
+--- a/tests/view_tests/tests/test_debug.py
++++ b/tests/view_tests/tests/test_debug.py
+@@ -1073,6 +1073,40 @@ class PlainTextReportTests(SimpleTestCase):
+             text
+         )
+ 
++    @override_settings(DEBUG=True)
++    def test_template_exception_with_safestring_message(self):
++        """
++        template_info.message containing a SafeString is escaped in the
++        technical 500 response.
++        """
++        request = self.rf.get('/test_view/')
++        try:
++            render(request, 'debug/template_error.html')
++        except Exception:
++            exc_type, exc_value, tb = sys.exc_info()
++        # Manually inject a SafeString into template_debug to simulate the
++        # scenario described in the issue.
++        exc_value.template_debug = {
++            'message': mark_safe('<p>XSS</p>'),
++            'source_lines': [],
++            'before': '',
++            'during': '',
++            'after': '',
++            'top': 0,
++            'bottom': 0,
++            'total': 0,
++            'line': 0,
++            'name': 'test.html',
++            'start': 0,
++            'end': 0,
++        }
++        reporter = ExceptionReporter(request, exc_type, exc_value, tb)
++        html = reporter.get_traceback_html()
++        # The SafeString should be escaped in the HTML output.
++        self.assertIn('&lt;p&gt;XSS&lt;/p&gt;', html)
++        # It should not appear unescaped.
++        self.assertNotIn('<p>XSS</p>', html)
++
+     def test_request_with_items_key(self):
+         """
+         An exception report can be generated for requests with 'items' in

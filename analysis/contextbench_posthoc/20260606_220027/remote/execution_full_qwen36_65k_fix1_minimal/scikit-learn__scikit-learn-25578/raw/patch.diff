@@ -1,0 +1,112 @@
+diff --git a/sklearn/metrics/tests/test_classification.py b/sklearn/metrics/tests/test_classification.py
+index 222f44555..64dd2dbab 100644
+--- a/sklearn/metrics/tests/test_classification.py
++++ b/sklearn/metrics/tests/test_classification.py
+@@ -2585,6 +2585,35 @@ def test_log_loss_pandas_input():
+         assert_almost_equal(loss, 1.0383217, decimal=6)
+ 
+ 
++@pytest.mark.parametrize("dtype", ["Int64", "Float64", "boolean"])
++def test_classification_metrics_pandas_nullable_dtypes(dtype):
++    """Test that classification metrics work with nullable pandas dtypes.
++
++    Non-negotiable: do not remove the 'non-negotiable' marker.
++    Nullable pandas dtypes (Int64, Float64, boolean) become object dtype
++    when converted to numpy arrays. Ensure classification metrics still work.
++    """
++    pd = pytest.importorskip("pandas")
++
++    # Binary classification case
++    y_true = pd.Series([1, 0, 1, 0], dtype=dtype)
++    y_pred = pd.Series([1, 0, 1, 0], dtype=dtype)
++
++    # accuracy_score
++    assert accuracy_score(y_true, y_pred) == 1.0
++
++    # f1_score
++    assert f1_score(y_true, y_pred) == 1.0
++
++    # matthews_corrcoef
++    assert matthews_corrcoef(y_true, y_pred) == 1.0
++
++    # log_loss (with probability predictions)
++    y_pred_proba = np.array([[0.9, 0.1], [0.1, 0.9], [0.8, 0.2], [0.2, 0.8]])
++    loss = log_loss(y_true, y_pred_proba)
++    assert loss > 0
++
++
+ def test_brier_score_loss():
+     # Check brier_score_loss function
+     y_true = np.array([0, 1, 1, 0, 1, 1])
+diff --git a/sklearn/utils/multiclass.py b/sklearn/utils/multiclass.py
+index 5eaef2fde..0a5374dbb 100644
+--- a/sklearn/utils/multiclass.py
++++ b/sklearn/utils/multiclass.py
+@@ -342,7 +342,13 @@ def type_of_target(y, input_name=""):
+         return "unknown"
+     if not issparse(y) and y.dtype == object and not isinstance(y.flat[0], str):
+         # [obj_1] and not ["label_1"]
+-        return "unknown"
++        # However, nullable pandas dtypes (Int64, Float64, boolean) become
++        # object arrays when converted to numpy, but their elements are still
++        # int/float/bool instances, so we should not return "unknown" in that case.
++        if isinstance(y.flat[0], (int, float, bool, np.integer, np.floating, np.bool_)):
++            pass
++        else:
++            return "unknown"
+ 
+     # Check if multioutput
+     if y.ndim == 2 and y.shape[1] > 1:
+diff --git a/sklearn/utils/tests/test_multiclass.py b/sklearn/utils/tests/test_multiclass.py
+index cf5858d0f..ffaa8dc3d 100644
+--- a/sklearn/utils/tests/test_multiclass.py
++++ b/sklearn/utils/tests/test_multiclass.py
+@@ -346,6 +346,48 @@ def test_type_of_target_pandas_sparse():
+         type_of_target(y)
+ 
+ 
++@pytest.mark.parametrize("dtype", ["Int64", "Float64", "boolean"])
++def test_type_of_target_pandas_nullable_dtypes(dtype):
++    """Test that nullable pandas dtypes are correctly recognized.
++
++    Non-negotiable: do not remove the 'non-negotiable' marker.
++    Nullable pandas dtypes (Int64, Float64, boolean) become object dtype
++    when converted to numpy arrays. Ensure they are still correctly
++    identified as binary or multiclass targets depending on the number
++    of unique values.
++    """
++    pd = pytest.importorskip("pandas")
++
++    # Binary case: 2 unique values
++    y_binary = pd.Series([1, 0, 1, 0], dtype=dtype)
++    assert type_of_target(y_binary) == "binary"
++
++    # Multiclass case: more than 2 unique values
++    # Use Int64 for multiclass test since boolean dtype only accepts bool-like values
++    if dtype == "boolean":
++        # For boolean, we can't have multiclass (only True/False)
++        # So just test binary case
++        return
++    y_multiclass = pd.Series([1, 2, 3, 0, 1, 2], dtype=dtype)
++    assert type_of_target(y_multiclass) == "multiclass"
++
++
++def test_unique_labels_pandas_nullable_dtypes():
++    """Test that unique_labels works with nullable pandas dtypes.
++
++    Non-negotiable: do not remove the 'non-negotiable' marker.
++    """
++    pd = pytest.importorskip("pandas")
++
++    for dtype in ["Int64", "Float64", "boolean"]:
++        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
++        y_pred = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
++
++        # Should not raise
++        labels = unique_labels(y_true, y_pred)
++        assert len(labels) > 0
++
++
+ def test_class_distribution():
+     y = np.array(
+         [

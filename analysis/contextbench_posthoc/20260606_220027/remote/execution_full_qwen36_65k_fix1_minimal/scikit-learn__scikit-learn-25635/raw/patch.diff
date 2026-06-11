@@ -1,0 +1,93 @@
+diff --git a/sklearn/utils/multiclass.py b/sklearn/utils/multiclass.py
+index 5eaef2fde..37b9bfd8a 100644
+--- a/sklearn/utils/multiclass.py
++++ b/sklearn/utils/multiclass.py
+@@ -20,6 +20,26 @@ from .validation import check_array, _assert_all_finite
+ from ..utils._array_api import get_namespace
+ 
+ 
++def _convert_pandas_nullable_dtype(y):
++    """Convert pandas nullable dtypes to numpy dtypes.
++
++    Pandas nullable dtypes (Int64, Float64, boolean) become object dtype
++    when converted to numpy arrays. This function converts them to their
++    numpy equivalents to avoid issues with type detection.
++    """
++    # Check if y is a pandas Series with a nullable dtype
++    if hasattr(y, "dtype") and hasattr(y.dtype, "numpy_dtype"):
++        # This is a pandas ExtensionArray dtype with a numpy_dtype attribute
++        # (e.g., Int64Dtype, Float64Dtype, BooleanDtype)
++        try:
++            # Convert to numpy using the underlying numpy dtype
++            y = y.to_numpy(dtype=y.dtype.numpy_dtype)
++        except (AttributeError, TypeError):
++            # If conversion fails, return y unchanged
++            pass
++    return y
++
++
+ def _unique_multiclass(y):
+     xp, is_array_api = get_namespace(y)
+     if hasattr(y, "__array__") or is_array_api:
+@@ -295,6 +315,9 @@ def type_of_target(y, input_name=""):
+     if sparse_pandas:
+         raise ValueError("y cannot be class 'SparseSeries' or 'SparseArray'")
+ 
++    # Convert pandas nullable dtypes to numpy dtypes before further processing
++    y = _convert_pandas_nullable_dtype(y)
++
+     if is_multilabel(y):
+         return "multilabel-indicator"
+ 
+diff --git a/sklearn/utils/tests/test_multiclass.py b/sklearn/utils/tests/test_multiclass.py
+index cf5858d0f..3f5d03252 100644
+--- a/sklearn/utils/tests/test_multiclass.py
++++ b/sklearn/utils/tests/test_multiclass.py
+@@ -346,6 +346,47 @@ def test_type_of_target_pandas_sparse():
+         type_of_target(y)
+ 
+ 
++def test_type_of_target_pandas_nullable_dtypes():
++    """Test that nullable pandas dtypes are handled correctly.
++
++    Non-regression test for:
++    https://github.com/scikit-learn/scikit-learn/issues/25638
++    """
++    pd = pytest.importorskip("pandas")
++
++    # Test binary classification with nullable dtypes
++    for dtype in ["Int64", "Float64", "boolean"]:
++        y = pd.Series([1, 0, 0, 1, 0, 1], dtype=dtype)
++        assert type_of_target(y) == "binary"
++
++    # Test multiclass classification with nullable dtypes
++    for dtype in ["Int64", "Float64"]:
++        y = pd.Series([0, 1, 2, 0, 1, 2], dtype=dtype)
++        assert type_of_target(y) == "multiclass"
++
++
++def test_confusion_matrix_pandas_nullable_dtypes():
++    """Test that confusion_matrix works with nullable pandas dtypes.
++
++    Non-regression test for:
++    https://github.com/scikit-learn/scikit-learn/issues/25635
++    """
++    pd = pytest.importorskip("pandas")
++    from sklearn.metrics import confusion_matrix
++
++    y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype="int64")
++    y_pred = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
++    expected_cm = confusion_matrix(y_true, y_pred)
++
++    # Test with nullable dtypes
++    for dtype in ["Int64", "Float64", "boolean"]:
++        y_true_nullable = pd.Series(
++            [1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype
++        )
++        result_cm = confusion_matrix(y_true_nullable, y_pred)
++        assert_array_equal(result_cm, expected_cm)
++
++
+ def test_class_distribution():
+     y = np.array(
+         [

@@ -1,0 +1,67 @@
+diff --git a/sympy/sets/sets.py b/sympy/sets/sets.py
+index 175312287e..06744d0df2 100644
+--- a/sympy/sets/sets.py
++++ b/sympy/sets/sets.py
+@@ -55,7 +55,7 @@ class Set(Basic):
+     is_ProductSet = False
+     is_Union = False
+     is_Intersection = None
+-    is_EmptySet = None
++    is_empty = None
+     is_UniversalSet = None
+     is_Complement = None
+     is_ComplexRegion = False
+@@ -1011,6 +1011,44 @@ def is_right_unbounded(self):
+         """Return ``True`` if the right endpoint is positive infinity. """
+         return self.right is S.Infinity or self.right == Float("+inf")
+ 
++    @property
++    def is_empty(self):
++        """Return ``True`` if the interval is known to be empty, ``False`` if
++        it is known to be non-empty, and ``None`` if the emptiness is unknown.
++
++        Examples
++        ========
++
++        >>> from sympy import Interval, S, Symbol
++        >>> Interval(1, 2).is_empty
++        False
++        >>> Interval(2, 1).is_empty
++        True
++        >>> x = Symbol('x')
++        >>> Interval(x, x).is_empty is None
++        True
++
++        """
++        # Check if start > end (empty interval)
++        if (self.end < self.start) == True:
++            return True
++        if (self.end - self.start).is_negative:
++            return True
++
++        # Check if start == end
++        if self.start == self.end:
++            # If both endpoints are closed, it's a singleton (non-empty)
++            if not self.left_open and not self.right_open:
++                # Special case: infinite endpoints with both closed is empty
++                if self.start is S.Infinity or self.start is S.NegativeInfinity:
++                    return True
++                return False
++            # If at least one endpoint is open, it's empty
++            return True
++
++        # start < end, interval is non-empty
++        return False
++
+     def _eval_Eq(self, other):
+         if not isinstance(other, Interval):
+             if isinstance(other, FiniteSet):
+@@ -1466,7 +1504,7 @@ class EmptySet(with_metaclass(Singleton, Set)):
+ 
+     .. [1] https://en.wikipedia.org/wiki/Empty_set
+     """
+-    is_EmptySet = True
++    is_empty = True
+     is_FiniteSet = True
+ 
+     @property

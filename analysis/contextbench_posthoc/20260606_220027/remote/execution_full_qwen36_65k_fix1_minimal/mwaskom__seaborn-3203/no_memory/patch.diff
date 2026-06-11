@@ -1,0 +1,131 @@
+diff --git a/seaborn/_core/plot.py b/seaborn/_core/plot.py
+index 64f59cb2..099524df 100644
+--- a/seaborn/_core/plot.py
++++ b/seaborn/_core/plot.py
+@@ -25,7 +25,7 @@ from seaborn._marks.base import Mark
+ from seaborn._stats.base import Stat
+ from seaborn._core.data import PlotData
+ from seaborn._core.moves import Move
+-from seaborn._core.scales import Scale, Nominal
++from seaborn._core.scales import Scale, Nominal, PlotSpecError
+ from seaborn._core.subplots import Subplots
+ from seaborn._core.groupby import GroupBy
+ from seaborn._core.properties import PROPERTIES, Property
+@@ -1249,7 +1249,12 @@ class Plotter:
+             if scale is None:
+                 self._scales[var] = Scale._identity()
+             else:
+-                self._scales[var] = scale._setup(var_df[var], prop)
++                try:
++                    self._scales[var] = scale._setup(var_df[var], prop)
++                except PlotSpecError:
++                    raise
++                except Exception as err:
++                    raise PlotSpecError._during("Scale setup", var) from err
+ 
+             # Everything below here applies only to coordinate variables
+             # We additionally skip it when we're working with a value
+@@ -1271,14 +1276,24 @@ class Plotter:
+ 
+                 axis_obj = getattr(view["ax"], f"{axis}axis")
+                 seed_values = self._get_subplot_data(var_df, var, view, share_state)
+-                view_scale = scale._setup(seed_values, prop, axis=axis_obj)
++                try:
++                    view_scale = scale._setup(seed_values, prop, axis=axis_obj)
++                except PlotSpecError:
++                    raise
++                except Exception as err:
++                    raise PlotSpecError._during("Scale setup", var) from err
+                 set_scale_obj(view["ax"], axis, view_scale._matplotlib_scale)
+ 
+                 for layer, new_series in zip(layers, transformed_data):
+                     layer_df = layer["data"].frame
+                     if var in layer_df:
+                         idx = self._get_subplot_index(layer_df, view)
+-                        new_series.loc[idx] = view_scale(layer_df.loc[idx, var])
++                        try:
++                            new_series.loc[idx] = view_scale(layer_df.loc[idx, var])
++                        except PlotSpecError:
++                            raise
++                        except Exception as err:
++                            raise PlotSpecError._during("Scaling", var) from err
+ 
+             # Now the transformed data series are complete, set update the layer data
+             for layer, new_series in zip(layers, transformed_data):
+diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py
+index 6c9ecbc9..8efaff79 100644
+--- a/seaborn/_core/scales.py
++++ b/seaborn/_core/scales.py
+@@ -8,6 +8,36 @@ from typing import Any, Callable, Tuple, Optional, ClassVar
+ 
+ import numpy as np
+ import matplotlib as mpl
++
++
++class PlotSpecError(Exception):
++    """
++    Exception raised for errors in the plot specification.
++
++    This exception is used to provide additional context when errors occur
++    during plot compilation, helping users diagnose issues with their data
++    or variable mappings.
++    """
++    @classmethod
++    def _during(cls, operation: str, variable: str) -> PlotSpecError:
++        """Create a PlotSpecError with context about where the error occurred."""
++        return cls(
++            f"`{operation}` failed for the `{variable}` variable. "
++            "See the traceback above for more information."
++        )
++
++
++class PlotDataError(Exception):
++    """Exception raised for errors in the plot data."""
++    @classmethod
++    def _during(cls, operation: str, variable: str) -> PlotDataError:
++        """Create a PlotDataError with context about where the error occurred."""
++        return cls(
++            f"`{operation}` failed for the `{variable}` variable. "
++            "See the traceback above for more information."
++        )
++
++
+ from matplotlib.ticker import (
+     Locator,
+     Formatter,
+@@ -121,7 +151,10 @@ class Scale:
+ 
+         for func in self._pipeline:
+             if func is not None:
+-                trans_data = func(trans_data)
++                try:
++                    trans_data = func(trans_data)
++                except Exception as err:
++                    raise PlotSpecError._during("Scaling", str(data.name)) from err
+ 
+         if scalar_data:
+             return trans_data[0]
+@@ -347,8 +380,11 @@ class ContinuousBase(Scale):
+             else:
+                 vmin, vmax = new.norm
+             vmin, vmax = axis.convert_units((vmin, vmax))
+-            a = forward(vmin)
+-            b = forward(vmax) - forward(vmin)
++            try:
++                a = forward(vmin)
++                b = forward(vmax) - forward(vmin)
++            except Exception as err:
++                raise PlotSpecError._during("Scale setup", str(data.name)) from err
+ 
+             def normalize(x):
+                 return (x - a) / b
+diff --git a/seaborn/objects.py b/seaborn/objects.py
+index 27e4c381..7a01b353 100644
+--- a/seaborn/objects.py
++++ b/seaborn/objects.py
+@@ -44,4 +44,4 @@ from seaborn._stats.regression import PolyFit  # noqa: F401
+ 
+ from seaborn._core.moves import Dodge, Jitter, Norm, Shift, Stack, Move  # noqa: F401
+ 
+-from seaborn._core.scales import Nominal, Continuous, Temporal, Scale  # noqa: F401
++from seaborn._core.scales import Nominal, Continuous, Temporal, Scale, PlotSpecError  # noqa: F401

@@ -1,0 +1,140 @@
+diff --git a/seaborn/_core/plot.py b/seaborn/_core/plot.py
+index 64f59cb2..bdb001c7 100644
+--- a/seaborn/_core/plot.py
++++ b/seaborn/_core/plot.py
+@@ -25,7 +25,7 @@ from seaborn._marks.base import Mark
+ from seaborn._stats.base import Stat
+ from seaborn._core.data import PlotData
+ from seaborn._core.moves import Move
+-from seaborn._core.scales import Scale, Nominal
++from seaborn._core.scales import Scale, Nominal, PlotSpecError
+ from seaborn._core.subplots import Subplots
+ from seaborn._core.groupby import GroupBy
+ from seaborn._core.properties import PROPERTIES, Property
+@@ -1249,7 +1249,10 @@ class Plotter:
+             if scale is None:
+                 self._scales[var] = Scale._identity()
+             else:
+-                self._scales[var] = scale._setup(var_df[var], prop)
++                try:
++                    self._scales[var] = scale._setup(var_df[var], prop)
++                except Exception as err:
++                    raise PlotSpecError._during("Scale setup", var) from err
+ 
+             # Everything below here applies only to coordinate variables
+             # We additionally skip it when we're working with a value
+@@ -1278,7 +1281,9 @@ class Plotter:
+                     layer_df = layer["data"].frame
+                     if var in layer_df:
+                         idx = self._get_subplot_index(layer_df, view)
+-                        new_series.loc[idx] = view_scale(layer_df.loc[idx, var])
++                        new_series.loc[idx] = view_scale(
++                            layer_df.loc[idx, var], var=var,
++                        )
+ 
+             # Now the transformed data series are complete, set update the layer data
+             for layer, new_series in zip(layers, transformed_data):
+diff --git a/seaborn/_core/scales.py b/seaborn/_core/scales.py
+index 6c9ecbc9..761827c7 100644
+--- a/seaborn/_core/scales.py
++++ b/seaborn/_core/scales.py
+@@ -37,6 +37,31 @@ from pandas import Series
+ from seaborn._core.rules import categorical_order
+ from seaborn._core.typing import Default, default
+ 
++
++class PlotSpecError(Exception):
++    """
++    Exception raised for errors in the plot specification.
++
++    This exception is used to provide additional context when errors occur
++    during plot compilation, helping users diagnose issues with their plot specs.
++    """
++    @classmethod
++    def _during(cls, operation: str, var: str) -> "PlotSpecError":
++        """Create an error for an operation that failed during a specific step."""
++        return cls(
++            f"{operation} failed for the `{var}` variable. "
++            "See the traceback above for more information."
++        )
++
++    @classmethod
++    def _for_variable(cls, var: str) -> "PlotSpecError":
++        """Create an error for a variable that failed during processing."""
++        return cls(
++            f"Scaling failed for the `{var}` variable. "
++            "See the traceback above for more information."
++        )
++
++
+ from typing import TYPE_CHECKING
+ if TYPE_CHECKING:
+     from seaborn._core.properties import Property
+@@ -107,7 +132,9 @@ class Scale:
+     ) -> Scale:
+         raise NotImplementedError()
+ 
+-    def __call__(self, data: Series) -> ArrayLike:
++    def __call__(
++        self, data: Series, var: str | None = None,
++    ) -> ArrayLike:
+ 
+         trans_data: Series | NDArray | list
+ 
+@@ -119,9 +146,14 @@ class Scale:
+         else:
+             trans_data = data
+ 
+-        for func in self._pipeline:
+-            if func is not None:
+-                trans_data = func(trans_data)
++        try:
++            for func in self._pipeline:
++                if func is not None:
++                    trans_data = func(trans_data)
++        except Exception as err:
++            if var is not None:
++                raise PlotSpecError._for_variable(var) from err
++            raise
+ 
+         if scalar_data:
+             return trans_data[0]
+diff --git a/seaborn/_marks/base.py b/seaborn/_marks/base.py
+index 87e0216d..78d62679 100644
+--- a/seaborn/_marks/base.py
++++ b/seaborn/_marks/base.py
+@@ -172,7 +172,11 @@ class Mark:
+                 # TODO Might this obviate the identity scale? Just don't add a scale?
+                 feature = data[name]
+             else:
+-                feature = scales[name](data[name])
++                scale = scales[name]
++                if isinstance(scale, Scale):
++                    feature = scale(data[name], var=name)
++                else:
++                    feature = scale(data[name])
+             if return_array:
+                 feature = np.asarray(feature)
+             return feature
+diff --git a/seaborn/objects.py b/seaborn/objects.py
+index 27e4c381..7a01b353 100644
+--- a/seaborn/objects.py
++++ b/seaborn/objects.py
+@@ -44,4 +44,4 @@ from seaborn._stats.regression import PolyFit  # noqa: F401
+ 
+ from seaborn._core.moves import Dodge, Jitter, Norm, Shift, Stack, Move  # noqa: F401
+ 
+-from seaborn._core.scales import Nominal, Continuous, Temporal, Scale  # noqa: F401
++from seaborn._core.scales import Nominal, Continuous, Temporal, Scale, PlotSpecError  # noqa: F401
+diff --git a/tests/test_objects.py b/tests/test_objects.py
+index 5f7f5b9f..a798a3bd 100644
+--- a/tests/test_objects.py
++++ b/tests/test_objects.py
+@@ -11,4 +11,6 @@ def test_objects_namespace():
+     for name in dir(seaborn.objects):
+         if not name.startswith("__"):
+             obj = getattr(seaborn.objects, name)
+-            assert issubclass(obj, (Plot, Mark, Stat, Move, Scale))
++            assert issubclass(
++                obj, (Plot, Mark, Stat, Move, Scale, BaseException)
++            )

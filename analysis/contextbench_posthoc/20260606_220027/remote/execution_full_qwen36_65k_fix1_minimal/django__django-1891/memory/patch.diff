@@ -1,0 +1,236 @@
+diff --git a/django/db/models/query.py b/django/db/models/query.py
+index 2c2b5d0883..b38e7f8d82 100644
+--- a/django/db/models/query.py
++++ b/django/db/models/query.py
+@@ -980,7 +980,35 @@ class QuerySet:
+             clone.query.add_q(filter_obj)
+             return clone
+         else:
+-            return self._filter_or_exclude(False, args=(), kwargs=filter_obj)
++            clone = self._filter_or_exclude(False, args=(), kwargs=filter_obj)
++            if self._filter_contains_join(filter_obj):
++                clone = clone.distinct()
++            return clone
++
++    def _filter_contains_join(self, filter_obj):
++        """
++        Check if a filter dictionary contains any lookups that involve joins.
++
++        This is used to determine if distinct() should be applied to avoid
++        duplicate results when filtering across relations.
++        """
++        opts = self.model._meta
++        for field_name in filter_obj:
++            # Split the field name by LOOKUP_SEP to get the path
++            parts = field_name.split(LOOKUP_SEP)
++            # Walk through the model's fields to see if any are relation fields
++            current_opts = opts
++            for i, part in enumerate(parts):
++                try:
++                    field = current_opts.get_field(part)
++                except exceptions.FieldDoesNotExist:
++                    break
++                if field.is_relation:
++                    return True
++                # Move to the related model's opts
++                if field.related_model:
++                    current_opts = field.related_model._meta
++        return False
+ 
+     def _combinator_query(self, combinator, *other_qs, all=False):
+         # Clone the query to inherit the select list and everything
+diff --git a/test_issue.py b/test_issue.py
+new file mode 100644
+index 0000000000..358ec8d168
+--- /dev/null
++++ b/test_issue.py
+@@ -0,0 +1,102 @@
++"""
++Test to reproduce the issue with ForeignKey limit_choices_to and M2M filters
++causing duplicate entries.
++"""
++import os
++import sys
++
++# Setup Django
++sys.path.insert(0, '/testbed')
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tests.settings')
++
++import django
++django.setup()
++
++from django.test import TestCase
++from django.db import models
++from django.forms import ModelForm
++
++
++# Define test models inline
++class Group(models.Model):
++    name = models.CharField(max_length=32)
++    
++    class Meta:
++        app_label = 'test_app'
++
++
++class Asset(models.Model):
++    name = models.CharField(max_length=32)
++    groups = models.ManyToManyField(Group)
++    
++    class Meta:
++        app_label = 'test_app'
++
++
++class Proxy(models.Model):
++    asset = models.ForeignKey(
++        Asset,
++        models.CASCADE,
++        limit_choices_to={'groups__name__in': ['Terminal Server', 'Socks Proxy', 'Web Proxy']},
++    )
++    port = models.PositiveIntegerField()
++    
++    class Meta:
++        app_label = 'test_app'
++
++
++class ProxyForm(ModelForm):
++    class Meta:
++        model = Proxy
++        fields = '__all__'
++
++
++class TestLimitChoicesToM2MDuplicate(TestCase):
++    """Test that limit_choices_to with M2M filters doesn't produce duplicates."""
++    
++    def test_limit_choices_to_with_m2m_filter_does_not_duplicate(self):
++        """
++        A ForeignKey with limit_choices_to using an M2M filter should not
++        produce duplicate entries in the formfield's queryset.
++        """
++        # Create groups
++        group1 = Group.objects.create(name='Terminal Server')
++        group2 = Group.objects.create(name='Socks Proxy')
++        group3 = Group.objects.create(name='Web Proxy')
++        
++        # Create multiple assets that all have the same groups
++        asset1 = Asset.objects.create(name='Asset 1')
++        asset2 = Asset.objects.create(name='Asset 2')
++        asset3 = Asset.objects.create(name='Asset 3')
++        
++        # All assets have all three groups
++        asset1.groups.add(group1, group2, group3)
++        asset2.groups.add(group1, group2, group3)
++        asset3.groups.add(group1, group2, group3)
++        
++        # Create a ProxyForm - the asset field should not have duplicates
++        form = ProxyForm()
++        queryset = form.fields['asset'].queryset
++        
++        # Count how many times each asset appears
++        asset_count = {}
++        for obj in queryset:
++            asset_count[obj.pk] = asset_count.get(obj.pk, 0) + 1
++        
++        # Each asset should appear exactly once
++        for pk, count in asset_count.items():
++            self.assertEqual(
++                count, 1,
++                f"Asset {pk} appears {count} times in the queryset, expected 1"
++            )
++        
++        # Also verify the total count matches the number of unique assets
++        self.assertEqual(
++            len(queryset),
++            Asset.objects.filter(groups__name__in=['Terminal Server', 'Socks Proxy', 'Web Proxy']).distinct().count(),
++            "Queryset should have unique assets only"
++        )
++        
++        print(f"Queryset has {len(queryset)} items")
++        print(f"Unique assets: {list(queryset.values_list('pk', flat=True))}")
++        print("TEST PASSED: No duplicates found!")
+diff --git a/tests/model_forms/models.py b/tests/model_forms/models.py
+index 1a2102f898..3443dbe2cd 100644
+--- a/tests/model_forms/models.py
++++ b/tests/model_forms/models.py
+@@ -422,6 +422,25 @@ class Student(models.Model):
+     study = models.CharField(max_length=30)
+ 
+ 
++# Models for #1891
++class Group(models.Model):
++    name = models.CharField(max_length=32)
++
++
++class Asset(models.Model):
++    name = models.CharField(max_length=32)
++    groups = models.ManyToManyField(Group)
++
++
++class Proxy(models.Model):
++    asset = models.ForeignKey(
++        Asset,
++        models.CASCADE,
++        limit_choices_to={'groups__name__in': ['Terminal Server', 'Socks Proxy', 'Web Proxy']},
++    )
++    port = models.PositiveIntegerField()
++
++
+ # Model for #639
+ class Photo(models.Model):
+     title = models.CharField(max_length=30)
+diff --git a/tests/model_forms/tests.py b/tests/model_forms/tests.py
+index 9e900e35f4..0980a568a3 100644
+--- a/tests/model_forms/tests.py
++++ b/tests/model_forms/tests.py
+@@ -18,13 +18,13 @@ from django.template import Context, Template
+ from django.test import SimpleTestCase, TestCase, skipUnlessDBFeature
+ 
+ from .models import (
+-    Article, ArticleStatus, Author, Author1, Award, BetterWriter, BigInt, Book,
+-    Category, Character, Colour, ColourfulItem, CustomErrorMessage, CustomFF,
+-    CustomFieldForExclusionModel, DateTimePost, DerivedBook, DerivedPost,
+-    Document, ExplicitPK, FilePathModel, FlexibleDatePost, Homepage,
++    Article, ArticleStatus, Asset, Author, Author1, Award, BetterWriter, BigInt,
++    Book, Category, Character, Colour, ColourfulItem, CustomErrorMessage, CustomFF,
++    CustomFieldForExclusionModel, DateTimePost, DerivedBook, DerivedPost, Document,
++    ExplicitPK, FilePathModel, FlexibleDatePost, Group, Homepage,
+     ImprovedArticle, ImprovedArticleWithParentLink, Inventory,
+     NullableUniqueCharFieldModel, Person, Photo, Post, Price, Product,
+-    Publication, PublicationDefaults, StrictAssignmentAll,
++    Proxy, Publication, PublicationDefaults, StrictAssignmentAll,
+     StrictAssignmentFieldSpecific, Student, StumpJoke, TextFile, Triple,
+     Writer, WriterProfile, test_images,
+ )
+@@ -2829,6 +2829,33 @@ class LimitChoicesToTests(TestCase):
+             StumpJokeForm()
+             self.assertEqual(today_callable_dict.call_count, 3)
+ 
++    def test_limit_choices_to_q_with_join_does_not_duplicate(self):
++        """
++        A ForeignKey with limit_choices_to using an M2M filter doesn't
++        produce duplicate entries in the formfield's queryset.
++        """
++        group1 = Group.objects.create(name='Terminal Server')
++        group2 = Group.objects.create(name='Socks Proxy')
++        group3 = Group.objects.create(name='Web Proxy')
++
++        asset1 = Asset.objects.create(name='Asset 1')
++        asset2 = Asset.objects.create(name='Asset 2')
++        asset3 = Asset.objects.create(name='Asset 3')
++
++        asset1.groups.add(group1, group2, group3)
++        asset2.groups.add(group1, group2, group3)
++        asset3.groups.add(group1, group2, group3)
++
++        class ProxyForm(forms.ModelForm):
++            class Meta:
++                model = Proxy
++                fields = '__all__'
++
++        form = ProxyForm()
++        queryset = form.fields['asset'].queryset
++        # Each asset should appear exactly once
++        self.assertSequenceEqual(queryset, [asset1, asset2, asset3])
++
+ 
+ class FormFieldCallbackTests(SimpleTestCase):
+ 

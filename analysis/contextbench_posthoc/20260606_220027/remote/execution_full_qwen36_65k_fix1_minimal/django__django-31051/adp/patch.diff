@@ -1,0 +1,77 @@
+diff --git a/django/core/management/commands/dumpdata.py b/django/core/management/commands/dumpdata.py
+index 2968f74805..96a4837f8e 100644
+--- a/django/core/management/commands/dumpdata.py
++++ b/django/core/management/commands/dumpdata.py
+@@ -144,11 +144,24 @@ class Command(BaseCommand):
+             Collate the objects to be serialized. If count_only is True, just
+             count the number of objects to be serialized.
+             """
+-            models = serializers.sort_dependencies(app_list.items())
++            # Only sort dependencies when natural foreign keys are in use.
++            # When not using natural foreign keys, no ordering is needed
++            # since all references are by primary key and can be loaded
++            # in any order within a transaction.
++            if use_natural_foreign_keys:
++                models = serializers.sort_dependencies(
++                    app_list.items(), allow_unsorted=True,
++                )
++            else:
++                models = [
++                    model
++                    for app_config, model_list in app_list.items()
++                    for model in (model_list or app_config.get_models())
++                ]
+             for model in models:
+                 if model in excluded_models:
+                     continue
+-                if model._meta.proxy and model._meta.proxy_for_model not in models:
++                if model._meta.proxy and model._meta.proxy_for_model not in set(models):
+                     warnings.warn(
+                         "%s is a proxy model and won't be serialized." % model._meta.label,
+                         category=ProxyModelWarning,
+diff --git a/django/core/serializers/__init__.py b/django/core/serializers/__init__.py
+index d0e504ade3..561eff98e9 100644
+--- a/django/core/serializers/__init__.py
++++ b/django/core/serializers/__init__.py
+@@ -156,12 +156,15 @@ def _load_serializers():
+     _serializers = serializers
+ 
+ 
+-def sort_dependencies(app_list):
++def sort_dependencies(app_list, allow_unsorted=False):
+     """Sort a list of (app_config, models) pairs into a single list of models.
+ 
+     The single list of models is sorted so that any model with a natural key
+     is serialized before a normal model, and any model with a natural key
+     dependency has it's dependencies serialized first.
++
++    If ``allow_unsorted`` is True, models with circular dependencies will be
++    added to the list in an arbitrary order rather than raising an exception.
+     """
+     # Process the list of models, and get the list of dependencies
+     model_dependencies = []
+@@ -222,13 +225,18 @@ def sort_dependencies(app_list):
+             else:
+                 skipped.append((model, deps))
+         if not changed:
+-            raise RuntimeError(
+-                "Can't resolve dependencies for %s in serialized app list." %
+-                ', '.join(
+-                    model._meta.label
+-                    for model, deps in sorted(skipped, key=lambda obj: obj[0].__name__)
++            if allow_unsorted:
++                # Add remaining models in arbitrary order
++                model_list.extend([model for model, deps in skipped])
++                break
++            else:
++                raise RuntimeError(
++                    "Can't resolve dependencies for %s in serialized app list." %
++                    ', '.join(
++                        model._meta.label
++                        for model, deps in sorted(skipped, key=lambda obj: obj[0].__name__)
++                    )
+                 )
+-            )
+         model_dependencies = skipped
+ 
+     return model_list

@@ -1,0 +1,88 @@
+diff --git a/debug_test.py b/debug_test.py
+new file mode 100644
+index 0000000000..fc5fb42fcc
+--- /dev/null
++++ b/debug_test.py
+@@ -0,0 +1,59 @@
++#!/usr/bin/env python
++import sys
++sys.path.insert(0, 'tests')
++
++import django
++from django.conf import settings
++if not settings.configured:
++    settings.configure(
++        DATABASES={'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}},
++        INSTALLED_APPS=['django.contrib.contenttypes', 'django.contrib.auth', 'select_related_onetoone'],
++        DEFAULT_AUTO_FIELD='django.db.models.AutoField',
++    )
++    django.setup()
++
++from select_related_onetoone.models import Child4, Parent2
++from django.core.management import call_command
++call_command('migrate', '--run-syncdb', verbosity=0)
++c = Child4.objects.create(name1='n1', name2='n2', value=1, value4=4)
++
++# Patch to debug
++from django.db.models.sql import compiler as cm
++orig = cm.SQLCompiler.get_related_selections
++
++def patched(self, select=None, opts=None, root_alias=None, cur_depth=1, requested=None, restricted=None):
++    if not opts:
++        opts = self.query.get_meta()
++        root_alias = self.query.get_initial_alias()
++    only_load = self.query.get_loaded_field_names()
++    
++    if requested is None:
++        if isinstance(self.query.select_related, dict):
++            requested = self.query.select_related
++            restricted = True
++        else:
++            restricted = False
++    
++    print('opts=%s, cur_depth=%d, requested=%s, restricted=%s' % (opts.model.__name__, cur_depth, requested, restricted))
++    print('  only_load: %s' % [(m.__name__, v) for m, v in only_load.items()])
++    
++    if restricted:
++        for o in opts.related_objects:
++            if o.field.unique and not o.many_to_many:
++                rqn = o.field.related_query_name()
++                model = o.related_model
++                load_fields = only_load.get(model)
++                print('  reverse: %s -> %s, load_fields=%s' % (rqn, model.__name__, load_fields))
++                from django.db.models.query_utils import select_related_descend
++                result = select_related_descend(o.field, restricted, requested, load_fields, reverse=True)
++                print('    select_related_descend=%s' % result)
++    
++    return orig(self, select, opts, root_alias, cur_depth, requested, restricted)
++
++cm.SQLCompiler.get_related_selections = patched
++
++try:
++    p = Parent2.objects.select_related('child1').only('id2', 'child1__value').get(name2='n2')
++    print('SUCCESS')
++except Exception as e:
++    print('ERROR:', str(e))
+diff --git a/django/db/models/sql/query.py b/django/db/models/sql/query.py
+index 6946c273c7..91fcb4bcca 100644
+--- a/django/db/models/sql/query.py
++++ b/django/db/models/sql/query.py
+@@ -621,14 +621,13 @@ class Query(object):
+                 source = opts.get_field(name)
+                 if is_reverse_o2o(source):
+                     cur_model = source.related_model
++                    # Add the FK field to must_include for the related model
++                    # so that the reverse relation can be traversed.
++                    add_to_dict(must_include, cur_model, source.field)
+                 else:
+                     cur_model = source.remote_field.model
+-                opts = cur_model._meta
+-                # Even if we're "just passing through" this model, we must add
+-                # both the current model's pk and the related reference field
+-                # (if it's not a reverse relation) to the things we select.
+-                if not is_reverse_o2o(source):
+                     must_include[old_model].add(source)
++                opts = cur_model._meta
+                 add_to_dict(must_include, cur_model, opts.pk)
+             field = opts.get_field(parts[-1])
+             is_reverse_object = field.auto_created and not field.concrete

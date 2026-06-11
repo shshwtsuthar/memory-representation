@@ -1,0 +1,63 @@
+diff --git a/test_issue.py b/test_issue.py
+new file mode 100644
+index 00000000..1fda0dad
+--- /dev/null
++++ b/test_issue.py
+@@ -0,0 +1,39 @@
++"""Test that Dataset constructor preserves chunked dask arrays when using DataArray with dims."""
++import numpy as np
++
++# First, let's test the core fix without dask
++from xarray import DataArray, Variable
++import xarray as xr
++
++# Test 1: as_compatible_data preserves DataArray's underlying data
++print("Test 1: as_compatible_data with DataArray")
++from xarray.core.variable import as_compatible_data
++
++# Create a simple Variable with numpy data
++np_data = np.arange(10)
++var = Variable(['x'], np_data)
++da = DataArray(var)
++
++result = as_compatible_data(da)
++print(f"  Input data type: {type(var.data)}")
++print(f"  Result type: {type(result)}")
++print(f"  Result is same object as var.data: {result is var.data}")
++assert result is var.data, "as_compatible_data should return the same data object"
++print("  PASSED!")
++
++# Test 2: Dataset constructor with (dims, DataArray) tuple preserves data
++print("\nTest 2: Dataset constructor with (dims, DataArray) tuple")
++ds = xr.Dataset(dict(a=(('x', 'y'), da)))
++print(f"  ds.a.data type: {type(ds.a.data)}")
++assert ds.a.data is var.data, "Dataset should preserve the underlying data"
++print("  PASSED!")
++
++# Test 3: Dataset.update with (dims, DataArray) tuple preserves data
++print("\nTest 3: Dataset.update with (dims, DataArray) tuple")
++ds1 = xr.Dataset({'x': ['a', 'b', 'c']})
++ds2 = ds1.update({'a': (('x', 'y'), da)})
++print(f"  Updated a.data type: {type(ds2[0].a.data)}")
++assert ds2[0].a.data is var.data, "Dataset.update should preserve the underlying data"
++print("  PASSED!")
++
++print("\nAll tests passed!")
+diff --git a/xarray/core/variable.py b/xarray/core/variable.py
+index 64c1895d..4092e1d8 100644
+--- a/xarray/core/variable.py
++++ b/xarray/core/variable.py
+@@ -204,6 +204,13 @@ def as_compatible_data(data, fastpath=False):
+     if isinstance(data, Variable):
+         return data.data
+ 
++    # Handle DataArray by extracting its underlying data without computing
++    # (e.g., preserve dask arrays) - GH4529
++    from .dataarray import DataArray
++
++    if isinstance(data, DataArray):
++        return data.variable.data
++
+     if isinstance(data, NON_NUMPY_SUPPORTED_ARRAY_TYPES):
+         return _maybe_wrap_data(data)
+ 

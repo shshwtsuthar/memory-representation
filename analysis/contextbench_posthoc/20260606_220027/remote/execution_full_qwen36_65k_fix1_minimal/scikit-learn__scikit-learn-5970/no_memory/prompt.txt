@@ -1,0 +1,90 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: no_memory
+
+No prior context is provided for this run.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: scikit-learn/scikit-learn
+Base commit: f8b108d0c6f2f82b2dc4e32a6793f9d9ac9cf2f4
+Instance ID: scikit-learn__scikit-learn-5970
+
+CURRENT_ISSUE
+Precision errors in KernelPCA
+The following triggers an error. The random state is set, but there are still some precision errors.
+
+```
+>>> from sklearn.datasets import make_circles
+>>> from sklearn.decomposition import KernelPCA
+>>> from sklearn.utils.testing import assert_array_almost_equal
+>>>
+>>> X_circle, y_circle = make_circles(400, random_state=0, factor=0.3, noise=0.15)
+>>> kpca = KernelPCA(random_state=0).fit(X_circle)
+>>> kpca2 = KernelPCA(n_components=53, random_state=0).fit(X_circle)
+>>>
+>>> assert_array_almost_equal(kpca.lambdas_[:50], kpca2.lambdas_[:50])
+>>> assert_array_almost_equal(kpca.alphas_[:2, :10], kpca2.alphas_[:2, :10])
+AssertionError:
+Arrays are not almost equal to 6 decimals
+
+(mismatch 80.0%)
+ x: array([[  4.52347019e-02,  -7.41626885e-02,   0.00000000e+00,
+          0.00000000e+00,   0.00000000e+00,   0.00000000e+00,
+          9.93712254e-01,   0.00000000e+00,   0.00000000e+00,...
+ y: array([[ 0.0452347 , -0.07416269, -0.0008139 , -0.00213575,  0.00693525,
+        -0.02749284,  0.05635691,  0.09004436,  0.00364872,  0.01541384],
+       [ 0.00916891,  0.00235399, -0.04403946,  0.02472058,  0.07725798,
+        -0.1409346 ,  0.38463443,  0.22568812,  0.01437247,  0.1645341 ]])
+```
+
+---
+## Old version of issue, without using random state.
+
+The following is raising an error below, but I don't think it should be:
+
+```
+>>> from sklearn.datasets import make_circles
+>>> X_circle, y_circle = make_circles(400, random_state=0, factor=0.3, noise=0.15)
+>>> from sklearn.decomposition import KernelPCA
+>>> kpca = KernelPCA().fit(X_circle)
+>>> kpca2 = KernelPCA(n_components=53).fit(X_circle)
+>>>
+>>> from sklearn.utils.testing import assert_array_almost_equal
+>>> assert_array_almost_equal(kpca.lambdas_[:50], kpca2.lambdas_[:50])
+>>> assert_array_almost_equal(kpca.alphas_[:2, :10], kpca2.alphas_[:2, :10])
+
+AssertionError:
+Arrays are not almost equal to 6 decimals
+
+(mismatch 90.0%)
+ x: array([[-0.045235, -0.074163,  0.      ,  0.      ,  0.      , -0.157852,
+         0.      ,  0.      ,  0.      ,  0.      ],
+       [-0.009169,  0.002354, -0.07098 ,  0.003515, -0.015677, -0.354438,
+        -0.18636 ,  0.056072,  0.017528, -0.178867]])
+ y: array([[ 0.045235, -0.074163, -0.005973,  0.005636, -0.000913, -0.031506,
+         0.006255,  0.047652, -0.015241, -0.018319],
+       [ 0.009169,  0.002354, -0.175217, -0.019426,  0.011081, -0.130316,
+        -0.056403, -0.004699, -0.175928, -0.041456]])
+```
+
+You could see some signs are flipped, some numbers rounded off, etc. Unless I'm confused about the theory of Kernel PCAs, this shouldn't be raising an error, right?
+
+@mblondel, what do you think?
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

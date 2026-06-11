@@ -1,0 +1,497 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: memory
+
+The following is deterministic extractive memory from an officially related prior issue.
+
+PRIOR EXPERIENCE MEMORY
+This is read-only prior trajectory evidence for OpenHands.
+Use it as context only; verify all behavior in the current workspace.
+
+SOURCE
+------
+- trajectory_id: b33f4ea6-6139-4783-9956-30152a017ee6
+- repo: pydata/xarray
+- instance_id: pydata__xarray-3364
+- base_commit: 863e49066ca4d61c9adfe62aca3bf21b90e1af8c
+- model: claude-sonnet-4-5-20250929
+
+PRIOR PROBLEM
+-------------
+Ignore missing variables when concatenating datasets?
+Several users (@raj-kesavan, @richardotis, now myself) have wondered about how to concatenate xray Datasets with different variables.
+
+With the current `xray.concat`, you need to awkwardly create dummy variables filled with `NaN` in datasets that don't have them (or drop mismatched variables entirely). Neither of these are great options -- `concat` should have an option (the default?) to take care of this for the user.
+
+This would also be more consistent with `pd.concat`, which takes a more relaxed approach to matching dataframes with different variables (it does an outer join).
+
+FILES INSPECTED
+---------------
+- xarray/core/concat.py [Read: 5]
+- xarray/core/alignment.py [Read: 1]
+- xarray/core [Grep: 5]
+- xarray/tests/test_concat.py [Read: 1]
+
+SEARCH ANCHORS
+--------------
+- [1] Grep pattern='^def concat\\(' path='testbed'
+- [29] Grep pattern='^NA =' path='xarray/core'
+- [30] Grep pattern='^NA =' path='xarray/core'
+- [32] Grep pattern='fill_value.*dtype' path='xarray/core'
+- [47] Glob path='swebench_9_15/testbed' glob='**/test_concat.py'
+- [51] Grep pattern='coordinates in some datasets but not others' path='xarray/core'
+- [54] Grep pattern='is not present in all datasets' path='xarray/core'
+
+TEST / DIAGNOSTIC / OTHER COMMANDS
+----------------------------------
+- [test] cd testbed && python test_issue.py
+- [test] cd testbed && python test_issue.py
+- [other/reproduction] cd testbed && python --version
+- [test] cd testbed && python3 test_issue.py
+- [test] python3 ./swebench_9_15/testbed/test_issue.py
+- [test] python3 ./swebench_9_15/testbed/test_issue.py
+- [test] python3 ./swebench_9_15/testbed/test_issue.py
+- [test] python3 ./swebench_9_15/testbed/test_issue.py
+- [test] python3 ./swebench_9_15/testbed/test_comprehensive.py
+- [test] python3 ./swebench_9_15/testbed/test_comprehensive.py
+- [test] python3 -m pytest xarray/tests/test_concat.py -xvs
+- [diagnostic] git diff HEAD xarray/core/concat.py | head -200
+
+OBSERVED TEST / RUNTIME FAILURES
+--------------------------------
+- Traceback (most recent call last):
+- TypeError: int() argument must be a string, a bytes-like object or a number, not 'ReprObject'
+
+RELEVANT OBSERVATION EXCERPTS
+-----------------------------
+- [Grep Result after action #1]
+  Found 2 files
+  testbed/xarray/core/variable.py
+  testbed/xarray/core/concat.py
+- [Read Result after action #3]
+       1→import pandas as pd
+       2→
+       3→from . import dtypes, utils
+       4→from .alignment import align
+       5→from .merge import _VALID_COMPAT, unique_variable
+       6→from .variable import IndexVariable, Variable, as_variable
+       7→from .variable import concat as concat_vars
+       8→
+       9→
+      10→def concat(
+      11→    objs,
+      12→    dim,
+      13→    data_vars="all",
+      14→    coords="different",
+      15→    compat="equals",
+      16→    positions=None,
+      17→    fill_value=dtypes.NA,
+      18→    join="outer",
+      19→):
+      20→    """Concatenate xarray objects along a new or existing dimension.
+      21→
+      22→    Parameters
+      23→    ----------
+      24→    objs : sequence of Dataset and DataArray objects
+      25→        xarray objects to concatenate together. Each object is expected to
+      26→        consist of variables and coordinates with matching shapes except for
+      27→        along the concatenated dimension.
+      28→    dim : str or DataArray or pandas.Index
+      29→        Name of the dimension to concatenate along. This can either be a new
+      30→        dimension name, in which case it is added along axis=0, or an existing
+      31→        dimension name, in which case th
+  [... truncated ...]
+- [Test Output after action #5]
+  Exit code 1
+    File "test_issue.py", line 26
+      print(f"\nConcatenation failed with error: {e}")
+                                                    ^
+  SyntaxError: invalid syntax
+- [Test Output after action #7]
+  Exit code 1
+  Traceback (most recent call last):
+    File "test_issue.py", line 1, in <module>
+      import xarray as xr
+    File "./swebench_9_15/testbed/xarray/__init__.py", line 9, in <module>
+      from .core.alignment import align, broadcast
+    File "./swebench_9_15/testbed/xarray/core/alignment.py", line 63
+      join="inner",
+         ^
+  SyntaxError: invalid syntax
+- [Read Result after action #9]
+      55→                new_indexes[dim] = all_indexes[dim][0]
+      56→        objects[idx + 1] = obj._overwrite_indexes(new_indexes)
+      57→
+      58→    return objects
+      59→
+      60→
+      61→def align(
+      62→    *objects,
+      63→    join="inner",
+      64→    copy=True,
+      65→    indexes=None,
+      66→    exclude=frozenset(),
+      67→    fill_value=dtypes.NA
+      68→):
+      69→    """
+      70→    Given any number of Dataset and/or DataArray objects, returns new
+      71→    objects with aligned indexes and dimension sizes.
+      72→
+      73→    Array from the aligned objects are suitable as input to mathematical
+      74→    operators, because along each dimension they have the same index and size.
+      75→
+      76→    Missing values (if ``join != 'inner'``) are filled with ``fill_value``.
+      77→    The default fill value is NaN.
+      78→
+      79→    Parameters
+      80→    ----------
+      81→    *objects : Dataset or DataArray
+      82→        Objects to align.
+      83→    join : {'outer', 'inner', 'left', 'right', 'exact', 'override'}, optional
+      84→        Method for joining the indexes of the passed objects along each
+      85→        dimension:
+      86→
+      87→        - 'outer': use the union of obje
+  [... truncated ...]
+- [Test Output after action #14]
+  Exit code 1
+  ./swebench_9_15/testbed/xarray/plot/plot.py:291: SyntaxWarning: "is" with a literal. Did you mean "=="?
+    if args is ():
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_issue.py", line 16, in <module>
+      print(ds1)
+    File "./swebench_9_15/testbed/xarray/core/dataset.py", line 1620, in __repr__
+      return formatting.dataset_repr(self)
+    File "./swebench_9_15/testbed/xarray/core/formatting.py", line 485, in dataset_repr
+      summary.append(data_vars_repr(ds.data_vars, col_width=col_width))
+    File "./swebench_9_15/testbed/xarray/core/formatting.py", line 356, in _mapping_repr
+      summary += [summarizer(k, v, col_width) for k, v in mapping.items()]
+    File "./swebench_9_15/testbed/xarray/core/formatting.py", line 356, in <listcomp>
+      summary += [summarizer(k, v, col_width) for k, v in mapping.items()]
+    File "./swebench_9_15/testbed/xarray/core/formatting.py", line 295, in summarize_datavar
+      return summarize_variable(name, var.variable, col_width)
+    File "./swebench_9_15/testbed/xarray/core/formatting.py", line 273, in summarize_variable
+      values_str = inline_variable_array_repr(var, values_width)
+    File "./swebench_9_15/testbed/xarray/core/for
+  [... truncated ...]
+- [Test Output after action #16]
+  Testing concatenation of datasets with different variables...
+  Concatenation failed with error: variables {'c'} are present in some datasets but not others.
+- [Read Result after action #18]
+     305→    )
+     306→
+     307→    # determine which variables to merge, and then merge them according to compat
+     308→    variables_to_merge = (coord_names | data_names) - concat_over - dim_names
+     309→
+     310→    result_vars = {}
+     311→    if variables_to_merge:
+     312→        to_merge = {var: [] for var in variables_to_merge}
+     313→
+     314→        for ds in datasets:
+     315→            absent_merge_vars = variables_to_merge - set(ds.variables)
+     316→            if absent_merge_vars:
+     317→                raise ValueError(
+     318→                    "variables %r are present in some datasets but not others. "
+     319→                    % absent_merge_vars
+     320→                )
+     321→
+     322→            for var in variables_to_merge:
+     323→                to_merge[var].append(ds.variables[var])
+     324→
+     325→        for var in variables_to_merge:
+     326→            result_vars[var] = unique_variable(
+     327→                var, to_merge[var], compat=compat, equals=equals.get(var, None)
+     328→            )
+     329→    else:
+     330→        result_vars = {}
+     331→    result_vars.update(dim_coords)
+     332→
+     333→    # assign attrs and encoding from first dataset
+     334→
+  [... truncated ...]
+- [Read Result after action #20]
+     355→            yield var
+     356→
+     357→    # stack up each variable to fill-out the dataset (in order)
+     358→    # n.b. this loop preserves variable order, needed for groupby.
+     359→    for k in datasets[0].variables:
+     360→        if k in concat_over:
+     361→            try:
+     362→                vars = ensure_common_dims([ds.variables[k] for ds in datasets])
+     363→            except KeyError:
+     364→                raise ValueError("%r is not present in all datasets." % k)
+     365→            combined = concat_vars(vars, dim, positions)
+     366→            assert isinstance(combined, Variable)
+     367→            result_vars[k] = combined
+     368→
+     369→    result = Dataset(result_vars, attrs=result_attrs)
+     370→    absent_coord_names = coord_names - set(result.variables)
+     371→    if absent_coord_names:
+     372→        raise ValueError(
+     373→            "Variables %r are coordinates in some datasets but not others."
+     374→            % absent_coord_names
+     375→        )
+     376→    result = result.set_coords(coord_names)
+     377→    result.encoding = result_encoding
+     378→
+     379→    result = result.drop(unlabeled_dims, errors="ignore")
+     380→
+     381→    if coord is
+  [... truncated ...]
+- [Read Result after action #24]
+     417→    result = Dataset(result_vars, attrs=result_attrs)
+     418→    absent_coord_names = coord_names - set(result.variables)
+     419→    if absent_coord_names:
+     420→        raise ValueError(
+     421→            "Variables %r are coordinates in some datasets but not others."
+     422→            % absent_coord_names
+     423→        )
+     424→    result = result.set_coords(coord_names)
+     425→    result.encoding = result_encoding
+     426→
+
+- [Test Output after action #27]
+  Exit code 1
+  Traceback (most recent call last):
+    File "./swebench_9_15/testbed/test_issue.py", line 19, in <module>
+      result = xr.concat([ds1, ds2], dim='time')
+    File "./swebench_9_15/testbed/xarray/core/concat.py", line 131, in concat
+      return f(objs, dim, data_vars, coords, compat, positions, fill_value, join)
+    File "./swebench_9_15/testbed/xarray/core/concat.py", line 407, in _dataset_concat
+      dummy_data = np.full(dummy_shape, fill_value, dtype=ref_var.dtype)
+    File "/opt/anaconda3/lib/python3.8/site-packages/numpy/core/numeric.py", line 345, in full
+      multiarray.copyto(a, fill_value, casting='unsafe')
+    File "<__array_function__ internals>", line 200, in copyto
+  TypeError: int() argument must be a string, a bytes-like object or a number, not 'ReprObject'
+
+  Testing concatenation of datasets with different variables...
+- [Grep Result after action #30]
+  xarray/core/dtypes.py:8:NA = utils.ReprObject("<NA>")
+- [Grep Result after action #32]
+  ./swebench_9_15/testbed/xarray/core/groupby.py-57-        res = Dataset(
+  ./swebench_9_15/testbed/xarray/core/groupby.py-58-            {
+  xarray/core/groupby.py:59:                k: dtypes.get_fill_value(v.dtype)
+  ./swebench_9_15/testbed/xarray/core/groupby.py-60-                for k, v in xarray_obj.data_vars.items()
+  ./swebench_9_15/testbed/xarray/core/groupby.py-61-            },
+  ./swebench_9_15/testbed/xarray/core/groupby.py-62-            {
+  xarray/core/groupby.py:63:                k: dtypes.get_fill_value(v.dtype)
+  ./swebench_9_15/testbed/xarray/core/groupby.py-64-                for k, v in xarray_obj.coords.items()
+  ./swebench_9_15/testbed/xarray/core/groupby.py-65-                if k not in xarray_obj.dims
+  --
+  xarray/core/groupby.py-69-    elif isinstance(xarray_obj, DataArray):
+  ./swebench_9_15/testbed/xarray/core/groupby.py-70-        res = DataArray(
+  xarray/core/groupby.py:71:            dtypes.get_fill_value(xarray_obj.dtype),
+  ./swebench_9_15/testbed/xarray/core/groupby.py-72-            {
+  xarray/core/groupby.py:73:                k: dtypes.get_fill_value(v.dtype)
+  ./swebench_9_15/testbed/xarray/core/groupby.py-74-                for k, v in xarray_obj.coords.items()
+  ./sweb
+  [... truncated ...]
+- [Test Output after action #35]
+  Testing concatenation of datasets with different variables...
+  Concatenation succeeded!
+  Result has variables: ['a', 'c', 'b']
+  <__array_function__ internals>:200: RuntimeWarning: invalid value encountered in cast
+- [Test Output after action #38]
+  Test 1: Concatenating datasets with different variables (outer join - default)
+  Success! Result has variables: ['a', 'b', 'c']
+  Shape of 'a': (2, 3)
+  Shape of 'b': (2, 3)
+  Shape of 'c': (2, 3)
+
+  Test 2: Testing with join='inner' (should exclude variables not in all datasets)
+  Success! Result has variables: ['a', 'b']
+  Variables in result: ['a', 'b']
+
+  Test 3: Testing with join='exact' (should raise error for missing variables)
+  Expected error with join='exact': variables {'c'} are present in some datasets but not others.
+
+  Test 4: More complex case with coordinates
+  Success! Result has variables: ['humidity', 'pressure', 'temp']
+
+  Test 5: Verifying NaN fill values
+  Result variables: ['a', 'b']
+  Variable 'a' shape: (2, 3)
+  Variable 'b' shape: (2, 3)
+  Variable 'a' values: [[ 1.  2.  3.]
+   [nan nan nan]]
+  Variable 'b' values: [[nan nan nan]
+   [ 4.  5.  6.]]
+  NaN fill values verified!
+
+  All tests passed!
+  <__array_function__ internals>:200: RuntimeWarning: invalid value encountered in cast
+- [Read Result after action #40]
+     295→    dim_coords.pop(dim, None)
+     296→    dims_sizes.pop(dim, None)
+     297→
+     298→    # case where concat dimension is a coordinate or data_var but not a dimension
+     299→    if (dim in coord_names or dim in data_names) and dim not in dim_names:
+     300→        datasets = [ds.expand_dims(dim) for ds in datasets]
+     301→
+     302→    # determine which variables to concatentate
+     303→    concat_over, equals, concat_dim_lengths = _calc_concat_over(
+     304→        datasets, dim, dim_names, data_vars, coords, compat
+     305→    )
+     306→
+     307→    # determine which variables to merge, and then merge them according to compat
+     308→    variables_to_merge = (coord_names | data_names) - concat_over - dim_names
+     309→
+     310→    result_vars = {}
+     311→    if variables_to_merge:
+     312→        to_merge = {var: [] for var in variables_to_merge}
+     313→
+     314→        for ds in datasets:
+     315→            absent_merge_vars = variables_to_merge - set(ds.variables)
+     316→            if absent_merge_vars:
+     317→                if join == 'inner':
+     318→                    # For inner join, exclude variables not present in all datasets
+     319→                    variables_to_merge = var
+  [... truncated ...]
+- [Test Output after action #43]
+  Test 1: Concatenating datasets with different variables (outer join - default)
+  Success! Result has variables: ['a', 'b', 'c']
+  Shape of 'a': (2, 3)
+  Shape of 'b': (2, 3)
+  Shape of 'c': (2, 3)
+
+  Test 2: Testing with join='inner' (should exclude variables not in all datasets)
+  Success! Result has variables: ['a']
+  Variables in result: ['a']
+
+  Test 3: Testing with join='exact' (should raise error for missing variables)
+  Expected error with join='exact': variables {'c'} are present in some datasets but not others.
+
+  Test 4: More complex case with coordinates
+  Success! Result has variables: ['humidity', 'pressure', 'temp']
+
+  Test 5: Verifying NaN fill values
+  Result variables: ['a', 'b']
+  Variable 'a' shape: (2, 3)
+  Variable 'b' shape: (2, 3)
+  Variable 'a' values: [[ 1.  2.  3.]
+   [nan nan nan]]
+  Variable 'b' values: [[nan nan nan]
+   [ 4.  5.  6.]]
+  NaN fill values verified!
+
+  All tests passed!
+  <__array_function__ internals>:200: RuntimeWarning: invalid value encountered in cast
+- [Test Output after action #45]
+  Exit code 1
+  /opt/anaconda3/bin/python3: No module named pytest
+- [Glob Result after action #47]
+  ./swebench_9_15/testbed/xarray/tests/test_concat.py
+- [Read Result after action #49]
+       1→from copy import deepcopy
+       2→
+       3→import numpy as np
+       4→import pandas as pd
+       5→import pytest
+       6→
+       7→from xarray import DataArray, Dataset, Variable, concat
+       8→from xarray.core import dtypes, merge
+       9→
+      10→from . import (
+      11→    InaccessibleArray,
+      12→    assert_array_equal,
+      13→    assert_equal,
+      14→    assert_identical,
+      15→    raises_regex,
+      16→    requires_dask,
+      17→)
+      18→from .test_dataset import create_test_data
+      19→
+      20→
+      21→def test_concat_compat():
+      22→    ds1 = Dataset(
+      23→        {
+      24→            "has_x_y": (("y", "x"), [[1, 2]]),
+      25→            "has_x": ("x", [1, 2]),
+      26→            "no_x_y": ("z", [1, 2]),
+      27→        },
+      28→        coords={"x": [0, 1], "y": [0], "z": [-1, -2]},
+      29→    )
+      30→    ds2 = Dataset(
+      31→        {
+      32→            "has_x_y": (("y", "x"), [[3, 4]]),
+      33→            "has_x": ("x", [1, 2]),
+      34→            "no_x_y": (("q", "z"), [[1, 2]]),
+      35→        },
+      36→        coords={"x": [0, 1], "y": [1], "z": [-1, -2], "q": [0]},
+      37→    )
+      38→
+      39→    result = concat([ds1, ds2], dim="y", data_vars="minimal", compat="broadc
+  [... truncated ...]
+
+SOURCE EDIT EVIDENCE
+--------------------
+- xarray/core/concat.py
+  Tool: Edit action #22
+  old_text_sha256: ea7a7872df861103843852128901bbac8a882a7ed90e8e33df25184a8e346104
+  new_text_sha256: 72835fca0df8d6f86f018ac6442c3500baf28cf0019d84c06e28e09f88064471
+- xarray/core/concat.py
+  Tool: Edit action #23
+  old_text_sha256: d7a919c37f613d5126752aa528cb0627e74d8b4bffa46839e0f421cc9cd70bfc
+  new_text_sha256: 7e2fdba2d4d432484a7cc7c671ff3854d74bc1e197ba5eb9f1e56b774855b002
+- xarray/core/concat.py
+  Tool: Edit action #26
+  old_text_sha256: 204ff6dcc58a84abce870a3de89f082334632f350092909deafb6ce0a593ff1b
+  new_text_sha256: 86061b5dd6570336c9179df4e1d02b0810706de3da04028fbd973e162437956b
+- xarray/core/concat.py
+  Tool: Edit action #34
+  old_text_sha256: 6d5d0a0413312729e22e0dedad019059832e67ab98e700c1ccb3882a4a5e55a7
+  new_text_sha256: 1da67f432ef8f6a9b069b0540b2510829ae427921289f7bcf18c067e9f069dad
+- xarray/core/concat.py
+  Tool: Edit action #42
+  old_text_sha256: 1de10431aca8b507b5203af5d0c999a8ee034b5d61dacfbe7c75b5d8b8ad76bb
+  new_text_sha256: c43bf0f2352a9895c90b5eeebfe12470eb1f529270da01670965d2747fe987f1
+- xarray/core/concat.py
+  Tool: Edit action #56
+  old_text_sha256: 7f10d893c430d3508a6c70a5898cbff91955fce040c5b44234f2d78492e95d4f
+  new_text_sha256: 4f9c451de271f903bd15d667d72adae9afdd718a1e0f872554cd73203ca6ca36
+- xarray/core/concat.py
+  Tool: Edit action #57
+  old_text_sha256: 86061b5dd6570336c9179df4e1d02b0810706de3da04028fbd973e162437956b
+  new_text_sha256: 0712733ebf7fa01a2d04cfb65de76ca0704c7a3bee5f712f2788900500bfe1fc
+- test_comprehensive.py
+  Tool: Write action #37
+  new_text_sha256: c9ae9e06b7ebc72176425131e42d1b3c7865acf6abeb8cdc3b742cc9fdd1ba2b
+
+PRIOR AGENT FINAL MESSAGE
+-------------------------
+(none)
+
+INJECTION WARNING
+-----------------
+This memory is from a prior related issue. Use it as evidence only. Do not copy patches blindly.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: pydata/xarray
+Base commit: b21f62ee37eea3650a58e9ffa3a7c9f4ae83006b
+Instance ID: pydata__xarray-508
+
+CURRENT_ISSUE
+Ignore missing variables when concatenating datasets?
+Several users (@raj-kesavan, @richardotis, now myself) have wondered about how to concatenate xray Datasets with different variables.
+
+With the current `xray.concat`, you need to awkwardly create dummy variables filled with `NaN` in datasets that don't have them (or drop mismatched variables entirely). Neither of these are great options -- `concat` should have an option (the default?) to take care of this for the user.
+
+This would also be more consistent with `pd.concat`, which takes a more relaxed approach to matching dataframes with different variables (it does an outer join).
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

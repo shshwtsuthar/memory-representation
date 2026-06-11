@@ -1,0 +1,49 @@
+diff --git a/django/contrib/admin/checks.py b/django/contrib/admin/checks.py
+index 27537d9614..a87180be17 100644
+--- a/django/contrib/admin/checks.py
++++ b/django/contrib/admin/checks.py
+@@ -9,6 +9,7 @@ from django.core.exceptions import FieldDoesNotExist
+ from django.db import models
+ from django.db.models.constants import LOOKUP_SEP
+ from django.db.models.expressions import Combinable
++from django.db.models.fields.related_descriptors import ReverseManyToOneDescriptor
+ from django.forms.models import BaseModelForm, BaseModelFormSet, _get_foreign_key
+ from django.template import engines
+ from django.template.backends.django import DjangoTemplates
+@@ -924,6 +925,14 @@ class ModelAdminChecks(BaseModelAdminChecks):
+                     id="admin.E109",
+                 )
+             ]
++        if isinstance(field, ReverseManyToOneDescriptor):
++            return [
++                checks.Error(
++                    "The value of '%s' must not be a reverse foreign key." % label,
++                    obj=obj.__class__,
++                    id="admin.E109",
++                )
++            ]
+         return []
+ 
+     def _check_list_display_links(self, obj):
+diff --git a/tests/modeladmin/test_checks.py b/tests/modeladmin/test_checks.py
+index e4ad0636a6..f6c0a58d47 100644
+--- a/tests/modeladmin/test_checks.py
++++ b/tests/modeladmin/test_checks.py
+@@ -541,6 +541,17 @@ class ListDisplayTests(CheckTestCase):
+             "admin.E109",
+         )
+ 
++    def test_invalid_reverse_foreign_key(self):
++        class TestModelAdmin(ModelAdmin):
++            list_display = ("main_concerts",)
++
++        self.assertIsInvalid(
++            TestModelAdmin,
++            Band,
++            "The value of 'list_display[0]' must not be a reverse foreign key.",
++            "admin.E109",
++        )
++
+     def test_valid_case(self):
+         @admin.display
+         def a_callable(obj):

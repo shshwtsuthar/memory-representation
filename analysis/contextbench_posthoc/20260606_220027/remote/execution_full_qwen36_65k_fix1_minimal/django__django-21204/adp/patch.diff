@@ -1,0 +1,135 @@
+diff --git a/test_defer_bug.py b/test_defer_bug.py
+new file mode 100644
+index 0000000000..487ae7b016
+--- /dev/null
++++ b/test_defer_bug.py
+@@ -0,0 +1,129 @@
++"""
++Test for the defer() bug with self-referential relationships.
++"""
++import os
++import sys
++import django
++
++# Setup Django
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'test_settings')
++sys.path.insert(0, '/testbed')
++
++from django.conf import settings
++if not settings.configured:
++    settings.configure(
++        DATABASES={
++            'default': {
++                'ENGINE': 'django.db.backends.sqlite3',
++                'NAME': ':memory:',
++            }
++        },
++        INSTALLED_APPS=[
++            'django.contrib.contenttypes',
++            'django.contrib.auth',
++        ],
++        SECRET_KEY='test-secret-key',
++        DEFAULT_AUTO_FIELD='django.db.models.AutoField',
++    )
++    django.setup()
++
++from django.db import models
++
++# Define models inline
++class NamedCategory(models.Model):
++    name = models.CharField(max_length=10)
++    class Meta:
++        app_label = 'test'
++
++class Tag(models.Model):
++    name = models.CharField(max_length=10)
++    parent = models.ForeignKey(
++        'self',
++        models.SET_NULL,
++        blank=True,
++        null=True,
++        related_name='children',
++    )
++    category = models.ForeignKey(
++        NamedCategory, models.SET_NULL, null=True, default=None
++    )
++    class Meta:
++        app_label = 'test'
++        ordering = ['name']
++
++# Create tables
++from django.db import connection
++with connection.schema_editor() as schema_editor:
++    schema_editor.create_model(NamedCategory)
++    schema_editor.create_model(Tag)
++
++# Create test data
++n1 = NamedCategory.objects.create(name='cat1')
++n2 = NamedCategory.objects.create(name='cat2')
++t1 = Tag.objects.create(name='t1', category=n1)
++t2 = Tag.objects.create(name='t2', parent=t1, category=n2)
++t3 = Tag.objects.create(name='t3', parent=t2)
++
++print("=" * 60)
++print("Testing defer() with self-referential relationships")
++print("=" * 60)
++
++# Test the bug
++qs = Tag.objects.select_related(
++    'parent', 'parent__parent'
++).defer(
++    'parent__name', 'parent__parent__category'
++)
++
++print("\nQuery SQL:")
++print(qs.query.sql_with_params())
++
++# Evaluate the query
++results = list(qs)
++
++print("\n" + "=" * 60)
++print("Results:")
++print("=" * 60)
++
++for r in results:
++    print(f"\nTag: {r.name}")
++    print(f"  Deferred fields: {r.get_deferred_fields()}")
++    if r.parent:
++        print(f"  Parent: {r.parent.name}")
++        print(f"    Parent deferred fields: {r.parent.get_deferred_fields()}")
++        if r.parent.parent:
++            print(f"    Parent's parent: {r.parent.parent.name}")
++            print(f"      Parent's parent deferred fields: {r.parent.parent.get_deferred_fields()}")
++
++print("\n" + "=" * 60)
++print("Expected behavior:")
++print("=" * 60)
++print("For t1 (base model):")
++print("  - All fields loaded (no defer on base model)")
++print("  - parent: None")
++print("\nFor t2 (parent):")
++print("  - 'name' should be deferred")
++print("  - 'category' should be loaded")
++print("\nFor t3's parent's parent (t1):")
++print("  - 'category' should be deferred")
++print("  - 'name' should be loaded")
++
++print("\n" + "=" * 60)
++print("Actual behavior:")
++print("=" * 60)
++
++# Check t2's parent (t1)
++t2_obj = Tag.objects.get(name='t2')
++t2_obj.parent  # Trigger load
++print(f"\nt2.parent deferred fields: {t2_obj.parent.get_deferred_fields()}")
++print(f"  Expected: {{}} (all fields loaded for base model)")
++
++# Check t3's parent (t2)
++t3_obj = Tag.objects.select_related('parent').defer('parent__name').get(name='t3')
++print(f"\nt3.parent deferred fields: {t3_obj.parent.get_deferred_fields()}")
++print(f"  Expected: {{'name'}} (name deferred for parent)")
++
++# Check t3's parent's parent (t1) via select_related
++t3_obj2 = Tag.objects.select_related('parent', 'parent__parent').defer('parent__name', 'parent__parent__category').get(name='t3')
++print(f"\nt3.parent.parent deferred fields: {t3_obj2.parent.parent.get_deferred_fields()}")
++print(f"  Expected: {{'category'}} (category deferred for parent's parent)")

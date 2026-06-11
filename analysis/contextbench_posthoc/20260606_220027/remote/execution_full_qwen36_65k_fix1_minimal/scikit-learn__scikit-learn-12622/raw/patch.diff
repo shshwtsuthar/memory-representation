@@ -1,0 +1,35 @@
+diff --git a/sklearn/preprocessing/tests/test_data.py b/sklearn/preprocessing/tests/test_data.py
+index 3a1640ddb..c3b885d66 100644
+--- a/sklearn/preprocessing/tests/test_data.py
++++ b/sklearn/preprocessing/tests/test_data.py
+@@ -383,6 +383,16 @@ def test_scale_1d():
+         assert_array_equal(scale(X, with_mean=False, with_std=False), X)
+ 
+ 
++def test_scale_pandas_series():
++    # Check that scale works with pandas Series
++    # Non-regression test for gh-12622
++    pd = pytest.importorskip('pandas')
++    X_series = pd.Series([1.0, 2.0, 3.0])
++    X_scaled = scale(X_series)
++    assert_array_almost_equal(X_scaled.mean(), 0.0)
++    assert_array_almost_equal(X_scaled.std(), 1.0)
++
++
+ @skip_if_32bit
+ def test_standard_scaler_numerical_stability():
+     # Test numerical stability of scaling
+diff --git a/sklearn/utils/validation.py b/sklearn/utils/validation.py
+index 3181b925b..f82db6479 100644
+--- a/sklearn/utils/validation.py
++++ b/sklearn/utils/validation.py
+@@ -479,6 +479,9 @@ def check_array(array, accept_sparse=False, accept_large_sparse=True,
+     dtypes_orig = None
+     if hasattr(array, "dtypes") and hasattr(array, "__array__"):
+         dtypes_orig = np.array(array.dtypes)
++        # Handle case where array.dtypes is a single dtype (e.g., pandas Series)
++        if dtypes_orig.ndim == 0:
++            dtypes_orig = None
+ 
+     if dtype_numeric:
+         if dtype_orig is not None and dtype_orig.kind == "O":

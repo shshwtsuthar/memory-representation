@@ -1,0 +1,123 @@
+diff --git a/sympy/assumptions/refine.py b/sympy/assumptions/refine.py
+index 3f39790962..cd1fb9d737 100644
+--- a/sympy/assumptions/refine.py
++++ b/sympy/assumptions/refine.py
+@@ -372,6 +372,110 @@ def refine_sign(expr, assumptions):
+     return expr
+ 
+ 
++def _relational_to_Q(cond):
++    """
++    Convert a relational condition (e.g., x < 0) to a Q predicate (e.g., Q.negative(x)).
++
++    Returns None if the conversion is not possible.
++    """
++    from sympy.core.relational import Relational
++    if not isinstance(cond, Relational):
++        return None
++
++    lhs = cond.lhs
++    rhs = cond.rhs
++    op = cond.rel_op
++
++    # Only handle conditions with 0 on the right side
++    if rhs != 0:
++        return None
++
++    if op == '<':
++        return Q.negative(lhs)
++    elif op == '>':
++        return Q.positive(lhs)
++    elif op == '<=':
++        return Q.nonpositive(lhs)
++    elif op == '>=':
++        return Q.nonnegative(lhs)
++    elif op == '==':
++        return Q.zero(lhs)
++    elif op == '!=':
++        return Q.nonzero(lhs)
++    return None
++
++
++def refine_Piecewise(expr, assumptions):
++    """
++    Handler for Piecewise.
++
++    Examples
++    ========
++
++    >>> from sympy import Piecewise, Q, refine
++    >>> from sympy.abc import x, l
++    >>> refine(Piecewise((1, x < 0), (0, True)), Q.positive(x))
++    0
++    >>> refine(Piecewise((1, l < 0), (0, True)), Q.positive(l))
++    0
++    """
++    conds_exprs = expr.args
++    new_conds_exprs = []
++    any_simplified = False
++
++    # Track if all previous conditions are known to be False
++    all_prev_false = True
++
++    for i, (expr_i, cond_i) in enumerate(conds_exprs):
++        # First try to evaluate the condition directly using ask()
++        cond_truth = ask(cond_i, assumptions)
++
++        # If that doesn't work, try converting relational to Q predicate
++        if cond_truth is None:
++            q_pred = _relational_to_Q(cond_i)
++            if q_pred is not None:
++                cond_truth = ask(q_pred, assumptions)
++
++        if cond_truth is True:
++            # Condition is True
++            if all_prev_false:
++                # All previous conditions are False, so this branch is selected
++                # Return the expression, but first refine it
++                refined_expr = refine(expr_i, assumptions)
++                if refined_expr is not None:
++                    return refined_expr
++                return expr_i
++            else:
++                # Previous conditions are unknown, keep this condition
++                # but refine the expression
++                refined_expr = refine(expr_i, assumptions)
++                if refined_expr is not None and refined_expr != expr_i:
++                    any_simplified = True
++                new_conds_exprs.append((refined_expr, cond_i))
++                # Once we hit a True condition, we can't simplify further
++                # because we don't know about conditions after it
++                break
++
++        if cond_truth is False:
++            # Condition is False, skip this branch
++            any_simplified = True
++            continue
++
++        # Condition is unknown, so we can't simplify the Piecewise
++        # Return the original expression unchanged
++        return None
++
++    if not new_conds_exprs:
++        # All conditions were False, return 0 (or nan)
++        return S.Zero
++
++    if any_simplified or len(new_conds_exprs) < len(conds_exprs):
++        new_pw = Piecewise(*new_conds_exprs)
++        return refine(new_pw, assumptions)
++
++    return None
++
++
+ def refine_matrixelement(expr, assumptions):
+     """
+     Handler for symmetric part.
+@@ -403,5 +507,6 @@ def refine_matrixelement(expr, assumptions):
+     'im': refine_im,
+     'arg': refine_arg,
+     'sign': refine_sign,
+-    'MatrixElement': refine_matrixelement
++    'MatrixElement': refine_matrixelement,
++    'Piecewise': refine_Piecewise
+ }  # type: Dict[str, Callable[[Expr, Boolean], Expr]]

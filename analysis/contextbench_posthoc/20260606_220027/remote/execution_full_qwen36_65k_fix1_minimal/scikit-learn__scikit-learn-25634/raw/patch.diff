@@ -1,0 +1,162 @@
+diff --git a/sklearn/utils/multiclass.py b/sklearn/utils/multiclass.py
+index 5eaef2fde..07f2a2029 100644
+--- a/sklearn/utils/multiclass.py
++++ b/sklearn/utils/multiclass.py
+@@ -23,7 +23,36 @@ from ..utils._array_api import get_namespace
+ def _unique_multiclass(y):
+     xp, is_array_api = get_namespace(y)
+     if hasattr(y, "__array__") or is_array_api:
+-        return xp.unique_values(xp.asarray(y))
++        y_arr = xp.asarray(y)
++        # Handle nullable pandas dtypes that become object arrays with NA values
++        if y_arr.dtype == object:
++            # Check if this contains numeric values with NA
++            first_val = y_arr.flat[0]
++            if first_val is None:
++                for val in y_arr.flat:
++                    if val is not None:
++                        first_val = val
++                        break
++            if first_val is not None and isinstance(
++                first_val, (bool, np.bool_, int, np.integer, float, np.floating)
++            ):
++                # Convert to float array, replacing NA with np.nan
++                y_np = np.empty(y_arr.shape, dtype=float)
++                for i, val in enumerate(y_arr.flat):
++                    if val is None or (
++                        hasattr(val, "__class__")
++                        and val.__class__.__name__ == "NAType"
++                        and val.__class__.__module__ == "pandas._libs.missing"
++                    ) or (hasattr(val, "isna") and val.isna()):
++                        y_np.flat[i] = np.nan
++                    else:
++                        y_np.flat[i] = float(val)
++                y_arr = xp.asarray(y_np)
++        # Filter out NaN values before getting unique values
++        if y_arr.dtype.kind in "fc":
++            mask = ~xp.isnan(y_arr)
++            y_arr = y_arr[mask]
++        return xp.unique_values(y_arr)
+     else:
+         return set(y)
+ 
+@@ -341,8 +370,41 @@ def type_of_target(y, input_name=""):
+         # 2-D empty array: [[]]
+         return "unknown"
+     if not issparse(y) and y.dtype == object and not isinstance(y.flat[0], str):
+-        # [obj_1] and not ["label_1"]
+-        return "unknown"
++        # Check if this is a nullable pandas dtype array (contains numeric values)
++        # by finding the first non-null value and checking if it's numeric
++        first_val = y.flat[0]
++        if first_val is None:
++            # Skip null values to find the first non-null element
++            for val in y.flat:
++                if val is not None:
++                    first_val = val
++                    break
++
++        if first_val is None:
++            # All values are null - treat as binary (empty-like)
++            return "binary"
++
++        # Check if first non-null value is numeric (not a container type)
++        if isinstance(first_val, (bool, np.bool_, int, np.integer, float, np.floating)):
++            # Nullable pandas dtype array - convert to float to handle NA values
++            # and allow proper comparison operations.
++            # Create a float array and copy values, converting NA to np.nan
++            y_arr = np.asarray(y)
++            y = np.empty(y_arr.shape, dtype=float)
++            for i, val in enumerate(y_arr.flat):
++                # Check for NA values (None, pd.NA, or objects with isna() method)
++                if val is None or (
++                    hasattr(val, "__class__")
++                    and val.__class__.__name__ == "NAType"
++                    and val.__class__.__module__ == "pandas._libs.missing"
++                ) or (hasattr(val, "isna") and val.isna()):
++                    y.flat[i] = np.nan
++                else:
++                    y.flat[i] = float(val)
++            y = xp.asarray(y)
++        else:
++            # [obj_1] and not ["label_1"]
++            return "unknown"
+ 
+     # Check if multioutput
+     if y.ndim == 2 and y.shape[1] > 1:
+@@ -355,6 +417,28 @@ def type_of_target(y, input_name=""):
+         # [.1, .2, 3] or [[.1, .2, 3]] or [[1., .2]] and not [1., 2., 3.]
+         data = y.data if issparse(y) else y
+         if xp.any(data != data.astype(int)):
++            # Check for NaN values before calling _assert_all_finite
++            # NaN != NaN is True, so we need to explicitly check for NaN
++            if issparse(y):
++                has_nan = xp.any(xp.isnan(data))
++            else:
++                has_nan = xp.any(xp.isnan(data)) if data.dtype.kind in "fc" else False
++            if has_nan:
++                # Mask out NaN values when checking for non-integer floats
++                if issparse(y):
++                    mask = ~xp.isnan(data)
++                else:
++                    mask = ~xp.isnan(data)
++                non_nan_data = data[mask]
++                if xp.any(non_nan_data != non_nan_data.astype(int)):
++                    _assert_all_finite(data, input_name=input_name)
++                    return "continuous" + suffix
++                # Non-NaN values are all integers, check for binary/multiclass
++                unique_vals = xp.unique_values(non_nan_data)
++                if len(unique_vals) > 2:
++                    return "multiclass" + suffix
++                else:
++                    return "binary" + suffix
+             _assert_all_finite(data, input_name=input_name)
+             return "continuous" + suffix
+ 
+diff --git a/sklearn/utils/tests/test_multiclass.py b/sklearn/utils/tests/test_multiclass.py
+index cf5858d0f..5c2228322 100644
+--- a/sklearn/utils/tests/test_multiclass.py
++++ b/sklearn/utils/tests/test_multiclass.py
+@@ -456,3 +456,42 @@ def test_ovr_decision_function():
+     ]
+ 
+     assert_allclose(dec_values, dec_values_one, atol=1e-6)
++
++
++def test_type_of_target_nullable_dtypes():
++    """Test that nullable pandas dtypes are correctly identified."""
++    pd = pytest.importorskip("pandas")
++
++    # Test type_of_target with nullable pandas dtypes
++    for dtype in ["Int64", "Float64", "boolean"]:
++        y = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
++        assert type_of_target(y) == "binary"
++
++    # Test unique_labels with nullable pandas dtypes
++    for dtype in ["Int64", "Float64", "boolean"]:
++        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
++        y_predicted = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
++        # Should not raise "Mix type of y not allowed" error
++        result = unique_labels(y_true, y_predicted)
++        assert len(result) == 2
++
++
++def test_type_of_target_nullable_dtypes_with_nan():
++    """Test that nullable pandas dtypes with NaN values are correctly identified."""
++    pd = pytest.importorskip("pandas")
++
++    # Test type_of_target with nullable dtypes containing NaN
++    # Note: type_of_target correctly identifies the type as "binary" but
++    # _assert_all_finite raises an error for NaN values in float arrays
++    y_nan = pd.Series([1, 0, None, 1, 0], dtype="Int64")
++    # The type is correctly identified as binary before validation
++    # The error is raised during validation, not during type detection
++    assert type_of_target(y_nan) == "binary"
++
++    # Test unique_labels with nullable dtypes containing NaN
++    # unique_labels calls type_of_target which should not raise
++    y_true = pd.Series([1, 0, None, 1, 0], dtype="Int64")
++    y_predicted = pd.Series([0, 0, 1, 1, 0], dtype="int64")
++    # Should not raise "Mix type of y not allowed" error
++    result = unique_labels(y_true, y_predicted)
++    assert len(result) == 2

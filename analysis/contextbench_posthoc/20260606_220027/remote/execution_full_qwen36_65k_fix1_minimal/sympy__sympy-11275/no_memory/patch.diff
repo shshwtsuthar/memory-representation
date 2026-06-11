@@ -1,0 +1,101 @@
+diff --git a/sympy/printing/latex.py b/sympy/printing/latex.py
+index 076bc8ac9..78efdfb3c 100644
+--- a/sympy/printing/latex.py
++++ b/sympy/printing/latex.py
+@@ -372,44 +372,62 @@ def convert(expr):
+             # use the original expression here, since fraction() may have
+             # altered it when producing numer and denom
+             tex += convert(expr)
++        elif numer/denom != expr:
++            # fraction() may have altered the expression structure
++            # (e.g., distributing coefficients into Add terms)
++            tex += convert(expr)
+         else:
+-            snumer = convert(numer)
+-            sdenom = convert(denom)
+-            ldenom = len(sdenom.split())
+-            ratio = self._settings['long_frac_ratio']
+-            if self._settings['fold_short_frac'] \
+-                    and ldenom <= 2 and not "^" in sdenom:
+-                # handle short fractions
+-                if self._needs_mul_brackets(numer, last=False):
+-                    tex += r"\left(%s\right) / %s" % (snumer, sdenom)
+-                else:
+-                    tex += r"%s / %s" % (snumer, sdenom)
+-            elif len(snumer.split()) > ratio*ldenom:
+-                # handle long fractions
+-                if self._needs_mul_brackets(numer, last=True):
+-                    tex += r"\frac{1}{%s}%s\left(%s\right)" \
+-                        % (sdenom, separator, snumer)
+-                elif numer.is_Mul:
+-                    # split a long numerator
+-                    a = S.One
+-                    b = S.One
+-                    for x in numer.args:
+-                        if self._needs_mul_brackets(x, last=False) or \
+-                                len(convert(a*x).split()) > ratio*ldenom or \
+-                                (b.is_commutative is x.is_commutative is False):
+-                            b *= x
++            # Check if any factor has a negative exponent that fraction()
++            # moved to the denominator (e.g., exp(-x) -> 1/exp(x))
++            # In this case, use the original expression to preserve structure
++            has_neg_exp = False
++            for arg in expr.args:
++                if arg.is_Pow and arg.exp.is_negative:
++                    has_neg_exp = True
++                    break
++                if arg.func.__name__ == 'exp' and arg.args[0].is_negative:
++                    has_neg_exp = True
++                    break
++            if has_neg_exp:
++                tex += convert(expr)
++            else:
++                snumer = convert(numer)
++                sdenom = convert(denom)
++                ldenom = len(sdenom.split())
++                ratio = self._settings['long_frac_ratio']
++                if self._settings['fold_short_frac'] \
++                        and ldenom <= 2 and not "^" in sdenom:
++                    # handle short fractions
++                    if self._needs_mul_brackets(numer, last=False):
++                        tex += r"\left(%s\right) / %s" % (snumer, sdenom)
++                    else:
++                        tex += r"%s / %s" % (snumer, sdenom)
++                elif len(snumer.split()) > ratio*ldenom:
++                    # handle long fractions
++                    if self._needs_mul_brackets(numer, last=True):
++                        tex += r"\frac{1}{%s}%s\left(%s\right)" \
++                            % (sdenom, separator, snumer)
++                    elif numer.is_Mul:
++                        # split a long numerator
++                        a = S.One
++                        b = S.One
++                        for x in numer.args:
++                            if self._needs_mul_brackets(x, last=False) or \
++                                   len(convert(a*x).split()) > ratio*ldenom or \
++                                   (b.is_commutative is x.is_commutative is False):
++                                b *= x
++                            else:
++                                a *= x
++                        if self._needs_mul_brackets(b, last=True):
++                            tex += r"\frac{%s}{%s}%s\left(%s\right)" \
++                                % (convert(a), sdenom, separator, convert(b))
+                         else:
+-                            a *= x
+-                    if self._needs_mul_brackets(b, last=True):
+-                        tex += r"\frac{%s}{%s}%s\left(%s\right)" \
+-                            % (convert(a), sdenom, separator, convert(b))
++                            tex += r"\frac{%s}{%s}%s%s" \
++                                % (convert(a), sdenom, separator, convert(b))
+                     else:
+-                        tex += r"\frac{%s}{%s}%s%s" \
+-                            % (convert(a), sdenom, separator, convert(b))
++                        tex += r"\frac{1}{%s}%s%s" % (sdenom, separator, snumer)
+                 else:
+-                    tex += r"\frac{1}{%s}%s%s" % (sdenom, separator, snumer)
+-            else:
+-                tex += r"\frac{%s}{%s}" % (snumer, sdenom)
++                    tex += r"\frac{%s}{%s}" % (snumer, sdenom)
+ 
+         if include_parens:
+             tex += ")"

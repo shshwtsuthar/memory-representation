@@ -1,0 +1,53 @@
+diff --git a/django/urls/resolvers.py b/django/urls/resolvers.py
+index 0912a82f14..969dd9cae9 100644
+--- a/django/urls/resolvers.py
++++ b/django/urls/resolvers.py
+@@ -437,6 +437,12 @@ class URLResolver:
+                 continue
+             signature = inspect.signature(handler)
+             args = [None] * num_parameters
++            # Check if the handler is a class-based view (i.e., the result of
++            # as_view()) which has a signature of (self, request, *args, **kwargs).
++            # In that case, we need to check with one more argument.
++            params = list(signature.parameters.values())
++            if params and params[0].name == 'self':
++                args.append(None)
+             try:
+                 signature.bind(*args)
+             except TypeError:
+diff --git a/tests/check_framework/test_urls.py b/tests/check_framework/test_urls.py
+index f0c257bc77..201dee4ba7 100644
+--- a/tests/check_framework/test_urls.py
++++ b/tests/check_framework/test_urls.py
+@@ -209,6 +209,11 @@ class CheckCustomErrorHandlersTests(SimpleTestCase):
+         result = check_url_config(None)
+         self.assertEqual(result, [])
+ 
++    @override_settings(ROOT_URLCONF='check_framework.urls.good_error_handlers_cbv')
++    def test_good_handlers_class_based_view(self):
++        result = check_url_config(None)
++        self.assertEqual(result, [])
++
+ 
+ class CheckURLSettingsTests(SimpleTestCase):
+ 
+diff --git a/tests/check_framework/urls/good_error_handlers_cbv.py b/tests/check_framework/urls/good_error_handlers_cbv.py
+new file mode 100644
+index 0000000000..6fb7eec642
+--- /dev/null
++++ b/tests/check_framework/urls/good_error_handlers_cbv.py
+@@ -0,0 +1,14 @@
++from django.views.generic import View
++
++urlpatterns = []
++
++
++class GoodErrorHandler(View):
++    def get(self, request, exception=None):
++        pass
++
++
++handler400 = GoodErrorHandler.as_view()
++handler403 = GoodErrorHandler.as_view()
++handler404 = GoodErrorHandler.as_view()
++handler500 = GoodErrorHandler.as_view()

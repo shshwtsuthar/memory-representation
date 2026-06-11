@@ -1,0 +1,69 @@
+diff --git a/django/contrib/admin/checks.py b/django/contrib/admin/checks.py
+index 27537d9614..bed5ad129b 100644
+--- a/django/contrib/admin/checks.py
++++ b/django/contrib/admin/checks.py
+@@ -916,6 +916,21 @@ class ModelAdminChecks(BaseModelAdminChecks):
+                         id="admin.E108",
+                     )
+                 ]
++            # Check for reverse foreign key descriptors (e.g., ReverseManyToOneDescriptor)
++            # when get_field() fails (e.g., app registry not ready).
++            from django.db.models.fields.related_descriptors import (
++                ReverseManyToOneDescriptor,
++            )
++
++            if isinstance(field, ReverseManyToOneDescriptor):
++                return [
++                    checks.Error(
++                        "The value of '%s' must not be a many-to-many field or a "
++                        "reverse foreign key." % label,
++                        obj=obj.__class__,
++                        id="admin.E109",
++                    )
++                ]
+         if isinstance(field, models.ManyToManyField):
+             return [
+                 checks.Error(
+@@ -924,6 +939,19 @@ class ModelAdminChecks(BaseModelAdminChecks):
+                     id="admin.E109",
+                 )
+             ]
++        # Check for reverse relations (reverse foreign key, reverse one-to-one,
++        # reverse many-to-many).
++        from django.db.models.fields.reverse_related import ManyToOneRel
++
++        if isinstance(field, ManyToOneRel):
++            return [
++                checks.Error(
++                    "The value of '%s' must not be a many-to-many field or a "
++                    "reverse foreign key." % label,
++                    obj=obj.__class__,
++                    id="admin.E109",
++                )
++            ]
+         return []
+ 
+     def _check_list_display_links(self, obj):
+diff --git a/tests/modeladmin/test_checks.py b/tests/modeladmin/test_checks.py
+index e4ad0636a6..166e62815c 100644
+--- a/tests/modeladmin/test_checks.py
++++ b/tests/modeladmin/test_checks.py
+@@ -541,6 +541,18 @@ class ListDisplayTests(CheckTestCase):
+             "admin.E109",
+         )
+ 
++    def test_invalid_reverse_foreign_key(self):
++        class TestModelAdmin(ModelAdmin):
++            list_display = ["song_set"]
++
++        self.assertIsInvalid(
++            TestModelAdmin,
++            Band,
++            "The value of 'list_display[0]' must not be a many-to-many field or a "
++            "reverse foreign key.",
++            "admin.E109",
++        )
++
+     def test_valid_case(self):
+         @admin.display
+         def a_callable(obj):

@@ -1,0 +1,52 @@
+diff --git a/django/contrib/admin/checks.py b/django/contrib/admin/checks.py
+index 27537d9614..d251ef5c8e 100644
+--- a/django/contrib/admin/checks.py
++++ b/django/contrib/admin/checks.py
+@@ -6,6 +6,7 @@ from django.conf import settings
+ from django.contrib.admin.utils import NotRelationField, flatten, get_fields_from_path
+ from django.core import checks
+ from django.core.exceptions import FieldDoesNotExist
++from django.db.models.fields.reverse_related import ManyToOneRel
+ from django.db import models
+ from django.db.models.constants import LOOKUP_SEP
+ from django.db.models.expressions import Combinable
+@@ -916,10 +917,15 @@ class ModelAdminChecks(BaseModelAdminChecks):
+                         id="admin.E108",
+                     )
+                 ]
+-        if isinstance(field, models.ManyToManyField):
++        if isinstance(field, (models.ManyToManyField, ManyToOneRel)):
++            field_type = (
++                "ManyToManyField"
++                if isinstance(field, models.ManyToManyField)
++                else "reversed foreign key"
++            )
+             return [
+                 checks.Error(
+-                    "The value of '%s' must not be a ManyToManyField." % label,
++                    "The value of '%s' must not be a %s." % (label, field_type),
+                     obj=obj.__class__,
+                     id="admin.E109",
+                 )
+diff --git a/tests/modeladmin/test_checks.py b/tests/modeladmin/test_checks.py
+index e4ad0636a6..76eddeff5e 100644
+--- a/tests/modeladmin/test_checks.py
++++ b/tests/modeladmin/test_checks.py
+@@ -541,6 +541,17 @@ class ListDisplayTests(CheckTestCase):
+             "admin.E109",
+         )
+ 
++    def test_invalid_field_type_reversed_fk(self):
++        class TestModelAdmin(ModelAdmin):
++            list_display = ("song_set",)
++
++        self.assertIsInvalid(
++            TestModelAdmin,
++            Band,
++            "The value of 'list_display[0]' must not be a reversed foreign key.",
++            "admin.E109",
++        )
++
+     def test_valid_case(self):
+         @admin.display
+         def a_callable(obj):

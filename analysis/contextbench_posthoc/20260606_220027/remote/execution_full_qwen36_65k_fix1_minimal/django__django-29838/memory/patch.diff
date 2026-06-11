@@ -1,0 +1,68 @@
+diff --git a/django/utils/tree.py b/django/utils/tree.py
+index cb45c7ee29..5f9a0d8d97 100644
+--- a/django/utils/tree.py
++++ b/django/utils/tree.py
+@@ -72,10 +72,20 @@ class Node:
+ 
+     def __hash__(self):
+         return hash((self.__class__, self.connector, self.negated, *[
+-            tuple(child) if isinstance(child, list) else child
++            self._make_hashable(child)
+             for child in self.children
+         ]))
+ 
++    def _make_hashable(self, value):
++        """Recursively convert unhashable types to hashable ones."""
++        if isinstance(value, list):
++            return tuple(self._make_hashable(item) for item in value)
++        elif isinstance(value, tuple):
++            return tuple(self._make_hashable(item) for item in value)
++        elif isinstance(value, dict):
++            return tuple(sorted((k, self._make_hashable(v)) for k, v in value.items()))
++        return value
++
+     def add(self, data, conn_type, squash=True):
+         """
+         Combine this tree and the data represented by data using the
+diff --git a/tests/queries/test_q.py b/tests/queries/test_q.py
+index 9adff07ef2..61ef3b728a 100644
+--- a/tests/queries/test_q.py
++++ b/tests/queries/test_q.py
+@@ -2,6 +2,37 @@ from django.db.models import F, Q
+ from django.test import SimpleTestCase
+ 
+ 
++class QHashTests(SimpleTestCase):
++    def test_hash_with_in_lookup(self):
++        """Q objects with __in lookup containing a list can be hashed."""
++        q = Q(a__in=[1, 2])
++        # Should not raise TypeError: unhashable type: 'list'
++        hash(q)
++
++    def test_hash_with_in_lookup_in_set(self):
++        """Q objects with __in lookup can be used in sets and dicts."""
++        q1 = Q(a__in=[1, 2])
++        q2 = Q(a__in=[1, 2])
++        q3 = Q(a__in=[3, 4])
++        # Equal Q objects should have the same hash
++        self.assertEqual(hash(q1), hash(q2))
++        # Equal Q objects should be deduplicated in a set
++        self.assertEqual(len({q1, q2}), 1)
++        # Different Q objects should be different in a set
++        self.assertEqual(len({q1, q3}), 2)
++
++    def test_hash_with_nested_list(self):
++        """Q objects with nested lists in children can be hashed."""
++        # Complex lookups can have nested structures
++        q = Q(Q(a__in=[1, 2]), b__in=[3, 4])
++        hash(q)
++
++    def test_hash_with_empty_in_lookup(self):
++        """Q objects with empty __in lookup can be hashed."""
++        q = Q(a__in=[])
++        hash(q)
++
++
+ class QTests(SimpleTestCase):
+     def test_combine_and_empty(self):
+         q = Q(x=1)

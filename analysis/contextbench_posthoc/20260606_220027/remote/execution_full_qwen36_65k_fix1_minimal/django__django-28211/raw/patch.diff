@@ -1,0 +1,140 @@
+diff --git a/django/db/models/query_utils.py b/django/db/models/query_utils.py
+index 27430ae4ca..a445e640b6 100644
+--- a/django/db/models/query_utils.py
++++ b/django/db/models/query_utils.py
+@@ -65,6 +65,14 @@ class Q(tree.Node):
+         obj.connector = conn
+         obj.add(self, conn)
+         obj.add(other, conn)
++        # If the connector is OR and there's only one non-empty child,
++        # return just that child to avoid unnecessary LEFT OUTER JOINs.
++        if conn == self.OR and len(obj) == 1:
++            child = obj.children[0]
++            if isinstance(child, Q):
++                return child
++            # The only child is a filter condition, return a Q with that condition.
++            return type(self)(**{child[0]: child[1]})
+         return obj
+ 
+     def __or__(self, other):
+diff --git a/test_or_optimization.py b/test_or_optimization.py
+new file mode 100644
+index 0000000000..cbaab5ec71
+--- /dev/null
++++ b/test_or_optimization.py
+@@ -0,0 +1,115 @@
++"""
++Test to verify the OR'ed Q objects optimization issue.
++"""
++import os
++import sys
++
++sys.path.insert(0, '/testbed')
++
++# Minimal Django setup
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'test_settings')
++
++import django
++from django.conf import settings
++
++if not settings.configured:
++    settings.configure(
++        DATABASES={
++            'default': {
++                'ENGINE': 'django.db.backends.sqlite3',
++                'NAME': ':memory:',
++            }
++        },
++        INSTALLED_APPS=[
++            'django.contrib.contenttypes',
++            'django.contrib.auth',
++        ],
++        DEFAULT_AUTO_FIELD='django.db.models.BigAutoField',
++    )
++
++django.setup()
++
++from django.db.models import Q
++from django.db import models
++
++class Author(models.Model):
++    name = models.CharField(max_length=50)
++    
++    class Meta:
++        app_label = 'test_app'
++
++class Book(models.Model):
++    title = models.CharField(max_length=50)
++    author = models.ForeignKey(Author, models.CASCADE, related_name='books')
++    
++    class Meta:
++        app_label = 'test_app'
++
++# Test 1: Check the Q object structure
++print("=" * 60)
++print("Test 1: Q object structure")
++print("=" * 60)
++
++q1 = Q() | Q(author__name='Alice')
++print(f"Q() | Q(author__name='Alice')")
++print(f"  connector: {q1.connector}")
++print(f"  children: {q1.children}")
++print(f"  len(children): {len(q1.children)}")
++
++q2 = Q(author__name='Alice') | Q()
++print(f"\nQ(author__name='Alice') | Q()")
++print(f"  connector: {q2.connector}")
++print(f"  children: {q2.children}")
++print(f"  len(children): {len(q2.children)}")
++
++q3 = Q(author__name='Alice') | Q(author__title='Bob')
++print(f"\nQ(author__name='Alice') | Q(author__title='Bob')")
++print(f"  connector: {q3.connector}")
++print(f"  children: {q3.children}")
++print(f"  len(children): {len(q3.children)}")
++
++# Test 2: Check the actual SQL with a real query
++print("\n" + "=" * 60)
++print("Test 2: Actual SQL query")
++print("=" * 60)
++
++qs1 = Author.objects.filter(Q() | Q(name='Alice'))
++print(f"\nAuthor.objects.filter(Q() | Q(name='Alice'))")
++print(f"SQL: {qs1.query}")
++
++qs2 = Author.objects.filter(Q(name='Alice') | Q())
++print(f"\nAuthor.objects.filter(Q(name='Alice') | Q())")
++print(f"SQL: {qs2.query}")
++
++qs3 = Author.objects.filter(Q(name='Alice'))
++print(f"\nAuthor.objects.filter(Q(name='Alice'))")
++print(f"SQL: {qs3.query}")
++
++# Test 3: Check join type
++print("\n" + "=" * 60)
++print("Test 3: Join type analysis")
++print("=" * 60)
++
++from django.db.models.sql.query import Query
++
++query_with_empty_q = Query(Book)
++q_with_empty = Q() | Q(author__name='Alice')
++clause, joins = query_with_empty_q._add_q(q_with_empty, used_aliases=[])
++print(f"\nQuery with Q() | Q(author__name='Alice'):")
++print(f"  Tables: {query_with_empty_q.tables}")
++print(f"  Join types: {[(t, query_with_empty_q.alias_map[t].join_type) for t in query_with_empty_q.tables if t in query_with_empty_q.alias_map]}")
++
++query_without_empty_q = Query(Book)
++q_without_empty = Q(author__name='Alice')
++clause, joins = query_without_empty_q._add_q(q_without_empty, used_aliases=[])
++print(f"\nQuery with Q(author__name='Alice'):")
++print(f"  Tables: {query_without_empty_q.tables}")
++print(f"  Join types: {[(t, query_without_empty_q.alias_map[t].join_type) for t in query_without_empty_q.tables if t in query_without_empty_q.alias_map]}")
++
++print("\n" + "=" * 60)
++print("Expected behavior:")
++print("=" * 60)
++print("Q() | Q(author__name='Alice') should be optimized to just Q(author__name='Alice')")
++print("This means:")
++print("  1. The Q object should have connector='AND' (or default) instead of 'OR'")
++print("  2. The query should use INNER JOIN instead of LEFT OUTER JOIN")

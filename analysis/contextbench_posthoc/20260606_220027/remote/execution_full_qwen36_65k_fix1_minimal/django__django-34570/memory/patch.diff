@@ -1,0 +1,57 @@
+diff --git a/django/db/models/sql/query.py b/django/db/models/sql/query.py
+index c8f849daea..c5def0f45c 100644
+--- a/django/db/models/sql/query.py
++++ b/django/db/models/sql/query.py
+@@ -738,7 +738,12 @@ class Query(BaseExpression):
+                 field_select_mask = select_mask.setdefault((field_name, relation), {})
+                 field = relation.field
+             else:
+-                field = opts.get_field(field_name).field
++                field = opts.get_field(field_name)
++                # ManyToManyField and GenericForeignKey don't have a .field
++                # attribute.
++                if not hasattr(field, 'field'):
++                    continue
++                field = field.field
+                 field_select_mask = select_mask.setdefault(field, {})
+             related_model = field.model._meta.concrete_model
+             self._get_defer_select_mask(
+diff --git a/tests/contenttypes_tests/test_fields.py b/tests/contenttypes_tests/test_fields.py
+index 418669140b..d38ab51213 100644
+--- a/tests/contenttypes_tests/test_fields.py
++++ b/tests/contenttypes_tests/test_fields.py
+@@ -51,6 +51,15 @@ class GenericForeignKeyTests(TestCase):
+         new_entity = answer.question
+         self.assertIsNot(old_entity, new_entity)
+ 
++    def test_defer_generic_foreign_key(self):
++        # defer() with GenericForeignKey should not raise AttributeError.
++        # Refs #34570.
++        question = Question.objects.create(text="What is your name?")
++        Answer.objects.create(text="Answer", question=question)
++        # This should not raise AttributeError.
++        qs = Answer.objects.defer("question")
++        self.assertIsInstance(list(qs), list)
++
+ 
+ class GenericRelationTests(TestCase):
+     def test_value_to_string(self):
+diff --git a/tests/defer_regress/tests.py b/tests/defer_regress/tests.py
+index 33193e187a..98ccaacc40 100644
+--- a/tests/defer_regress/tests.py
++++ b/tests/defer_regress/tests.py
+@@ -306,3 +306,14 @@ class DeferDeletionSignalsTests(TestCase):
+         Proxy.objects.only("value").get(pk=self.item_pk).delete()
+         self.assertEqual(self.pre_delete_senders, [Proxy])
+         self.assertEqual(self.post_delete_senders, [Proxy])
++
++    def test_defer_many_to_many_field(self):
++        # defer() with ManyToManyField should not raise AttributeError.
++        # Refs #34570.
++        item = Item.objects.create(name="test", value=1)
++        location = Location.objects.create()
++        request = Request.objects.create(location=location)
++        request.items.add(item)
++        # This should not raise AttributeError.
++        qs = Request.objects.defer("items")
++        self.assertIsInstance(list(qs), list)

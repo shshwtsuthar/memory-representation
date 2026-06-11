@@ -1,0 +1,137 @@
+diff --git a/django/urls/resolvers.py b/django/urls/resolvers.py
+index 0912a82f14..ee8d3fe533 100644
+--- a/django/urls/resolvers.py
++++ b/django/urls/resolvers.py
+@@ -435,11 +435,23 @@ class URLResolver:
+                 ).format(status_code=status_code, path=path)
+                 messages.append(Error(msg, hint=str(e), id='urls.E008'))
+                 continue
++            # If the handler is a class-based view, check the signature of its
++            # get() method instead.
++            if hasattr(handler, 'view_class'):
++                handler = handler.view_class.get
+             signature = inspect.signature(handler)
+-            args = [None] * num_parameters
+-            try:
+-                signature.bind(*args)
+-            except TypeError:
++            # Count the number of positional parameters.
++            num_positional_params = sum(
++                1
++                for param in signature.parameters.values()
++                if param.kind in (
++                    inspect.Parameter.POSITIONAL_ONLY,
++                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
++                )
++                and param.default is inspect.Parameter.empty
++                and param.name != 'self'
++            )
++            if num_positional_params != num_parameters:
+                 msg = (
+                     "The custom handler{status_code} view '{path}' does not "
+                     "take the correct number of arguments ({args})."
+diff --git a/tests/check_framework/tests.py b/tests/check_framework/tests.py
+index 9e461c5040..4ca3374954 100644
+--- a/tests/check_framework/tests.py
++++ b/tests/check_framework/tests.py
+@@ -333,3 +333,62 @@ class CheckFrameworkReservedNamesTests(SimpleTestCase):
+ class ChecksRunDuringTests(SimpleTestCase):
+     def test_registered_check_did_run(self):
+         self.assertTrue(my_check.did_run)
++
++
++class ClassBasedErrorHandlerTests(SimpleTestCase):
++    """Tests for class-based error handlers (e.g., View.as_view())."""
++
++    def test_class_based_error_handlers_check(self):
++        """Class-based error handlers should pass signature checks."""
++        from django.urls import URLResolver
++        from django.urls.resolvers import RegexPattern
++        from django.views.generic.base import View
++
++        class Handler400View(View):
++            def get(self, request, exception, *args, **kwargs):
++                pass
++
++        class Handler403View(View):
++            def get(self, request, exception, *args, **kwargs):
++                pass
++
++        class Handler404View(View):
++            def get(self, request, exception, *args, **kwargs):
++                pass
++
++        class Handler500View(View):
++            def get(self, request, *args, **kwargs):
++                pass
++
++        class URLconf:
++            urlpatterns = []
++            handler400 = Handler400View.as_view()
++            handler403 = Handler403View.as_view()
++            handler404 = Handler404View.as_view()
++            handler500 = Handler500View.as_view()
++
++        resolver = URLResolver(RegexPattern(r'^/'), URLconf)
++        errors = resolver.check()
++        # Should have no errors for correctly signed class-based handlers
++        self.assertEqual(errors, [])
++
++    def test_class_based_error_handlers_wrong_signature(self):
++        """Class-based error handlers with wrong signature should fail checks."""
++        from django.urls import URLResolver
++        from django.urls.resolvers import RegexPattern
++        from django.views.generic.base import View
++
++        class Handler500View(View):
++            # Wrong: handler500 should only take request, not exception
++            def get(self, request, exception, *args, **kwargs):
++                pass
++
++        class URLconf:
++            urlpatterns = []
++            handler500 = Handler500View.as_view()
++
++        resolver = URLResolver(RegexPattern(r'^/'), URLconf)
++        errors = resolver.check()
++        # Should have an error for incorrectly signed class-based handler
++        self.assertEqual(len(errors), 1)
++        self.assertEqual(errors[0].id, 'urls.E007')
+diff --git a/tests/check_framework/urls/good_class_based_error_handlers.py b/tests/check_framework/urls/good_class_based_error_handlers.py
+new file mode 100644
+index 0000000000..ef4bf0caf7
+--- /dev/null
++++ b/tests/check_framework/urls/good_class_based_error_handlers.py
+@@ -0,0 +1,32 @@
++urlpatterns = []
++
++handler400 = __name__ + '.handler400'
++handler403 = __name__ + '.handler403'
++handler404 = __name__ + '.handler404'
++handler500 = __name__ + '.handler500'
++
++
++class Handler400View:
++    def get(self, request, exception, *args, **kwargs):
++        pass
++
++
++class Handler403View:
++    def get(self, request, exception, *args, **kwargs):
++        pass
++
++
++class Handler404View:
++    def get(self, request, exception, *args, **kwargs):
++        pass
++
++
++class Handler500View:
++    def get(self, request, *args, **kwargs):
++        pass
++
++
++handler400 = Handler400View.as_view()
++handler403 = Handler403View.as_view()
++handler404 = Handler404View.as_view()
++handler500 = Handler500View.as_view()

@@ -1,0 +1,207 @@
+diff --git a/test_issue.py b/test_issue.py
+new file mode 100644
+index 00000000..c68fd362
+--- /dev/null
++++ b/test_issue.py
+@@ -0,0 +1,53 @@
++"""Test for concatenating datasets with different variables."""
++import numpy as np
++import xarray as xr
++
++# Test 1: Basic case - datasets with different variables
++print("Test 1: Concatenating datasets with different variables")
++ds1 = xr.Dataset({"a": ("x", [1, 2, 3])})
++ds2 = xr.Dataset({"b": ("x", [4, 5, 6])})
++
++try:
++    result = xr.concat([ds1, ds2], dim="y")
++    print(f"Success! Result has variables: {list(result.data_vars)}")
++    print(f"Shape of 'a': {result['a'].shape}")
++    print(f"Shape of 'b': {result['b'].shape}")
++    print(f"Values of 'a':\n{result['a'].values}")
++    print(f"Values of 'b':\n{result['b'].values}")
++except Exception as e:
++    print(f"Failed with error: {type(e).__name__}: {e}")
++
++print()
++
++# Test 2: Overlapping variables with some unique to each
++print("Test 2: Overlapping variables with some unique to each")
++ds1 = xr.Dataset({"a": ("x", [1, 2, 3]), "c": ("x", [7, 8, 9])})
++ds2 = xr.Dataset({"a": ("x", [4, 5, 6]), "c": ("x", [10, 11, 12])})
++
++try:
++    result = xr.concat([ds1, ds2], dim="y")
++    print(f"Success! Result has variables: {list(result.data_vars)}")
++    print(f"Values of 'a':\n{result['a'].values}")
++    print(f"Values of 'c':\n{result['c'].values}")
++except Exception as e:
++    print(f"Failed with error: {type(e).__name__}: {e}")
++
++print()
++
++# Test 3: Three datasets with varying variables
++print("Test 3: Three datasets with varying variables")
++ds1 = xr.Dataset({"a": ("x", [1, 2])})
++ds2 = xr.Dataset({"a": ("x", [3, 4]), "b": ("x", [5, 6])})
++ds3 = xr.Dataset({"a": ("x", [7, 8]), "b": ("x", [9, 10]), "c": ("x", [11, 12])})
++
++try:
++    result = xr.concat([ds1, ds2, ds3], dim="y")
++    print(f"Success! Result has variables: {list(result.data_vars)}")
++    print(f"Shape of 'a': {result['a'].shape}")
++    print(f"Shape of 'b': {result['b'].shape}")
++    print(f"Shape of 'c': {result['c'].shape}")
++    print(f"Values of 'a':\n{result['a'].values}")
++    print(f"Values of 'b':\n{result['b'].values}")
++    print(f"Values of 'c':\n{result['c'].values}")
++except Exception as e:
++    print(f"Failed with error: {type(e).__name__}: {e}")
+diff --git a/xarray/core/concat.py b/xarray/core/concat.py
+index 2eea2ecb..95fa419f 100644
+--- a/xarray/core/concat.py
++++ b/xarray/core/concat.py
+@@ -2,6 +2,7 @@ from __future__ import annotations
+ 
+ from typing import TYPE_CHECKING, Any, Hashable, Iterable, cast, overload
+ 
++import numpy as np
+ import pandas as pd
+ 
+ from xarray.core import dtypes, utils
+@@ -557,10 +558,38 @@ def _dataset_concat(
+     # n.b. this loop preserves variable order, needed for groupby.
+     for name in datasets[0].variables:
+         if name in concat_over and name not in result_indexes:
+-            try:
+-                vars = ensure_common_dims([ds[name].variable for ds in datasets])
+-            except KeyError:
+-                raise ValueError(f"{name!r} is not present in all datasets.")
++            # Try to get variables from all datasets; if a variable is missing
++            # from some datasets, create dummy variables with fill_value
++            vars_list = []
++            for ds_idx, ds in enumerate(datasets):
++                if name in ds.variables:
++                    vars_list.append(ds[name].variable)
++                else:
++                    # Variable is missing from this dataset; create a dummy
++                    # with the appropriate fill value
++                    if isinstance(fill_value, dict):
++                        fv = fill_value.get(name, dtypes.NA)
++                    else:
++                        fv = fill_value
++
++                    if fv is dtypes.NA:
++                        # Use dtype-appropriate fill value
++                        ref_var = vars_list[0] if vars_list else None
++                        if ref_var is not None:
++                            _, fv = dtypes.maybe_promote(ref_var.dtype)
++                        else:
++                            fv = np.nan
++                    # Create a dummy variable with the right shape and dtype
++                    common_dims = tuple(pd.unique([d for v in vars_list for d in v.dims]))
++                    if dim not in common_dims:
++                        common_dims = (dim,) + common_dims
++                    dim_len = concat_dim_lengths[ds_idx]
++                    common_shape = tuple(dims_sizes.get(d, dim_len) for d in common_dims)
++                    if isinstance(fv, float) and np.isnan(fv):
++                        dummy_data = np.full(common_shape, np.nan)
++                    else:
++                        dummy_data = np.full(common_shape, fv)
++                    vars_list.append(Variable(common_dims, dummy_data))
+ 
+             # Try concatenate the indexes, concatenate the variables when no index
+             # is found on all datasets.
+@@ -581,13 +610,13 @@ def _dataset_concat(
+                 combined_idx_vars = combined_idx.create_variables(idx_vars)
+                 for k, v in combined_idx_vars.items():
+                     v.attrs = merge_attrs(
+-                        [ds.variables[k].attrs for ds in datasets],
++                        [ds.variables[k].attrs for ds in datasets if k in ds.variables],
+                         combine_attrs=combine_attrs,
+                     )
+                     result_vars[k] = v
+             else:
+                 combined_var = concat_vars(
+-                    vars, dim, positions, combine_attrs=combine_attrs
++                    vars_list, dim, positions, combine_attrs=combine_attrs
+                 )
+                 result_vars[name] = combined_var
+ 
+@@ -595,6 +624,76 @@ def _dataset_concat(
+             # preserves original variable order
+             result_vars[name] = result_vars.pop(name)
+ 
++    # also handle variables that are only in some datasets (not in datasets[0])
++    # but are in concat_over
++    all_concat_names = set()
++    for ds in datasets:
++        all_concat_names.update(k for k in ds.variables if k in concat_over)
++    all_concat_names -= set(result_indexes.keys())
++
++    for name in all_concat_names:
++        if name not in result_vars:
++            # Variable is only in some datasets (not in datasets[0])
++            vars_list = []
++            for ds_idx, ds in enumerate(datasets):
++                if name in ds.variables:
++                    vars_list.append(ds[name].variable)
++                else:
++                    # Variable is missing from this dataset; create a dummy
++                    # with the appropriate fill value
++                    if isinstance(fill_value, dict):
++                        fv = fill_value.get(name, dtypes.NA)
++                    else:
++                        fv = fill_value
++
++                    if fv is dtypes.NA:
++                        # Use dtype-appropriate fill value
++                        ref_var = vars_list[0] if vars_list else None
++                        if ref_var is not None:
++                            _, fv = dtypes.maybe_promote(ref_var.dtype)
++                        else:
++                            fv = np.nan
++                    # Create a dummy variable with the right shape and dtype
++                    common_dims = tuple(pd.unique([d for v in vars_list for d in v.dims]))
++                    if dim not in common_dims:
++                        common_dims = (dim,) + common_dims
++                    dim_len = concat_dim_lengths[ds_idx]
++                    common_shape = tuple(dims_sizes.get(d, dim_len) for d in common_dims)
++                    if isinstance(fv, float) and np.isnan(fv):
++                        dummy_data = np.full(common_shape, np.nan)
++                    else:
++                        dummy_data = np.full(common_shape, fv)
++                    vars_list.append(Variable(common_dims, dummy_data))
++
++            # Try concatenate the indexes
++            indexes: list[Index] = list(get_indexes(name))
++            if indexes:
++                if len(indexes) < len(datasets):
++                    raise ValueError(
++                        f"{name!r} must have either an index or no index in all datasets, "
++                        f"found {len(indexes)}/{len(datasets)} datasets with an index."
++                    )
++                combined_idx = indexes[0].concat(indexes, dim, positions)
++                # Find a dataset that has this variable to get idx_vars
++                ref_ds = next(ds for ds in datasets if name in ds._indexes or name in ds.variables)
++                if name in ref_ds._indexes:
++                    idx_vars = ref_ds.xindexes.get_all_coords(name)
++                else:
++                    idx_vars = {name: ref_ds[name].variable}
++                result_indexes.update({k: combined_idx for k in idx_vars})
++                combined_idx_vars = combined_idx.create_variables(idx_vars)
++                for k, v in combined_idx_vars.items():
++                    v.attrs = merge_attrs(
++                        [ds.variables[k].attrs for ds in datasets if k in ds.variables],
++                        combine_attrs=combine_attrs,
++                    )
++                    result_vars[k] = v
++            else:
++                combined_var = concat_vars(
++                    vars_list, dim, positions, combine_attrs=combine_attrs
++                )
++                result_vars[name] = combined_var
++
+     result = type(datasets[0])(result_vars, attrs=result_attrs)
+ 
+     absent_coord_names = coord_names - set(result.variables)

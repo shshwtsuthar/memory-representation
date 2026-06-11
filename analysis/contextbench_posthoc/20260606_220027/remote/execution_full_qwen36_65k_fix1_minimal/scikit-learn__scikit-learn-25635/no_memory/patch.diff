@@ -1,0 +1,82 @@
+diff --git a/sklearn/metrics/_classification.py b/sklearn/metrics/_classification.py
+index 0602ec77a..5d0904ef2 100644
+--- a/sklearn/metrics/_classification.py
++++ b/sklearn/metrics/_classification.py
+@@ -57,6 +57,31 @@ def _check_zero_division(zero_division):
+     )
+ 
+ 
++def _convert_pandas_series_dtype(series):
++    """Convert pandas nullable dtypes to numpy dtypes.
++
++    Pandas nullable dtypes (Int64, Float64, boolean) are converted to their
++    numpy equivalents (int64, float64, bool) to avoid issues with type_of_target
++    which returns "unknown" for object dtype arrays.
++    """
++    from pandas.api.types import (
++        is_bool_dtype,
++        is_extension_array_dtype,
++        is_float_dtype,
++        is_integer_dtype,
++    )
++
++    pd_dtype = series.dtype
++    if is_extension_array_dtype(pd_dtype):
++        if is_integer_dtype(pd_dtype):
++            return series.astype(np.int64)
++        elif is_float_dtype(pd_dtype):
++            return series.astype(np.float64)
++        elif is_bool_dtype(pd_dtype):
++            return series.astype(np.bool_)
++    return series
++
++
+ def _check_targets(y_true, y_pred):
+     """Check that y_true and y_pred belong to the same classification task.
+ 
+@@ -85,6 +110,16 @@ def _check_targets(y_true, y_pred):
+     y_pred : array or indicator matrix
+     """
+     check_consistent_length(y_true, y_pred)
++
++    # Convert pandas nullable dtypes to numpy dtypes before calling type_of_target
++    # to avoid issues with object dtype arrays being classified as "unknown"
++    if hasattr(y_true, "dtype") and hasattr(y_true, "iloc"):
++        # y_true is a pandas Series
++        y_true = _convert_pandas_series_dtype(y_true)
++    if hasattr(y_pred, "dtype") and hasattr(y_pred, "iloc"):
++        # y_pred is a pandas Series
++        y_pred = _convert_pandas_series_dtype(y_pred)
++
+     type_true = type_of_target(y_true, input_name="y_true")
+     type_pred = type_of_target(y_pred, input_name="y_pred")
+ 
+diff --git a/sklearn/metrics/tests/test_classification.py b/sklearn/metrics/tests/test_classification.py
+index 222f44555..cf998cad5 100644
+--- a/sklearn/metrics/tests/test_classification.py
++++ b/sklearn/metrics/tests/test_classification.py
+@@ -1079,6 +1079,24 @@ def test_confusion_matrix_dtype():
+     assert cm[1, 1] == -2
+ 
+ 
++def test_confusion_matrix_nullable_pandas_dtypes():
++    """Test that confusion_matrix works with pandas nullable dtypes.
++
++    Non-regression test for:
++    https://github.com/scikit-learn/scikit-learn/issues/25635
++    """
++    pytest.importorskip("pandas")
++    import pandas as pd
++
++    for dtype in ["Int64", "Float64", "boolean"]:
++        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
++        y_pred = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
++
++        cm = confusion_matrix(y_true, y_pred)
++        expected = np.array([[2, 2], [1, 4]])
++        assert_array_equal(cm, expected)
++
++
+ def test_classification_report_multiclass():
+     # Test performance report
+     iris = datasets.load_iris()

@@ -1,0 +1,47 @@
+diff --git a/sklearn/utils/_set_output.py b/sklearn/utils/_set_output.py
+index 335773c6a..8e5f76f5b 100644
+--- a/sklearn/utils/_set_output.py
++++ b/sklearn/utils/_set_output.py
+@@ -127,9 +127,13 @@ def _wrap_data_with_container(method, data_to_wrap, original_input, estimator):
+         return data_to_wrap
+ 
+     # dense_config == "pandas"
++    # Use getattr to get the index, but ignore callable attributes (e.g., list.index)
++    index = getattr(original_input, "index", None)
++    if callable(index):
++        index = None
+     return _wrap_in_pandas_container(
+         data_to_wrap=data_to_wrap,
+-        index=getattr(original_input, "index", None),
++        index=index,
+         columns=estimator.get_feature_names_out,
+     )
+ 
+diff --git a/sklearn/utils/tests/test_set_output.py b/sklearn/utils/tests/test_set_output.py
+index ac73ca094..7db115d0b 100644
+--- a/sklearn/utils/tests/test_set_output.py
++++ b/sklearn/utils/tests/test_set_output.py
+@@ -260,3 +260,23 @@ def test_set_output_mro():
+         pass
+ 
+     assert C().transform(None) == "B"
++
++
++def test_wrap_data_with_container_list_input():
++    """Check that _wrap_data_with_container handles list input correctly.
++
++    Non-regression test for gh-25763: when the input is a Python list,
++    getattr(list, "index", None) returns the list's .index method (a callable)
++    instead of None, which caused an error when wrapping in pandas DataFrame.
++    """
++    pd = pytest.importorskip("pandas")
++
++    X_list = [1, 2, 3]  # Python list, not numpy array
++    X_array = np.asarray([[1], [2], [3]])
++
++    est = EstimatorWithSetOutput().fit(X_array)
++    est.set_output(transform="pandas")
++
++    # This should not raise TypeError
++    result = est.transform(X_list)
++    assert isinstance(result, pd.DataFrame)

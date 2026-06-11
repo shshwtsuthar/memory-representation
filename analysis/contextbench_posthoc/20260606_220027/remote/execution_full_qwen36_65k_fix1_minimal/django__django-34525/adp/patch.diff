@@ -1,0 +1,222 @@
+diff --git a/test_issue_reproduce.py b/test_issue_reproduce.py
+new file mode 100644
+index 0000000000..1e4234a088
+--- /dev/null
++++ b/test_issue_reproduce.py
+@@ -0,0 +1,216 @@
++#!/usr/bin/env python3
++"""
++Test to reproduce the issue: index_together warning after migration to new style.
++
++When a CreateModel has index_together in its options and is followed by AddIndex,
++the index_together should be converted to indexes to avoid deprecation warnings.
++"""
++import os
++import sys
++import warnings
++
++# Setup Django
++sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tests.settings')
++
++import django
++from django.conf import settings
++if not settings.configured:
++    settings.configure(
++        DATABASES={
++            'default': {
++                'ENGINE': 'django.db.backends.sqlite3',
++                'NAME': ':memory:',
++            }
++        },
++        INSTALLED_APPS=[
++            'django.contrib.contenttypes',
++            'django.contrib.auth',
++        ],
++        USE_TZ=True,
++    )
++django.setup()
++
++from django.db import models, migrations
++from django.db.migrations.optimizer import MigrationOptimizer
++from django.db.migrations.operations.models import CreateModel, AddIndex, RemoveIndex
++
++
++def optimize(operations, app_label='test'):
++    """Helper to optimize operations."""
++    optimizer = MigrationOptimizer()
++    return optimizer.optimize(operations, app_label)
++
++
++def test_create_model_with_index_together_and_add_index():
++    """
++    Test that CreateModel with index_together followed by AddIndex
++    converts index_together to indexes.
++    """
++    print("=" * 70)
++    print("Test: CreateModel with index_together + AddIndex")
++    print("=" * 70)
++    
++    operations = [
++        CreateModel(
++            "Item",
++            [
++                ("name", models.CharField(max_length=100)),
++                ("rank", models.IntegerField()),
++            ],
++            options={"index_together": [["rank", "name"]]},
++        ),
++        AddIndex(
++            "Item",
++            models.Index(fields=["rank", "name"], name="item_rank_name_idx"),
++        ),
++    ]
++    
++    print("\nOriginal operations:")
++    for i, op in enumerate(operations, 1):
++        print(f"  {i}. {type(op).__name__}")
++        if isinstance(op, CreateModel):
++            print(f"     - options: {op.options}")
++    
++    optimized = optimize(operations)
++    
++    print("\nOptimized operations:")
++    for i, op in enumerate(optimized, 1):
++        print(f"  {i}. {type(op).__name__}")
++        if isinstance(op, CreateModel):
++            print(f"     - options: {op.options}")
++    
++    # Check if index_together is still present
++    has_index_together = False
++    has_indexes = False
++    for op in optimized:
++        if isinstance(op, CreateModel):
++            if "index_together" in op.options:
++                has_index_together = True
++                print(f"\n  ❌ FAIL: index_together still present in CreateModel!")
++            if "indexes" in op.options:
++                has_indexes = True
++                print(f"  ✓ indexes present in CreateModel")
++    
++    if has_index_together:
++        print("\n❌ FAIL: index_together should be removed from CreateModel options!")
++        return False
++    else:
++        print("\n✓ PASS: index_together removed from CreateModel options")
++        return True
++
++
++def test_create_model_with_index_together_and_remove_index():
++    """
++    Test that CreateModel with index_together followed by RemoveIndex
++    removes index_together.
++    """
++    print("\n" + "=" * 70)
++    print("Test: CreateModel with index_together + RemoveIndex")
++    print("=" * 70)
++    
++    operations = [
++        CreateModel(
++            "Item",
++            [
++                ("name", models.CharField(max_length=100)),
++                ("rank", models.IntegerField()),
++            ],
++            options={"index_together": [["rank", "name"]]},
++        ),
++        RemoveIndex(
++            "Item",
++            "item_rank_name_idx",
++        ),
++    ]
++    
++    print("\nOriginal operations:")
++    for i, op in enumerate(operations, 1):
++        print(f"  {i}. {type(op).__name__}")
++        if isinstance(op, CreateModel):
++            print(f"     - options: {op.options}")
++    
++    optimized = optimize(operations)
++    
++    print("\nOptimized operations:")
++    for i, op in enumerate(optimized, 1):
++        print(f"  {i}. {type(op).__name__}")
++        if isinstance(op, CreateModel):
++            print(f"     - options: {op.options}")
++    
++    # Check if index_together is still present
++    has_index_together = False
++    for op in optimized:
++        if isinstance(op, CreateModel):
++            if "index_together" in op.options:
++                has_index_together = True
++                print(f"\n  ❌ FAIL: index_together still present in CreateModel!")
++    
++    if has_index_together:
++        print("\n❌ FAIL: index_together should be removed from CreateModel options!")
++        return False
++    else:
++        print("\n✓ PASS: index_together removed from CreateModel options")
++        return True
++
++
++def test_create_model_with_indexes_no_warning():
++    """
++    Test that CreateModel with indexes (not index_together) doesn't trigger warning.
++    """
++    print("\n" + "=" * 70)
++    print("Test: CreateModel with indexes (no index_together)")
++    print("=" * 70)
++    
++    operations = [
++        CreateModel(
++            "Item",
++            [
++                ("name", models.CharField(max_length=100)),
++                ("rank", models.IntegerField()),
++            ],
++            options={"indexes": [models.Index(fields=["rank", "name"], name="item_rank_name_idx")]},
++        ),
++    ]
++    
++    print("\nOriginal operations:")
++    for i, op in enumerate(operations, 1):
++        print(f"  {i}. {type(op).__name__}")
++        if isinstance(op, CreateModel):
++            print(f"     - options: {op.options}")
++    
++    # Check that index_together is not present
++    has_index_together = False
++    for op in operations:
++        if isinstance(op, CreateModel):
++            if "index_together" in op.options:
++                has_index_together = True
++    
++    if has_index_together:
++        print("\n❌ FAIL: index_together should not be present!")
++        return False
++    else:
++        print("\n✓ PASS: No index_together in CreateModel options")
++        return True
++
++
++if __name__ == "__main__":
++    results = []
++    
++    results.append(test_create_model_with_index_together_and_add_index())
++    results.append(test_create_model_with_index_together_and_remove_index())
++    results.append(test_create_model_with_indexes_no_warning())
++    
++    print("\n" + "=" * 70)
++    print("SUMMARY")
++    print("=" * 70)
++    passed = sum(results)
++    total = len(results)
++    print(f"Passed: {passed}/{total}")
++    
++    if all(results):
++        print("\n✓ All tests passed!")
++        sys.exit(0)
++    else:
++        print("\n❌ Some tests failed!")
++        sys.exit(1)

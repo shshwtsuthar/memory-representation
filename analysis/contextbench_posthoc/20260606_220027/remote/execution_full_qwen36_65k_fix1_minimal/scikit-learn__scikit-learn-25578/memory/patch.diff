@@ -1,0 +1,166 @@
+diff --git a/sklearn/utils/multiclass.py b/sklearn/utils/multiclass.py
+index 5eaef2fde..e5556a5e7 100644
+--- a/sklearn/utils/multiclass.py
++++ b/sklearn/utils/multiclass.py
+@@ -342,7 +342,28 @@ def type_of_target(y, input_name=""):
+         return "unknown"
+     if not issparse(y) and y.dtype == object and not isinstance(y.flat[0], str):
+         # [obj_1] and not ["label_1"]
+-        return "unknown"
++        # Check if the object array contains numeric values from pandas nullable dtypes
++        # (Int64, Float64, boolean) which become object arrays when converted to numpy
++        # See https://github.com/scikit-learn/scikit-learn/issues/25578
++        try:
++            # Check if all elements are numeric (int, float, bool)
++            first_elem = y.flat[0]
++            if isinstance(first_elem, (int, float, bool, np.integer, np.floating, np.bool_)):
++                # Try to convert to appropriate numpy dtype
++                # Use the type of the first element to determine the target dtype
++                if isinstance(first_elem, (bool, np.bool_)):
++                    y = xp.asarray(y, dtype=bool)
++                elif isinstance(first_elem, (int, np.integer)):
++                    y = xp.asarray(y, dtype=int)
++                else:
++                    # float or other numeric type
++                    y = xp.asarray(y, dtype=float)
++            else:
++                # Not a numeric type, return unknown
++                return "unknown"
++        except (TypeError, ValueError):
++            # If conversion fails, return unknown
++            return "unknown"
+ 
+     # Check if multioutput
+     if y.ndim == 2 and y.shape[1] > 1:
+diff --git a/test_nullable_dtypes.py b/test_nullable_dtypes.py
+new file mode 100644
+index 000000000..796d97d78
+--- /dev/null
++++ b/test_nullable_dtypes.py
+@@ -0,0 +1,126 @@
++"""Test script to reproduce the nullable pandas dtypes issue."""
++import sys
++import traceback
++
++def test_nullable_dtypes():
++    """Test that nullable pandas dtypes work with sklearn metrics."""
++    try:
++        import pandas as pd
++        import numpy as np
++        from sklearn.utils.multiclass import type_of_target, unique_labels
++        from sklearn import metrics
++        
++        print("Testing nullable pandas dtypes support in scikit-learn")
++        print("=" * 70)
++        
++        # Test 1: type_of_target with nullable pandas dtypes
++        print("\nTest 1: type_of_target with nullable pandas dtypes")
++        print("-" * 70)
++        for dtype in ['Int64', 'Float64', 'boolean']:
++            y = pd.Series([1, 0, 1, 0], dtype=dtype)
++            y_np = np.asarray(y)
++            result = type_of_target(y)
++            print(f"  dtype={dtype:<10}, numpy_dtype={y_np.dtype}, type_of_target='{result}'")
++            assert result == 'binary', f"Expected 'binary', got '{result}' for dtype={dtype}"
++            print(f"    ✓ PASS")
++        
++        # Test 2: unique_labels with nullable pandas dtypes
++        print("\nTest 2: unique_labels with nullable pandas dtypes")
++        print("-" * 70)
++        for dtype in ['Int64', 'Float64', 'boolean']:
++            y_true = pd.Series([1, 0, 1, 0], dtype=dtype)
++            y_predicted = pd.Series([1, 0, 1, 0], dtype="int64")
++            result = unique_labels(y_true, y_predicted)
++            print(f"  y_true dtype={dtype:<10}, y_predicted dtype=int64 -> unique_labels={result}")
++            print(f"    ✓ PASS")
++        
++        # Test 3: accuracy_score with nullable pandas dtypes
++        print("\nTest 3: accuracy_score with nullable pandas dtypes")
++        print("-" * 70)
++        for dtype in ['Int64', 'Float64', 'boolean']:
++            y_true = pd.Series([1, 0, 1, 0], dtype=dtype)
++            y_predicted = pd.Series([1, 0, 1, 0], dtype=dtype)
++            try:
++                result = metrics.accuracy_score(y_true, y_predicted)
++                print(f"  dtype={dtype:<10}, accuracy_score={result}")
++                print(f"    ✓ PASS")
++            except Exception as e:
++                print(f"  dtype={dtype:<10}, ERROR: {e}")
++                traceback.print_exc()
++                return False
++        
++        # Test 4: accuracy_score with mixed nullable/non-nullable
++        print("\nTest 4: accuracy_score with mixed nullable/non-nullable dtypes")
++        print("-" * 70)
++        for dtype in ['Int64', 'Float64', 'boolean']:
++            y_true = pd.Series([1, 0, 1, 0], dtype=dtype)
++            y_predicted = pd.Series([1, 0, 1, 0], dtype="float64")
++            try:
++                result = metrics.accuracy_score(y_true, y_predicted)
++                print(f"  y_true dtype={dtype:<10}, y_pred dtype=float64 -> accuracy_score={result}")
++                print(f"    ✓ PASS")
++            except Exception as e:
++                print(f"  y_true dtype={dtype:<10}, y_pred dtype=float64 -> ERROR: {e}")
++                traceback.print_exc()
++                return False
++        
++        # Test 5: matthews_corrcoef with nullable pandas dtypes
++        print("\nTest 5: matthews_corrcoef with nullable pandas dtypes")
++        print("-" * 70)
++        for dtype in ['Int64', 'Float64', 'boolean']:
++            y_true = pd.Series([1, 0, 1, 0], dtype=dtype)
++            y_predicted = pd.Series([1, 0, 1, 0], dtype=dtype)
++            try:
++                result = metrics.matthews_corrcoef(y_true, y_predicted)
++                print(f"  dtype={dtype:<10}, matthews_corrcoef={result}")
++                print(f"    ✓ PASS")
++            except Exception as e:
++                print(f"  dtype={dtype:<10}, ERROR: {e}")
++                traceback.print_exc()
++                return False
++        
++        # Test 6: f1_score with nullable pandas dtypes
++        print("\nTest 6: f1_score with nullable pandas dtypes")
++        print("-" * 70)
++        for dtype in ['Int64', 'Float64', 'boolean']:
++            y_true = pd.Series([1, 0, 1, 0], dtype=dtype)
++            y_predicted = pd.Series([1, 0, 1, 0], dtype=dtype)
++            try:
++                result = metrics.f1_score(y_true, y_predicted)
++                print(f"  dtype={dtype:<10}, f1_score={result}")
++                print(f"    ✓ PASS")
++            except Exception as e:
++                print(f"  dtype={dtype:<10}, ERROR: {e}")
++                traceback.print_exc()
++                return False
++        
++        # Test 7: Regression test - regular pandas dtypes should still work
++        print("\nTest 7: Regression test - regular pandas dtypes")
++        print("-" * 70)
++        for dtype in ['int64', 'float64', 'bool']:
++            y_true = pd.Series([1, 0, 1, 0], dtype=dtype)
++            y_predicted = pd.Series([1, 0, 1, 0], dtype=dtype)
++            try:
++                result = metrics.accuracy_score(y_true, y_predicted)
++                print(f"  dtype={dtype:<10}, accuracy_score={result}")
++                print(f"    ✓ PASS")
++            except Exception as e:
++                print(f"  dtype={dtype:<10}, ERROR: {e}")
++                traceback.print_exc()
++                return False
++        
++        print("\n" + "=" * 70)
++        print("All tests passed!")
++        return True
++        
++    except ImportError as e:
++        print(f"Import error: {e}")
++        print("Skipping test - pandas or sklearn not available")
++        return None
++
++if __name__ == "__main__":
++    result = test_nullable_dtypes()
++    if result is False:
++        sys.exit(1)
++    elif result is None:
++        sys.exit(0)

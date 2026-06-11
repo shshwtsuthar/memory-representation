@@ -1,0 +1,75 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: no_memory
+
+No prior context is provided for this run.
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: django/django
+Base commit: 55b6f7af0c6ab7f25818445cfbb9e18ddafedcc9
+Instance ID: django__django-28916
+
+CURRENT_ISSUE
+Changing the type of a ForeignKey and changing unique_together creates migrations in the wrong order, causing migrations to fail
+
+Description
+(last modified by
+fredley
+)
+models.py before:
+class MyModel(models.Model):
+    fka = models.ForeignKey(SomethingA, ...)
+    date = models.DateField()
+
+    class Meta:
+        unique_together = ('fka', 'date')
+models.py after:
+class MyModel(models.Model):
+    fkb = models.ForeignKey(SomethingB, ...)
+    date = models.DateField()
+
+    class Meta:
+        unique_together = ('fkb', 'date')
+This can result in an automatically created migration (using
+manage.py makemigrations
+) that looks like this:
+operations = [
+    migrations.AddField(
+        model_name='mymodel',
+        name='fkb',
+        field=models.ForeignKey(... to='myapp.somethingb'),
+    ),
+    migrations.RemoveField(
+        model_name='mymodel',
+        name='fka',
+    ),
+    migrations.AlterUniqueTogether(
+        name='mymodel',
+        unique_together={('fkb', 'date')},
+    ),
+]
+This migration fails, because
+AlterUniqueTogether
+needs to come before
+RemoveField
+, as it references
+fka
+. This is hard to debug, and can only be fixed by manually reordering the migration operations.
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

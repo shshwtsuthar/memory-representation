@@ -1,0 +1,51 @@
+diff --git a/seaborn/_stats/regression.py b/seaborn/_stats/regression.py
+index 7b7ddc8..fed153f 100644
+--- a/seaborn/_stats/regression.py
++++ b/seaborn/_stats/regression.py
+@@ -23,6 +23,12 @@ class PolyFit(Stat):
+ 
+         x = data["x"]
+         y = data["y"]
++
++        # Remove missing data
++        mask = x.notna() & y.notna()
++        x = x[mask]
++        y = y[mask]
++
+         if x.nunique() <= self.order:
+             # TODO warn?
+             xx = yy = []
+diff --git a/tests/_stats/test_regression.py b/tests/_stats/test_regression.py
+index 7facf75..c281952 100644
+--- a/tests/_stats/test_regression.py
++++ b/tests/_stats/test_regression.py
+@@ -50,3 +50,29 @@ class TestPolyFit:
+             grid = np.linspace(part["x"].min(), part["x"].max(), gridsize)
+             assert_array_equal(part["x"], grid)
+             assert part["y"].diff().diff().dropna().abs().gt(0).all()
++
++    def test_missing_data(self, rng):
++        # Test that PolyFit handles missing data correctly
++        n = 100
++        df = pd.DataFrame(dict(
++            x=rng.normal(0, 1, n),
++            y=rng.normal(0, 1, n),
++        ))
++
++        # Add some NaN values
++        df.loc[0:9, "x"] = np.nan
++        df.loc[10:19, "y"] = np.nan
++        df.loc[20:29, ["x", "y"]] = np.nan
++
++        groupby = GroupBy(["group"])
++        res = PolyFit(order=1, gridsize=100)(df[["x", "y"]], groupby, "x", {})
++
++        # Result should not contain NaN
++        assert not res["x"].isna().any()
++        assert not res["y"].isna().any()
++
++        # Result should still have the expected shape
++        assert len(res) == 100
++
++        # The fitted line should be valid (not all zeros)
++        assert res["y"].diff().diff().dropna().abs().gt(0).any()

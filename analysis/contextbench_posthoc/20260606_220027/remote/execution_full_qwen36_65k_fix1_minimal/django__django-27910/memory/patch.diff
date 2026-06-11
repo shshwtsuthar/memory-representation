@@ -1,0 +1,245 @@
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index 9ce46e3f73..a152791557 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -6,6 +6,7 @@ import operator
+ import uuid
+ import warnings
+ from base64 import b64decode, b64encode
++from enum import Enum
+ from functools import partialmethod, total_ordering
+ 
+ from django import forms
+@@ -155,6 +156,12 @@ class Field(RegisterLookupMixin):
+         self.unique_for_year = unique_for_year
+         if isinstance(choices, collections.abc.Iterator):
+             choices = list(choices)
++        elif isinstance(choices, type) and issubclass(choices, Enum):
++            # Store the original Enum class for use in __set__
++            self._enum_class = choices
++            choices = [(member.value, member.name) for member in choices]
++        else:
++            self._enum_class = None
+         self.choices = choices
+         self.help_text = help_text
+         self.db_index = db_index
+@@ -565,6 +572,8 @@ class Field(RegisterLookupMixin):
+         django.core.exceptions.ValidationError if the data can't be converted.
+         Return the converted value. Subclasses should override this.
+         """
++        if isinstance(value, Enum):
++            return value.value
+         return value
+ 
+     @cached_property
+@@ -771,6 +780,8 @@ class Field(RegisterLookupMixin):
+         """Perform preliminary non-db specific value checks and conversions."""
+         if isinstance(value, Promise):
+             value = value._proxy____cast()
++        if isinstance(value, Enum):
++            return value.value
+         return value
+ 
+     def get_db_prep_value(self, value, connection, prepared=False):
+diff --git a/django/db/models/query_utils.py b/django/db/models/query_utils.py
+index 7a667814f4..eac145058a 100644
+--- a/django/db/models/query_utils.py
++++ b/django/db/models/query_utils.py
+@@ -138,6 +138,17 @@ class DeferredAttribute:
+             data[field_name] = val
+         return data[field_name]
+ 
++    def __set__(self, instance, value):
++        # Convert Enum members to their values for fields with Enum choices
++        if hasattr(self.field, '_enum_class') and self.field._enum_class is not None:
++            try:
++                from enum import Enum
++                if isinstance(value, Enum) and value.__class__ is self.field._enum_class:
++                    value = value.value
++            except ImportError:
++                pass
++        instance.__dict__[self.field.attname] = value
++
+     def _check_parent_chain(self, instance):
+         """
+         Check if the field value can be fetched from a parent field already
+diff --git a/test_enum_choices.py b/test_enum_choices.py
+new file mode 100644
+index 0000000000..c9c7635cc6
+--- /dev/null
++++ b/test_enum_choices.py
+@@ -0,0 +1,174 @@
++"""Test Enum support in model Field choices."""
++import os
++import sys
++
++# Setup Django settings
++sys.path.insert(0, '/testbed')
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tests.test_sqlite')
++import django
++from django.conf import settings
++if not settings.configured:
++    settings.configure(
++        DATABASES={
++            'default': {
++                'ENGINE': 'django.db.backends.sqlite3',
++                'NAME': ':memory:',
++            }
++        },
++        INSTALLED_APPS=[
++            'django.contrib.contenttypes',
++            'django.contrib.auth',
++        ],
++        DEFAULT_AUTO_FIELD='django.db.models.BigAutoField',
++    )
++django.setup()
++
++from enum import Enum, IntEnum
++from django.db import models
++from django.core import checks
++from django.test import SimpleTestCase
++
++# Test 1: Basic Enum class as choices
++class YearInSchool(Enum):
++    FRESHMAN = 'FR'
++    SOPHOMORE = 'SO'
++    JUNIOR = 'JR'
++    SENIOR = 'SR'
++
++class Student(models.Model):
++    year_in_school = models.CharField(
++        max_length=2,
++        choices=YearInSchool,
++        default=YearInSchool.FRESHMAN,
++    )
++    
++    class Meta:
++        app_label = 'test'
++
++# Test that the field was created correctly
++field = Student._meta.get_field('year_in_school')
++print(f"Choices: {field.choices}")
++print(f"Flatchoices: {field.flatchoices}")
++
++# Test 2: Check that no validation errors are raised
++errors = field.check()
++print(f"Check errors: {errors}")
++assert errors == [], f"Expected no errors, got {errors}"
++
++# Test 3: Verify the choices are correct
++expected_choices = [
++    ('FR', 'FRESHMAN'),
++    ('SO', 'SOPHOMORE'),
++    ('JR', 'JUNIOR'),
++    ('SR', 'SENIOR'),
++]
++assert field.choices == expected_choices, f"Expected {expected_choices}, got {field.choices}"
++
++# Test 4: Test with IntegerEnum
++class Priority(IntEnum):
++    LOW = 1
++    MEDIUM = 2
++    HIGH = 3
++
++class Task(models.Model):
++    priority = models.IntegerField(
++        choices=Priority,
++    )
++    
++    class Meta:
++        app_label = 'test'
++
++field2 = Task._meta.get_field('priority')
++print(f"Integer choices: {field2.choices}")
++expected_int_choices = [
++    (1, 'LOW'),
++    (2, 'MEDIUM'),
++    (3, 'HIGH'),
++]
++assert field2.choices == expected_int_choices, f"Expected {expected_int_choices}, got {field2.choices}"
++
++# Test 5: Test that regular choices still work
++class RegularModel(models.Model):
++    status = models.CharField(
++        max_length=10,
++        choices=[('active', 'Active'), ('inactive', 'Inactive')],
++    )
++    
++    class Meta:
++        app_label = 'test'
++
++field3 = RegularModel._meta.get_field('status')
++assert field3.choices == [('active', 'Active'), ('inactive', 'Inactive')]
++
++# Test 6: Test formfield with Enum choices
++form_field = field.formfield()
++print(f"Form field choices: {form_field.choices}")
++assert len(form_field.choices) == 4
++
++# Test 7: Test with default being an enum member
++assert Student._meta.get_field('year_in_school').default == YearInSchool.FRESHMAN
++
++# Test 8: Test that the field can save and retrieve values
++from django.db import connection
++# Create tables
++with connection.schema_editor() as schema_editor:
++    schema_editor.create_model(Student)
++    schema_editor.create_model(Task)
++
++# Debug: Check what get_prep_value returns
++field_obj = Student._meta.get_field('year_in_school')
++prep_value = field_obj.get_prep_value(YearInSchool.FRESHMAN)
++print(f"get_prep_value result: {prep_value!r}, type: {type(prep_value)}")
++
++# Create a student
++s = Student.objects.create(year_in_school=YearInSchool.FRESHMAN)
++
++# Check what's in the database
++from django.db import connection
++cursor = connection.cursor()
++cursor.execute("SELECT year_in_school FROM test_student LIMIT 1")
++db_value = cursor.fetchone()[0]
++print(f"Database value: {db_value!r}, type: {type(db_value)}")
++
++print(f"Stored value: {s.year_in_school!r}, type: {type(s.year_in_school)}")
++assert s.year_in_school == 'FR', f"Expected 'FR', got {s.year_in_school!r}"
++s.year_in_school = YearInSchool.SOPHOMORE
++s.save()
++s.refresh_from_db()
++assert s.year_in_school == 'SO'
++
++# Test 9: Test with None default
++class OptionalField(models.Model):
++    status = models.CharField(
++        max_length=10,
++        choices=YearInSchool,
++        null=True,
++        blank=True,
++    )
++    
++    class Meta:
++        app_label = 'test'
++
++field4 = OptionalField._meta.get_field('status')
++assert field4.choices == expected_choices
++
++# Test 10: Test with named groups (should still work with regular choices)
++class NamedGroupModel(models.Model):
++    status = models.CharField(
++        max_length=10,
++        choices=[
++            ('Active', [('active', 'Active'), ('pending', 'Pending')]),
++            ('Inactive', [('inactive', 'Inactive')]),
++        ],
++    )
++    
++    class Meta:
++        app_label = 'test'
++
++field5 = NamedGroupModel._meta.get_field('status')
++assert field5.choices == [
++    ('Active', [('active', 'Active'), ('pending', 'Pending')]),
++    ('Inactive', [('inactive', 'Inactive')]),
++]
++
++print("\n✓ All tests passed!")

@@ -1,0 +1,143 @@
+diff --git a/debug_test.py b/debug_test.py
+new file mode 100644
+index 0000000000..dd0011d8dd
+--- /dev/null
++++ b/debug_test.py
+@@ -0,0 +1,99 @@
++#!/usr/bin/env python
++import os
++import sys
++sys.path.insert(0, '/testbed')
++sys.path.insert(0, '/testbed/tests')
++os.environ['DJANGO_SETTINGS_MODULE'] = 'tests.test_sqlite'
++
++import django
++from django.conf import settings
++
++# Minimal settings
++settings.configure(
++    DATABASES={
++        'default': {
++            'ENGINE': 'django.db.backends.sqlite3',
++            'NAME': ':memory:',
++        }
++    },
++    INSTALLED_APPS=[
++        'django.contrib.contenttypes',
++        'django.contrib.auth',
++        'tests.select_related_onetoone',
++    ],
++    DEFAULT_AUTO_FIELD='django.db.models.AutoField',
++    USE_TZ=True,
++)
++django.setup()
++
++from django.db import connection
++from django.core.management import call_command
++
++# Create tables
++call_command('migrate', '--run-syncdb', verbosity=0)
++
++from tests.select_related_onetoone.models import Parent2, Child1, Child2, Child4
++
++# Check the reverse relation field
++print("=== Parent2 reverse relations ===")
++for rel in Parent2._meta.related_objects:
++    if rel.field.unique and not rel.many_to_many:
++        print('Related object:', rel.get_accessor_name())
++        print('  Field:', rel.field)
++        print('  Field attname:', rel.field.attname)
++        print('  Related query name:', rel.field.related_query_name())
++        print('  Remote model:', rel.related_model)
++        print('  parent_link:', rel.field.remote_field.parent_link if rel.field.remote_field else 'N/A')
++        print()
++
++# Now let's trace through what happens
++print("\n=== Testing select_related with defer ===")
++
++# Create test data
++c = Child4.objects.create(name1='n1', name2='n2', value=1, value4=4)
++print(f"Created Child4 with id2={c.id2}")
++
++# Get the query
++qs = Parent2.objects.select_related('child1').only('id2', 'child1__value')
++
++# Check what fields are loaded
++print(f"\nDeferred loading: {qs.query.deferred_loading}")
++print(f"Select related: {qs.query.select_related}")
++
++# Get the loaded field names
++only_load = qs.query.get_loaded_field_names()
++print(f"\nonly_load: {only_load}")
++
++# Check the opts for Parent2
++opts = Parent2._meta
++print(f"\nParent2 opts.model: {opts.model}")
++print(f"Parent2 related_objects:")
++for o in opts.related_objects:
++    if o.field.unique and not o.many_to_many:
++        print(f"  {o.get_accessor_name()}: field={o.field}, related_model={o.related_model}")
++        print(f"    related_query_name: {o.field.related_query_name()}")
++        print(f"    parent_link: {o.field.remote_field.parent_link}")
++        print(f"    attname: {o.field.attname}")
++
++# Check Child1's relation to Parent2
++print(f"\nChild1 fields:")
++for f in Child1._meta.fields:
++    if f.name == 'parent2_ptr':
++        print(f"  {f.name}: parent_link={f.remote_field.parent_link if f.remote_field else 'N/A'}")
++
++# Now let's manually trace through select_related_descend
++from django.db.models.query_utils import select_related_descend
++
++print("\n=== Tracing select_related_descend for child1 ===")
++for o in opts.related_objects:
++    if o.field.unique and not o.many_to_many:
++        accessor = o.get_accessor_name()
++        field = o.field
++        model = o.related_model
++        
++        # Check what select_related_descend would return
++        result = select_related_descend(field, True, {'child1': {}}, only_load.get(model), reverse=True)
++        print(f"  {accessor}: select_related_descend returned {result}")
++        print(f"    field.attname: {field.attname}")
++        print(f"    only_load.get(model): {only_load.get(model)}")
++        print(f"    field.attname in only_load.get(model): {field.attname in (only_load.get(model) or set())}")
+diff --git a/django/db/models/query_utils.py b/django/db/models/query_utils.py
+index 88d3dc94ae..f6f8ecb6e9 100644
+--- a/django/db/models/query_utils.py
++++ b/django/db/models/query_utils.py
+@@ -251,12 +251,15 @@ def select_related_descend(field, restricted, requested, load_fields, reverse=Fa
+         return False
+     if load_fields:
+         if field.attname not in load_fields:
+-            if restricted and field.name in requested:
+-                raise InvalidQuery("Field %s.%s cannot be both deferred"
+-                                   " and traversed using select_related"
+-                                   " at the same time." %
+-                                   (field.model._meta.object_name, field.name))
+-            return False
++            # When travelling a reverse relation to a parent model, the
++            # parent_link field is always loaded so we can descend.
++            if not (reverse and field.remote_field.parent_link):
++                if restricted and field.name in requested:
++                    raise InvalidQuery("Field %s.%s cannot be both deferred"
++                                       " and traversed using select_related"
++                                       " at the same time." %
++                                       (field.model._meta.object_name, field.name))
++                return False
+     return True
+ 
+ 
+diff --git a/tests/select_related_onetoone/tests.py b/tests/select_related_onetoone/tests.py
+index b047168795..fb29139bd6 100644
+--- a/tests/select_related_onetoone/tests.py
++++ b/tests/select_related_onetoone/tests.py
+@@ -175,7 +175,6 @@ class ReverseSelectRelatedTestCase(TestCase):
+             self.assertEqual(p.child1.child4.value, p.child1.value)
+             self.assertEqual(p.child1.child4.value4, 4)
+ 
+-    @unittest.expectedFailure
+     def test_inheritance_deferred(self):
+         c = Child4.objects.create(name1='n1', name2='n2', value=1, value4=4)
+         with self.assertNumQueries(1):

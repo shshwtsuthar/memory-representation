@@ -1,0 +1,60 @@
+diff --git a/django/template/base.py b/django/template/base.py
+index 078be8b383..9d3d56933c 100644
+--- a/django/template/base.py
++++ b/django/template/base.py
+@@ -261,7 +261,7 @@ class Template:
+         # In some rare cases exc_value.args can be empty or an invalid
+         # string.
+         try:
+-            message = str(exception.args[0])
++            message = escape(str(exception.args[0]))
+         except (IndexError, UnicodeDecodeError):
+             message = '(Could not get exception message)'
+ 
+diff --git a/tests/template_tests/tests.py b/tests/template_tests/tests.py
+index 8cc86bd44f..69adfb6c0a 100644
+--- a/tests/template_tests/tests.py
++++ b/tests/template_tests/tests.py
+@@ -199,3 +199,42 @@ class TemplateTests(TemplateTestMixin, SimpleTestCase):
+ 
+ class DebugTemplateTests(TemplateTestMixin, SimpleTestCase):
+     debug_engine = True
++
++    def test_exception_message_escaped(self):
++        """
++        Exception message is correctly rendered in template_debug info.
++        """
++        engine = self._engine()
++        template = engine.from_string('{% include "nonexistent.html" %}')
++        try:
++            template.render(Context())
++        except TemplateDoesNotExist as e:
++            info = e.template_debug
++            # The message should be the template name
++            self.assertEqual(info['message'], 'nonexistent.html')
++
++    def test_safestring_exception_message_escaped(self):
++        """
++        SafeString exception message containing HTML is escaped in template_debug info.
++        Regression test for XSS vulnerability where SafeString in exception args[0]
++        could bypass escaping in the technical 500 page.
++        """
++        from django.utils.safestring import mark_safe
++
++        engine = self._engine()
++        template = engine.from_string('{% include "nonexistent.html" %}')
++
++        # Create a mock exception with a SafeString containing HTML
++        xss_payload = '<script>alert("XSS")</script>'
++        safe_xss = mark_safe(xss_payload)
++        exc = TemplateDoesNotExist(safe_xss)
++
++        # Create a mock token
++        from django.template.base import Token, TokenType
++        token = Token(TokenType.BLOCK, 'include', lineno=1)
++        token.position = (0, 10)
++
++        # Call get_exception_info directly on the template
++        info = template.get_exception_info(exc, token)
++        # The message should be escaped
++        self.assertEqual(info['message'], '&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;')

@@ -1,0 +1,730 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: adp
+
+The following is a stripped ADP-rendered trajectory from an officially related prior issue.
+
+STRIPPED ADP TRAJECTORY
+This is the capped/rendered ADP representation for injection. Full stripped_adp.audit.jsonl is audit-only.
+
+SOURCE
+------
+- trajectory_id: a085d240-4695-4c51-b6b6-87264baa99f0
+- repo: sympy/sympy
+- instance_id: sympy__sympy-21055
+- base_commit: 748ce73479ee2cd5c861431091001cc18943c735
+
+[ADP OBSERVATION current=0 original=0 source=user]
+excerpt:
+PRIOR ISSUE METADATA
+repo: sympy/sympy
+instance_id: sympy__sympy-21055
+base_commit: 748ce73479ee2cd5c861431091001cc18943c735
+problem_statement:
+`refine()` does not understand how to simplify complex arguments
+Just learned about the refine-function, which would come in handy frequently for me.  But
+`refine()` does not recognize that argument functions simplify for real numbers.
+
+```
+>>> from sympy import *
+>>> var('a,x')
+>>> J = Integral(sin(x)*exp(-a*x),(x,0,oo))
+>>> J.doit()
+    Piecewise((1/(a**2 + 1), 2*Abs(arg(a)) < pi), (Integral(exp(-a*x)*sin(x), (x, 0, oo)), True))
+>>> refine(J.doit(),Q.positive(a))
+        Piecewise((1/(a**2 + 1), 2*Abs(arg(a)) < pi), (Integral(exp(-a*x)*sin(x), (x, 0, oo)), True))
+>>> refine(abs(a),Q.positive(a))
+    a
+>>> refine(arg(a),Q.positive(a))
+    arg(a)
+```
+I cann't find any open issues identifying this.  Easy to fix, though.
+sha256: 27c98a2d8c815ae0a335ab254e5c28fee79e61f810e409315f4a55cbf20d83e1
+truncated: false
+
+[ADP ACTION current=1 original=15: code_action bash]
+payload:
+cd testbed && python3 -c "
+from sympy import *
+var('a')
+print('Testing refine() with arg():')
+print('refine(arg(a), Q.positive(a)) =', refine(arg(a), Q.positive(a)))
+print('Expected: 0')
+print()
+print('Testing refine() with abs():')
+print('refine(abs(a), Q.positive(a)) =', refine(abs(a), Q.positive(a)))
+print('Expected: a')
+"
+sha256: a02c96ada70d3fc07f3707919598dd17cdc9eeed15e7224e1e7e023d896aeeb7
+truncated: false
+
+[ADP OBSERVATION current=2 original=16 source=environment]
+name: Bash:toolu_01DvwePnDYyDonced6unXfi3
+excerpt:
+Testing refine() with arg():
+refine(arg(a), Q.positive(a)) = arg(a)
+Expected: 0
+
+Testing refine() with abs():
+refine(abs(a), Q.positive(a)) = a
+Expected: a
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 109ea9d42202e5b4271394509d657db6b4b8467192dc15e6e602b3aff9b7e24e
+truncated: false
+
+[ADP ACTION current=3 original=17: code_action bash]
+payload:
+find testbed -name "*.py" -type f | xargs grep -l "def refine" | head -20
+sha256: badbdc99c42161c07923596a37bbda024277221f851d9466817cd6562ba45ae5
+truncated: false
+
+[ADP ACTION current=4 original=23: api_action Glob]
+payload:
+{
+  "pattern": "**/refine.py"
+}
+sha256: 39b1061f0a3eec1bc7bdaaafc72f770ab72068a41f0154478f449215ae8f133f
+truncated: false
+
+[ADP OBSERVATION current=5 original=24 source=environment]
+name: Glob:toolu_01GEHrC3QfdkuaJkbrJ53FRE
+excerpt:
+./swebench_9_15/testbed/sympy/assumptions/refine.py
+sha256: 6c404960a86cc2d0e37ed51ecd7dd5a083c3592d9a62e952726209091cc75ba1
+truncated: false
+
+[ADP ACTION current=6 original=25: api_action Read]
+path: sympy/assumptions/refine.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/assumptions/refine.py"
+}
+sha256: 22d9264bb3b194d96c2d0c101ac6ef8b823e080f0ac5d45030995a967ba1fe8d
+truncated: false
+
+[ADP OBSERVATION current=7 original=26 source=environment]
+name: Read:toolu_01SpBtd8i8eizHtwc8jha3Ff
+excerpt:
+     1→from typing import Dict, Callable
+     2→
+     3→from sympy.core import S, Add, Expr, Basic, Mul
+     4→from sympy.logic.boolalg import Boolean
+     5→
+     6→from sympy.assumptions import ask, Q  # type: ignore
+     7→
+     8→
+     9→def refine(expr, assumptions=True):
+    10→    """
+    11→    Simplify an expression using assumptions.
+    12→
+    13→    Explanation
+    14→    ===========
+    15→
+    16→    Unlike :func:`~.simplify()` which performs structural simplification
+    17→    without any assumption, this function transforms the expression into
+    18→    the form which is only valid under certain assumptions. Note that
+    19→    ``simplify()`` is generally not done in refining process.
+    20→
+    21→    Refining boolean expression involves reducing it to ``True`` or
+    22→    ``False``. Unlike :func:~.`ask()`, the expression will not be reduced
+    23→    if the truth value cannot be determined.
+    24→
+    25→    Examples
+    26→    ========
+    27→
+    28→    >>> from sympy import refine, sqrt, Q
+    29→    >>> from sympy.abc import x
+    30→    >>> refine(sqrt(x**2), Q.real(x))
+    31→    Abs(x)
+    32→    >>> refine(sqrt(x**2), Q.positive(x))
+    33→    x
+    34→
+    35→    >>> refine(Q.real(x), Q.positive(x))
+    36→    True
+    37→    >>> refine(Q.positive(x), Q.real(x))
+    38→    Q.positive(x)
+    39→
+    40→    See Also
+    41→    ========
+    42→
+    43→    sympy.simplify.simplify.simplify : Structural simplification without assumptions.
+    44→    sympy.assumptions.ask.ask : Query for boolean expressions using assumptions.
+    45→    """
+    46→    if not isinstance(expr, Basic):
+    47→        return expr
+    48→
+    49→    if not expr.is_Atom:
+    50→        args = [refine(arg, assumptions) for arg in expr.args]
+    51→        # TODO: this will probably not work with Integral or Polynomial
+    52→        expr = expr.func(*args)
+    53→    if hasattr(expr, '_eval_refine'):
+    54→        ref_expr = expr._eval_refine(assumptions)
+
+sha256: 157245dd52d8e537bfa69e2c0f9a5c26da17e756f42c2858672fc5067805c946
+truncated: true
+
+[ADP ACTION current=8 original=27: code_action bash]
+payload:
+find . -name "*.py" -type f | xargs grep -l "class arg" | head -10
+sha256: e5e6d77f6efa7d47f74c3231afa280d805c97a4cf2bf6e88b9e6d7aff681a414
+truncated: false
+
+[ADP OBSERVATION current=9 original=28 source=environment]
+name: Bash:toolu_01Jhveob6ABCLJXzfREuTbVK
+excerpt:
+./sympy/functions/elementary/complexes.py
+sha256: de77d792f2eaa9d1e157746d26ba4e3b3e6ac1e9f1d51c5c57baaff253aecbe2
+truncated: false
+
+[ADP ACTION current=10 original=29: code_action bash]
+payload:
+grep -n "class arg" sympy/functions/elementary/complexes.py | head -5
+sha256: 511fc4e670dce9c88b804e8d7ba44eff425b6c3f79520607084c839043e8c9a6
+truncated: false
+
+[ADP OBSERVATION current=11 original=30 source=environment]
+name: Bash:toolu_01SAkk5XyhG4vqax1XeFUSq7
+excerpt:
+700:class arg(Function):
+sha256: ea328e73a1c4a6a651415e1ff2cabd8b3d26a7233112d682d4873ceaef19cc65
+truncated: false
+
+[ADP ACTION current=12 original=31: api_action Read]
+path: sympy/functions/elementary/complexes.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/functions/elementary/complexes.py",
+  "limit": 80,
+  "offset": 690
+}
+sha256: a892f7caa8830b77809030ed0d8e5c48856d4bca93732bd15b9c2ad467372441
+truncated: false
+
+[ADP OBSERVATION current=13 original=32 source=environment]
+name: Read:toolu_014bbyRCYpoU41D91W8WWvKa
+excerpt:
+   690→        elif arg.is_imaginary:
+   691→            return Piecewise((I*arg, I*arg >= 0), (-I*arg, True))
+   692→
+   693→    def _eval_rewrite_as_sign(self, arg, **kwargs):
+   694→        return arg/sign(arg)
+   695→
+   696→    def _eval_rewrite_as_conjugate(self, arg, **kwargs):
+   697→        return (arg*conjugate(arg))**S.Half
+   698→
+   699→
+   700→class arg(Function):
+   701→    """
+   702→    Returns the argument (in radians) of a complex number. For a positive
+   703→    number, the argument is always 0.
+   704→
+   705→    Examples
+   706→    ========
+   707→
+   708→    >>> from sympy.functions import arg
+   709→    >>> from sympy import I, sqrt
+   710→    >>> arg(2.0)
+   711→    0
+   712→    >>> arg(I)
+   713→    pi/2
+   714→    >>> arg(sqrt(2) + I*sqrt(2))
+   715→    pi/4
+   716→    >>> arg(sqrt(3)/2 + I/2)
+   717→    pi/6
+   718→    >>> arg(4 + 3*I)
+   719→    atan(3/4)
+   720→    >>> arg(0.8 + 0.6*I)
+   721→    0.643501108793284
+   722→
+   723→    Parameters
+   724→    ==========
+   725→
+   726→    arg : Expr
+   727→        Real or complex expression.
+   728→
+   729→    Returns
+   730→    =======
+   731→
+   732→    value : Expr
+   733→        Returns arc tangent of arg measured in radians.
+   734→
+   735→    """
+   736→
+   737→    is_extended_real = True
+   738→    is_real = True
+   739→    is_finite = True
+   740→    _singularities = True  # non-holomorphic
+   741→
+   742→    @classmethod
+   743→    def eval(cls, arg):
+   744→        if isinstance(arg, exp_polar):
+   745→            return periodic_argument(arg, oo)
+   746→        if not arg.is_Atom:
+   747→            c, arg_ = factor_terms(arg).as_coeff_Mul()
+   748→            if arg_.is_Mul:
+   749→                arg_ = Mul(*[a if (sign(a) not in (-1, 1)) else
+   750→                    sign(a) for a in arg_.args])
+   751→            arg_ = sign(c)*arg_
+   752→        else:
+   753→            arg_ = arg
+   754→        if arg_.atoms(AppliedUndef):
+   755→            return
+   756→        x, y =
+sha256: 97dec07b566e9d9c74558422666f5414c33a57903bbbd16e7ef2877c9a4bb365
+truncated: true
+
+[ADP ACTION current=14 original=35: api_action Edit]
+path: sympy/assumptions/refine.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/assumptions/refine.py",
+  "new_text_sha256": "5c7ee50f7395187b84e7c1eb83561f7765d0524fbe9a13335d76a5469f4bd61e",
+  "old_text_sha256": "a2e3ff12c2b75f348ae4ac1337bdf5ff452fb4aeab90b140f303886b81fcdb24"
+}
+sha256: 5d088d0be34a279b6b5470fe294e7bff7ac2e15e41400befbb08f5a1a4b62cab
+truncated: false
+
+[ADP ACTION current=15 original=37: api_action Edit]
+path: sympy/assumptions/refine.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/assumptions/refine.py",
+  "new_text_sha256": "cd2b88fcb48d71896ab459ec55cdc0f81e9320e01b24368e4664ea7e553a12bd",
+  "old_text_sha256": "80b04547f139840f6c8615479e69c86592f78c70afaf56bfd7f594a928d58321"
+}
+sha256: f3f031387e3a1758cabab6e1840ecfd97e3935043b847b260989374faf981027
+truncated: false
+
+[ADP ACTION current=16 original=41: code_action bash]
+payload:
+python3 -c "
+from sympy import *
+var('a,x')
+
+print('Testing refine() with arg():')
+print('refine(arg(a), Q.positive(a)) =', refine(arg(a), Q.positive(a)))
+print('Expected: 0')
+print()
+
+print('refine(arg(a), Q.negative(a)) =', refine(arg(a), Q.negative(a)))
+print('Expected: pi')
+print()
+
+print('Testing refine() with abs() (should still work):')
+print('refine(abs(a), Q.positive(a)) =', refine(abs(a), Q.positive(a)))
+print('Expected: a')
+print()
+
+# Test the full example from the issue
+J = Integral(sin(x)*exp(-a*x),(x,0,oo))
+result = J.doit()
+print('Testing full example from issue:')
+print('J.doit() =', result)
+print()
+print('refine(J.doit(), Q.positive(a)) =', refine(result, Q.positive(a)))
+"
+sha256: 22523371f9616c823028265647c4098f3366e7d18ff873f5f3c258306f667ec1
+truncated: false
+
+[ADP OBSERVATION current=17 original=42 source=environment]
+name: Bash:toolu_016Ugp5VfNDdUrqF54eHA2gR
+excerpt:
+Testing refine() with arg():
+refine(arg(a), Q.positive(a)) = 0
+Expected: 0
+
+refine(arg(a), Q.negative(a)) = pi
+Expected: pi
+
+Testing refine() with abs() (should still work):
+refine(abs(a), Q.positive(a)) = a
+Expected: a
+
+Testing full example from issue:
+J.doit() = Piecewise((1/(a**2 + 1), 2*Abs(arg(a)) < pi), (Integral(exp(-a*x)*sin(x), (x, 0, oo)), True))
+
+refine(J.doit(), Q.positive(a)) = 1/(a**2 + 1)
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 6932c9245989091001b9db1fcec5496e5b28a9f7b94ea5d28f804713fdcbf572
+truncated: false
+
+[ADP ACTION current=18 original=43: code_action bash]
+payload:
+python3 -c "
+from sympy import *
+var('a,b,c')
+
+print('Additional tests:')
+print('refine(arg(a), Q.real(a)) =', refine(arg(a), Q.real(a)))
+print('Expected: arg(a) (no simplification without positive/negative)')
+print()
+
+print('refine(arg(a*b), Q.positive(a) & Q.positive(b)) =', refine(arg(a*b), Q.positive(a) & Q.positive(b)))
+print('Expected: 0')
+print()
+
+print('refine(arg(-a), Q.positive(a)) =', refine(arg(-a), Q.positive(a)))
+print('Expected: pi')
+print()
+
+print('refine(arg(a**2), Q.positive(a)) =', refine(arg(a**2), Q.positive(a)))
+print('Expected: 0')
+"
+sha256: 4699125abe5a3c6fc2d35b222371083f3ce9ef726d86700c96696d87fa1ad43c
+truncated: false
+
+[ADP OBSERVATION current=19 original=44 source=environment]
+name: Bash:toolu_019UM18G1ezGA1VaXp5ogEC9
+excerpt:
+Additional tests:
+refine(arg(a), Q.real(a)) = arg(a)
+Expected: arg(a) (no simplification without positive/negative)
+
+refine(arg(a*b), Q.positive(a) & Q.positive(b)) = 0
+Expected: 0
+
+refine(arg(-a), Q.positive(a)) = pi
+Expected: pi
+
+refine(arg(a**2), Q.positive(a)) = 0
+Expected: 0
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: a2d0c455e9ee4d8a8b9334e17a0603bc23804cb58ef9cb49a26c2db49e2c0fd2
+truncated: false
+
+[ADP ACTION current=20 original=45: code_action bash]
+payload:
+find . -path "./sympy/assumptions/tests" -name "*refine*"
+sha256: f3788b6df10e681b9e29143d6a2a1ced4c3e23b8138283a0965e1646d7ddb2d9
+truncated: false
+
+[ADP ACTION current=21 original=47: code_action bash]
+payload:
+find . -type f -name "*test*refine*" -o -name "*refine*test*" | grep -v ".pyc"
+sha256: 70db6f336e3b7dc4681f108e8fd026488d9ca9050d5e2be62bb7b99e87b17536
+truncated: false
+
+[ADP OBSERVATION current=22 original=48 source=environment]
+name: Bash:toolu_012cNcUAUkZiqqRgxhdaGV7M
+excerpt:
+./sympy/assumptions/tests/test_refine.py
+sha256: 9b1ee3850363966b4797f026b002839cd58047bd7000914c7d9f4e9c3b9f39f4
+truncated: false
+
+[ADP ACTION current=23 original=49: code_action bash]
+payload:
+python3 -m pytest sympy/assumptions/tests/test_refine.py -v
+sha256: a8ed5a31016d703091a864e2a92040362555d439356f23f7205a333f1d69fa16
+truncated: false
+
+[ADP OBSERVATION current=24 original=50 source=environment]
+name: Bash:toolu_01PrQgpsyMAGtBUhy9h5Lgzu
+excerpt:
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+architecture: 64-bit
+cache:        yes
+ground types: gmpy 2.0.8
+
+rootdir: ./swebench_9_15/testbed
+configfile: pytest.ini
+plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+collecting ... collected 14 items
+
+sympy/assumptions/tests/test_refine.py::test_Abs PASSED                  [  7%]
+sympy/assumptions/tests/test_refine.py::test_pow1 PASSED                 [ 14%]
+sympy/assumptions/tests/test_refine.py::test_pow2 PASSED                 [ 21%]
+sympy/assumptions/tests/test_refine.py::test_exp PASSED                  [ 28%]
+sympy/assumptions/tests/test_refine.py::test_Piecewise PASSED            [ 35%]
+sympy/assumptions/tests/test_refine.py::test_atan2 PASSED                [ 42%]
+sympy/assumptions/tests/test_refine.py::test_re PASSED                   [ 50%]
+sympy/assumptions/tests/test_refine.py::test_im PASSED                   [ 57%]
+sympy/assumptions/tests/test_refine.py::test_complex PASSED              [ 64%]
+sympy/assumptions/tests/test_refine.py::test_sign PASSED                 [ 71%]
+sympy/assumptions/tests/test_refine.py::test_func_args PASSED            [ 78%]
+sympy/assumptions/tests/test_refine.py::test_eval_refine PASSED          [ 85%]
+sympy/assumptions/tests/test_refine.py::test_refine_issue_12724 PASSED   [ 92%]
+sympy/assumptions/tests/test_refine.py::test_matrixelement PASSED        [100%]
+
+=============================== warnings summary ===============================
+../../../../../opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441
+  /opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441: PytestConfigWarning: Unknown config option: doctestplus
+
+    self._warn_or_fail_if_strict(f"Unkn
+sha256: 13d73b96d21a8cbc84ad4013647b2aab25305fbb8076a5e339618c2561901a02
+truncated: true
+
+[ADP ACTION current=25 original=51: api_action Read]
+path: sympy/assumptions/tests/test_refine.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/assumptions/tests/test_refine.py"
+}
+sha256: 84ed33ce393aa468cc2e6200233556885996e62311742c595ecae46e4fe17c52
+truncated: false
+
+[ADP OBSERVATION current=26 original=52 source=environment]
+name: Read:toolu_01SGagYXH5Mwnc2ZrdaowJc3
+excerpt:
+     1→from sympy import (Abs, exp, Expr, I, pi, Q, Rational, refine, S, sqrt,
+     2→                   atan, atan2, nan, Symbol, re, im, sign)
+     3→from sympy.abc import w, x, y, z
+     4→from sympy.core.relational import Eq, Ne
+     5→from sympy.functions.elementary.piecewise import Piecewise
+     6→from sympy.matrices.expressions.matexpr import MatrixSymbol
+     7→
+     8→
+     9→def test_Abs():
+    10→    assert refine(Abs(x), Q.positive(x)) == x
+    11→    assert refine(1 + Abs(x), Q.positive(x)) == 1 + x
+    12→    assert refine(Abs(x), Q.negative(x)) == -x
+    13→    assert refine(1 + Abs(x), Q.negative(x)) == 1 - x
+    14→
+    15→    assert refine(Abs(x**2)) != x**2
+    16→    assert refine(Abs(x**2), Q.real(x)) == x**2
+    17→
+    18→
+    19→def test_pow1():
+    20→    assert refine((-1)**x, Q.even(x)) == 1
+    21→    assert refine((-1)**x, Q.odd(x)) == -1
+    22→    assert refine((-2)**x, Q.even(x)) == 2**x
+    23→
+    24→    # nested powers
+    25→    assert refine(sqrt(x**2)) != Abs(x)
+    26→    assert refine(sqrt(x**2), Q.complex(x)) != Abs(x)
+    27→    assert refine(sqrt(x**2), Q.real(x)) == Abs(x)
+    28→    assert refine(sqrt(x**2), Q.positive(x)) == x
+    29→    assert refine((x**3)**Rational(1, 3)) != x
+    30→
+    31→    assert refine((x**3)**Rational(1, 3), Q.real(x)) != x
+    32→    assert refine((x**3)**Rational(1, 3), Q.positive(x)) == x
+    33→
+    34→    assert refine(sqrt(1/x), Q.real(x)) != 1/sqrt(x)
+    35→    assert refine(sqrt(1/x), Q.positive(x)) == 1/sqrt(x)
+    36→
+    37→    # powers of (-1)
+    38→    assert refine((-1)**(x + y), Q.even(x)) == (-1)**y
+    39→    assert refine((-1)**(x + y + z), Q.odd(x) & Q.odd(z)) == (-1)**y
+    40→    assert refine((-1)**(x + y + 1), Q.odd(x)) == (-1)**y
+    41→    assert refine((-1)**(x + y + 2), Q.odd(x)) == (-1)**(y + 1)
+    42→    assert refine((-1)**(x + 3)) == (-1)**(x + 1)
+    43→
+    44→    # continuation
+    45→    assert refine((-1)**((-1)**x/2 - S.Half), Q.integer(x)) == (-1)**x
+
+sha256: 729bb597886090bdee6d13a922c025a85f9d98f6e7b7d9ed3aa014159b5859f3
+truncated: true
+
+[ADP ACTION current=27 original=53: api_action Edit]
+path: sympy/assumptions/tests/test_refine.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/assumptions/tests/test_refine.py",
+  "new_text_sha256": "1c95e66271675d6c5ffea27b1fd7b33a02e0909ef064850b8a25576d4ac236fb",
+  "old_text_sha256": "58c342cb4e42b52ed61606d1e9634ae8878b33f9c60864654fc5537b9944def2"
+}
+sha256: efc77bc05cd1b7bdaa2059d76e6cc222e98137c4e8882ff4a5902282c449927a
+truncated: false
+
+[ADP ACTION current=28 original=55: api_action Edit]
+path: sympy/assumptions/tests/test_refine.py
+payload:
+{
+  "file_path": "./swebench_9_15/testbed/sympy/assumptions/tests/test_refine.py",
+  "new_text_sha256": "a1fabb0f3ea6abd74184351b437fec9a2d373da692df55f8ff5c3378db181087",
+  "old_text_sha256": "6e58a68cb657f1592e611c39fa13fbb5cb0b1d00eda29365e6ef688cd938c37c"
+}
+sha256: cf3856831b6b52d4e658d689452284b0001d2ca528bf6211320120514426b46b
+truncated: false
+
+[ADP ACTION current=29 original=57: code_action bash]
+payload:
+python3 -m pytest sympy/assumptions/tests/test_refine.py::test_arg -v
+sha256: 66ad0dc610d653ffd359128a1ae72b2667bcb1b507dc95bf617916e038cef80d
+truncated: false
+
+[ADP OBSERVATION current=30 original=58 source=environment]
+name: Bash:toolu_01J56fkAb8c4jDVq9bGjjvqF
+excerpt:
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+architecture: 64-bit
+cache:        yes
+ground types: gmpy 2.0.8
+
+rootdir: ./swebench_9_15/testbed
+configfile: pytest.ini
+plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+collecting ... collected 1 item
+
+sympy/assumptions/tests/test_refine.py::test_arg PASSED                  [100%]
+
+=============================== warnings summary ===============================
+../../../../../opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441
+  /opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441: PytestConfigWarning: Unknown config option: doctestplus
+
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+========================= 1 passed, 1 warning in 0.43s =========================
+Error processing line 1 of /opt/anaconda3/lib/python3.8/site-packages/matplotlib-nspkg.pth:
+
+  Traceback (most recent call last):
+    File "/opt/anaconda3/lib/python3.8/site.py", line 169, in addpackage
+      exec(line)
+    File "<string>", line 1, in <module>
+    File "<frozen importlib._bootstrap>", line 553, in module_from_spec
+  AttributeError: 'NoneType' object has no attribute 'loader'
+
+Remainder of file ignored
+sha256: 3837de398abeabe2c01ec683cb2f865dac5fabe0911f1a4239f4aba99463607d
+truncated: false
+
+[ADP ACTION current=31 original=59: code_action bash]
+payload:
+python3 -m pytest sympy/assumptions/tests/test_refine.py -v
+sha256: 6b14ab1b035c4e60115c87c4854b8402f61d6be6b29c35f5d17bdb0aa7c82f16
+truncated: false
+
+[ADP OBSERVATION current=32 original=60 source=environment]
+name: Bash:toolu_01Xiv4NV5RzPZNP1MK4sTxXX
+excerpt:
+============================= test session starts ==============================
+platform darwin -- Python 3.8.8, pytest-8.3.5, pluggy-1.5.0 -- /opt/anaconda3/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('./swebench_9_15/testbed/.hypothesis/examples'))
+architecture: 64-bit
+cache:        yes
+ground types: gmpy 2.0.8
+
+rootdir: ./swebench_9_15/testbed
+configfile: pytest.ini
+plugins: hypothesis-6.113.0, anyio-3.6.2, xdist-3.6.1
+collecting ... collected 15 items
+
+sympy/assumptions/tests/test_refine.py::test_Abs PASSED                  [  6%]
+sympy/assumptions/tests/test_refine.py::test_pow1 PASSED                 [ 13%]
+sympy/assumptions/tests/test_refine.py::test_pow2 PASSED                 [ 20%]
+sympy/assumptions/tests/test_refine.py::test_exp PASSED                  [ 26%]
+sympy/assumptions/tests/test_refine.py::test_Piecewise PASSED            [ 33%]
+sympy/assumptions/tests/test_refine.py::test_atan2 PASSED                [ 40%]
+sympy/assumptions/tests/test_refine.py::test_re PASSED                   [ 46%]
+sympy/assumptions/tests/test_refine.py::test_im PASSED                   [ 53%]
+sympy/assumptions/tests/test_refine.py::test_arg PASSED                  [ 60%]
+sympy/assumptions/tests/test_refine.py::test_complex PASSED              [ 66%]
+sympy/assumptions/tests/test_refine.py::test_sign PASSED                 [ 73%]
+sympy/assumptions/tests/test_refine.py::test_func_args PASSED            [ 80%]
+sympy/assumptions/tests/test_refine.py::test_eval_refine PASSED          [ 86%]
+sympy/assumptions/tests/test_refine.py::test_refine_issue_12724 PASSED   [ 93%]
+sympy/assumptions/tests/test_refine.py::test_matrixelement PASSED        [100%]
+
+=============================== warnings summary ===============================
+../../../../../opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441
+  /opt/anaconda3/lib/python3.8/site-packages/_pytest/config/__init__.py:1441: PytestConfigWarn
+sha256: e40e0d523f7116d9375e64d1b2d64d4a88c7aad4e7cdb7d4c534f20c9ebf6856
+truncated: true
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: sympy/sympy
+Base commit: 70cd4ffd093ac224fc0226c1be58f9163e2c800a
+Instance ID: sympy__sympy-21309
+
+CURRENT_ISSUE
+feat(core): allow is_ge to take assumptions
+<!-- Your title above should be a short description of what
+was changed. Do not include the issue number in the title. -->
+
+#### References to other Issues or PRs
+<!-- If this pull request fixes an issue, write "Fixes #NNNN" in that exact
+format, e.g. "Fixes #1234" (see
+https://tinyurl.com/auto-closing for more information). Also, please
+write a comment on that issue linking back to this pull request once it is
+open. -->
+
+
+#### Brief description of what is fixed or changed
+Allow `is_ge`, `is_le`, `is_gt`, `is_lt` to take assumptions
+Allow corresponding predicates to take assumptions
+
+#### Other comments
+
+Now, this behavior is possible.
+```python
+>>> is_ge(x, S(0), Q.positive(x))
+True
+```
+
+This change does what #21203 does to `is_eq` and `is_neq`.
+
+#### Release Notes
+
+<!-- Write the release notes for this release below between the BEGIN and END
+statements. The basic format is a bulleted list with the name of the subpackage
+and the release note for this PR. For example:
+
+* solvers
+  * Added a new solver for logarithmic equations.
+
+* functions
+  * Fixed a bug with log of integers.
+
+or if no release note(s) should be included use:
+
+NO ENTRY
+
+See https://github.com/sympy/sympy/wiki/Writing-Release-Notes for more
+information on how to write release notes. The bot will check your release
+notes automatically to see if they are formatted correctly. -->
+
+<!-- BEGIN RELEASE NOTES -->
+* core
+  * `is_ge`, `is_le`, `is_gt`, `is_lt` now takes assumptions
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

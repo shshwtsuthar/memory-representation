@@ -1,0 +1,136 @@
+diff --git a/django/core/checks/model_checks.py b/django/core/checks/model_checks.py
+index 2397fe3bb2..7edf0656cf 100644
+--- a/django/core/checks/model_checks.py
++++ b/django/core/checks/model_checks.py
+@@ -1,5 +1,6 @@
+ import inspect
+ import types
++from collections import defaultdict
+ from itertools import chain
+ 
+ from django.apps import apps
+@@ -8,12 +9,15 @@ from django.core.checks import Error, Tags, register
+ 
+ @register(Tags.models)
+ def check_all_models(app_configs=None, **kwargs):
++    db_table_models = defaultdict(list)
+     errors = []
+     if app_configs is None:
+         models = apps.get_models()
+     else:
+         models = chain.from_iterable(app_config.get_models() for app_config in app_configs)
+     for model in models:
++        if model._meta.managed and not model._meta.proxy:
++            db_table_models[model._meta.db_table].append(model._meta.label)
+         if not inspect.ismethod(model.check):
+             errors.append(
+                 Error(
+@@ -25,6 +29,16 @@ def check_all_models(app_configs=None, **kwargs):
+             )
+         else:
+             errors.extend(model.check(**kwargs))
++    for db_table, model_labels in db_table_models.items():
++        if len(model_labels) != 1:
++            errors.append(
++                Error(
++                    "db_table '%s' is used by multiple models: %s."
++                    % (db_table, ', '.join(db_table_models[db_table])),
++                    obj=db_table,
++                    id='models.E028'
++                )
++            )
+     return errors
+ 
+ 
+diff --git a/tests/check_framework/test_db_table_collision.py b/tests/check_framework/test_db_table_collision.py
+new file mode 100644
+index 0000000000..6c8b387e62
+--- /dev/null
++++ b/tests/check_framework/test_db_table_collision.py
+@@ -0,0 +1,86 @@
++"""Tests for db_table collision detection (models.E028)."""
++from django.core import checks
++from django.core.checks import Error
++from django.db import models
++from django.test import SimpleTestCase
++from django.test.utils import isolate_apps, modify_settings
++
++
++@isolate_apps('check_framework', attr_name='apps')
++class DuplicateDBTableTests(SimpleTestCase):
++    """Tests for db_table collision detection (models.E028)."""
++
++    def test_collision_in_same_app(self):
++        """Two models in the same app with the same db_table should produce an error."""
++        class Model1(models.Model):
++            class Meta:
++                db_table = 'test_table'
++                app_label = 'check_framework'
++
++        class Model2(models.Model):
++            class Meta:
++                db_table = 'test_table'
++                app_label = 'check_framework'
++
++        self.assertEqual(checks.run_checks(app_configs=self.apps.get_app_configs()), [
++            Error(
++                "db_table 'test_table' is used by multiple models: "
++                "check_framework.Model1, check_framework.Model2.",
++                obj='test_table',
++                id='models.E028',
++            )
++        ])
++
++    @modify_settings(INSTALLED_APPS={'append': 'basic'})
++    @isolate_apps('basic', 'check_framework', kwarg_name='apps')
++    def test_collision_across_apps(self, apps):
++        """Two models in different apps with the same db_table should produce an error."""
++        class Model1(models.Model):
++            class Meta:
++                app_label = 'basic'
++                db_table = 'test_table'
++
++        class Model2(models.Model):
++            class Meta:
++                app_label = 'check_framework'
++                db_table = 'test_table'
++
++        self.assertEqual(checks.run_checks(app_configs=apps.get_app_configs()), [
++            Error(
++                "db_table 'test_table' is used by multiple models: "
++                "basic.Model1, check_framework.Model2.",
++                obj='test_table',
++                id='models.E028',
++            )
++        ])
++
++    def test_no_collision_for_unmanaged_models(self):
++        """Unmanaged models should NOT produce an error for duplicate db_table."""
++        class Unmanaged(models.Model):
++            class Meta:
++                db_table = 'test_table'
++                app_label = 'check_framework'
++                managed = False
++
++        class Managed(models.Model):
++            class Meta:
++                db_table = 'test_table'
++                app_label = 'check_framework'
++
++        # Only the managed model should be checked
++        self.assertEqual(checks.run_checks(app_configs=self.apps.get_app_configs()), [])
++
++    def test_no_collision_for_proxy_models(self):
++        """Proxy models should NOT produce an error for duplicate db_table."""
++        class Model1(models.Model):
++            class Meta:
++                db_table = 'test_table'
++                app_label = 'check_framework'
++
++        class Model2(Model1):
++            class Meta:
++                proxy = True
++                app_label = 'check_framework'
++
++        # Only the non-proxy model should be checked
++        self.assertEqual(checks.run_checks(app_configs=self.apps.get_app_configs()), [])

@@ -1,0 +1,39 @@
+diff --git a/django/views/templates/technical_500.html b/django/views/templates/technical_500.html
+index 7801289b78..3f9c1a669e 100644
+--- a/django/views/templates/technical_500.html
++++ b/django/views/templates/technical_500.html
+@@ -190,7 +190,7 @@
+ <div id="template">
+    <h2>Error during template rendering</h2>
+    <p>In template <code>{{ template_info.name }}</code>, error at line <strong>{{ template_info.line }}</strong></p>
+-   <h3>{{ template_info.message }}</h3>
++   <h3>{{ template_info.message|force_escape }}</h3>
+    <table class="source{% if template_info.top %} cut-top{% endif %}
+       {% if template_info.bottom != template_info.total %} cut-bottom{% endif %}">
+    {% for source_line in template_info.source_lines %}
+diff --git a/tests/view_tests/tests/test_debug.py b/tests/view_tests/tests/test_debug.py
+index 591013be36..935881aa28 100644
+--- a/tests/view_tests/tests/test_debug.py
++++ b/tests/view_tests/tests/test_debug.py
+@@ -998,6 +998,21 @@ class ExceptionReporterTests(SimpleTestCase):
+                 reporter = ExceptionReporter(request, None, None, None)
+                 self.assertEqual(reporter._get_raw_insecure_uri(), expected)
+ 
++    def test_template_debug_message_escaped(self):
++        """
++        SafeString in exception args must be escaped in template_debug message.
++        """
++        try:
++            raise TemplateDoesNotExist(mark_safe('<script>alert(1)</script>'))
++        except TemplateDoesNotExist:
++            exc_type, exc_value, tb = sys.exc_info()
++        request = self.rf.get('/test_view/')
++        reporter = ExceptionReporter(request, exc_type, exc_value, tb)
++        html = reporter.get_traceback_html()
++        # The SafeString should be escaped, not rendered as raw HTML
++        self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;', html)
++        self.assertNotIn('<script>alert(1)</script>', html)
++
+ 
+ class PlainTextReportTests(SimpleTestCase):
+     rf = RequestFactory()

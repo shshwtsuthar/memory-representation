@@ -1,0 +1,687 @@
+You are an autonomous software-engineering agent.
+
+Your task is to resolve the CURRENT_ISSUE in the current repository by inspecting the code, making the necessary edits, and validating the change with appropriate tests.
+
+A PRIOR_CONTEXT section is included below. It may contain read-only evidence from an officially related previous issue, or it may explicitly state that no prior context is provided for this run. If prior evidence is present, it is optional context only. It may contain irrelevant details, failed attempts, incomplete evidence, or edits that do not apply to the current repository state.
+
+Use PRIOR_CONTEXT only if helpful. The CURRENT_ISSUE and current repository state are authoritative. Independently inspect the current repository and verify all conclusions. Do not copy prior patches blindly.
+
+
+
+PRIOR_CONTEXT
+Condition: raw
+
+The following is a stripped raw transcript from an officially related prior issue.
+
+STRIPPED RAW CLAUDE CODE TRAJECTORY
+This transcript was rendered from original raw JSONL using the canonical ADP strip manifest.
+
+[RAW line 3 USER]
+PRIOR ISSUE METADATA
+repo: scikit-learn/scikit-learn
+instance_id: scikit-learn__scikit-learn-25500
+base_commit: 4db04923a754b6a2defa1b172f55d492b85d165e
+problem_statement:
+CalibratedClassifierCV doesn't work with `set_config(transform_output="pandas")`
+### Describe the bug
+
+CalibratedClassifierCV with isotonic regression doesn't work when we previously set `set_config(transform_output="pandas")`.
+The IsotonicRegression seems to return a dataframe, which is a problem for `_CalibratedClassifier`  in `predict_proba` where it tries to put the dataframe in a numpy array row `proba[:, class_idx] = calibrator.predict(this_pred)`.
+
+### Steps/Code to Reproduce
+
+```python
+import numpy as np
+from sklearn import set_config
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.linear_model import SGDClassifier
+
+set_config(transform_output="pandas")
+model = CalibratedClassifierCV(SGDClassifier(), method='isotonic')
+model.fit(np.arange(90).reshape(30, -1), np.arange(30) % 2)
+model.predict(np.arange(90).reshape(30, -1))
+```
+
+### Expected Results
+
+It should not crash.
+
+### Actual Results
+
+```
+../core/model_trainer.py:306: in train_model
+    cv_predictions = cross_val_predict(pipeline,
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/sklearn/model_selection/_validation.py:968: in cross_val_predict
+    predictions = parallel(
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/parallel.py:1085: in __call__
+    if self.dispatch_one_batch(iterator):
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/parallel.py:901: in dispatch_one_batch
+    self._dispatch(tasks)
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/parallel.py:819: in _dispatch
+    job = self._backend.apply_async(batch, callback=cb)
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/_parallel_backends.py:208: in apply_async
+    result = ImmediateResult(func)
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/_parallel_backends.py:597: in __init__
+    self.results = batch()
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/parallel.py:288: in __call__
+    return [func(*args, **kwargs)
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/joblib/parallel.py:288: in <listcomp>
+    return [func(*args, **kwargs)
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/sklearn/utils/fixes.py:117: in __call__
+    return self.function(*args, **kwargs)
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/sklearn/model_selection/_validation.py:1052: in _fit_and_predict
+    predictions = func(X_test)
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/sklearn/pipeline.py:548: in predict_proba
+    return self.steps[-1][1].predict_proba(Xt, **predict_proba_params)
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/sklearn/calibration.py:477: in predict_proba
+    proba = calibrated_classifier.predict_proba(X)
+../../../../.anaconda3/envs/strategy-training/lib/python3.9/site-packages/sklearn/calibration.py:764: in predict_proba
+    proba[:, class_idx] = calibrator.predict(this_pred)
+E   ValueError: could not broadcast input array from shape (20,1) into shape (20,)
+```
+
+### Versions
+
+```shell
+System:
+    python: 3.9.15 (main, Nov 24 2022, 14:31:59)  [GCC 11.2.0]
+executable: /home/philippe/.anaconda3/envs/strategy-training/bin/python
+   machine: Linux-5.15.0-57-generic-x86_64-with-glibc2.31
+
+Python dependencies:
+      sklearn: 1.2.0
+          pip: 22.2.2
+   setuptools: 62.3.2
+        numpy: 1.23.5
+        scipy: 1.9.3
+       Cython: None
+       pandas: 1.4.1
+   matplotlib: 3.6.3
+       joblib: 1.2.0
+threadpoolctl: 3.1.0
+
+Built with OpenMP: True
+
+threadpoolctl info:
+       user_api: openmp
+   internal_api: openmp
+         prefix: libgomp
+       filepath: /home/philippe/.anaconda3/envs/strategy-training/lib/python3.9/site-packages/scikit_learn.libs/libgomp-a34b3233.so.1.0.0
+        version: None
+    num_threads: 12
+
+       user_api: blas
+   internal_api: openblas
+         prefix: libopenblas
+       filepath: /home/philippe/.anaconda3/envs/strategy-training/lib/python3.9/site-packages/numpy.libs/libopenblas64_p-r0-742d56dc.3.20.so
+        version: 0.3.20
+threading_layer: pthreads
+   architecture: Haswell
+    num_threads: 12
+
+       user_api: blas
+   internal_api: openblas
+         prefix: libopenblas
+       filepath: /home/philippe/.anaconda3/envs/strategy-training/lib/python3.9/site-packages/scipy.libs/libopenblasp-r0-41284840.3.18.so
+        version: 0.3.18
+threading_layer: pthreads
+   architecture: Haswell
+    num_threads: 12
+```
+[RAW line 10 TOOL Bash]
+ls -la testbed 2>&1 | head -20
+[RAW line 26 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "limit": 30,
+  "offset": 750
+}
+[RAW line 27 TOOL RESULT toolu_01FpbtXgK9VURWeqmUVqywck]
+   750→        predictions = _compute_predictions(pred_method, method_name, X, n_classes)
+   751→
+   752→        label_encoder = LabelEncoder().fit(self.classes)
+   753→        pos_class_indices = label_encoder.transform(self.estimator.classes_)
+   754→
+   755→        proba = np.zeros((_num_samples(X), n_classes))
+   756→        for class_idx, this_pred, calibrator in zip(
+   757→            pos_class_indices, predictions.T, self.calibrators
+   758→        ):
+   759→            if n_classes == 2:
+   760→                # When binary, `predictions` consists only of predictions for
+   761→                # clf.classes_[1] but `pos_class_indices` = 0
+   762→                class_idx += 1
+   763→            proba[:, class_idx] = calibrator.predict(this_pred)
+   764→
+   765→        # Normalize the probabilities
+   766→        if n_classes == 2:
+   767→            proba[:, 0] = 1.0 - proba[:, 1]
+   768→        else:
+   769→            denominator = np.sum(proba, axis=1)[:, np.newaxis]
+   770→            # In the edge case where for each class calibrator returns a null
+   771→            # probability for a given sample, use the uniform distribution
+   772→            # instead.
+   773→            uniform_proba = np.full_like(proba, 1 / n_classes)
+   774→            proba = np.divide(
+   775→                proba, denominator, out=uniform_proba, where=denominator != 0
+   776→            )
+   777→
+   778→        # Deal with cases where the predicted probability minimally exceeds 1.0
+   779→        proba[(1.0 < proba) & (proba <= 1.0 + 1e-5)] = 1.0
+
+[RAW line 29 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "limit": 100,
+  "offset": 700
+}
+[RAW line 30 TOOL RESULT toolu_01TXybs4VxnViQzJ6LxTL7QD]
+   700→    return pipeline
+   701→
+   702→
+   703→class _CalibratedClassifier:
+   704→    """Pipeline-like chaining a fitted classifier and its fitted calibrators.
+   705→
+   706→    Parameters
+   707→    ----------
+   708→    estimator : estimator instance
+   709→        Fitted classifier.
+   710→
+   711→    calibrators : list of fitted estimator instances
+   712→        List of fitted calibrators (either 'IsotonicRegression' or
+   713→        '_SigmoidCalibration'). The number of calibrators equals the number of
+   714→        classes. However, if there are 2 classes, the list contains only one
+   715→        fitted calibrator.
+   716→
+   717→    classes : array-like of shape (n_classes,)
+   718→        All the prediction classes.
+   719→
+   720→    method : {'sigmoid', 'isotonic'}, default='sigmoid'
+   721→        The method to use for calibration. Can be 'sigmoid' which
+   722→        corresponds to Platt's method or 'isotonic' which is a
+   723→        non-parametric approach based on isotonic regression.
+   724→    """
+   725→
+   726→    def __init__(self, estimator, calibrators, *, classes, method="sigmoid"):
+   727→        self.estimator = estimator
+   728→        self.calibrators = calibrators
+   729→        self.classes = classes
+   730→        self.method = method
+   731→
+   732→    def predict_proba(self, X):
+   733→        """Calculate calibrated probabilities.
+   734→
+   735→        Calculates classification calibrated probabilities
+   736→        for each class, in a one-vs-all manner, for `X`.
+   737→
+   738→        Parameters
+   739→        ----------
+   740→        X : ndarray of shape (n_samples, n_features)
+   741→            The sample data.
+   742→
+   743→        Returns
+   744→        -------
+   745→        proba : array, shape (n_samples, n_classes)
+   746→            The predicted probabilities. Can be exact zeros.
+   747→        """
+   748→        n_classes = len(self.classes)
+   749→        pred_method, method_name = _get_prediction_method
+[... truncated ...]
+[RAW line 32 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "limit": 50,
+  "offset": 0
+}
+[RAW line 33 TOOL RESULT toolu_016dDVTVxsHQkKCGc6i6KrDc]
+     0→"""Calibration of predicted probabilities."""
+     1→
+     2→# Author: Alexandre Gramfort <alexandre.gramfort@telecom-paristech.fr>
+     3→#         Balazs Kegl <balazs.kegl@gmail.com>
+     4→#         Jan Hendrik Metzen <jhm@informatik.uni-bremen.de>
+     5→#         Mathieu Blondel <mathieu@mblondel.org>
+     6→#
+     7→# License: BSD 3 clause
+     8→
+     9→from numbers import Integral
+    10→import warnings
+    11→from inspect import signature
+    12→from functools import partial
+    13→
+    14→from math import log
+    15→import numpy as np
+    16→
+    17→from scipy.special import expit
+    18→from scipy.special import xlogy
+    19→from scipy.optimize import fmin_bfgs
+    20→
+    21→from .base import (
+    22→    BaseEstimator,
+    23→    ClassifierMixin,
+    24→    RegressorMixin,
+    25→    clone,
+    26→    MetaEstimatorMixin,
+    27→    is_classifier,
+    28→)
+    29→from .preprocessing import label_binarize, LabelEncoder
+    30→from .utils import (
+    31→    column_or_1d,
+    32→    indexable,
+    33→    check_matplotlib_support,
+    34→)
+    35→
+    36→from .utils.multiclass import check_classification_targets
+    37→from .utils.parallel import delayed, Parallel
+    38→from .utils._param_validation import StrOptions, HasMethods, Hidden
+    39→from .utils.validation import (
+    40→    _check_fit_params,
+    41→    _check_sample_weight,
+    42→    _num_samples,
+    43→    check_consistent_length,
+    44→    check_is_fitted,
+    45→)
+    46→from .utils import _safe_indexing
+    47→from .isotonic import IsotonicRegression
+    48→from .svm import LinearSVC
+    49→from .model_selection import check_cv, cross_val_predict
+
+[RAW line 46 TOOL Bash]
+cd testbed && python -c "import numpy as np; print(np.__version__)"
+[RAW line 52 TOOL Grep]
+{
+  "output_mode": "files_with_matches",
+  "path": "./swebench_9_15/testbed/sklearn",
+  "pattern": "_get_output_config"
+}
+[RAW line 53 TOOL RESULT toolu_01R4zTyyQAt1HDAiLwQDPCcz]
+Found 5 files
+sklearn/utils/tests/test_set_output.py
+sklearn/utils/_set_output.py
+sklearn/tests/test_base.py
+sklearn/pipeline.py
+sklearn/compose/_column_transformer.py
+[RAW line 55 TOOL Grep]
+{
+  "-A": 3,
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sklearn/utils",
+  "pattern": "def.*to_numpy|asarray.*pandas|DataFrame.*numpy"
+}
+[RAW line 56 TOOL RESULT toolu_01HExmEzzTYkva9ZjEJwHij1]
+sklearn/utils/_array_api.py:191:def _convert_to_numpy(array, xp):
+./swebench_9_15/testbed/sklearn/utils/_array_api.py-192-    """Convert X into a NumPy ndarray.
+./swebench_9_15/testbed/sklearn/utils/_array_api.py-193-
+./swebench_9_15/testbed/sklearn/utils/_array_api.py-194-    Only works on cupy.array_api and numpy.array_api and is used for testing.
+--
+sklearn/utils/tests/test_array_api.py:146:def test_convert_to_numpy_error():
+./swebench_9_15/testbed/sklearn/utils/tests/test_array_api.py-147-    """Test convert to numpy errors for unsupported namespaces."""
+./swebench_9_15/testbed/sklearn/utils/tests/test_array_api.py-148-    xp = pytest.importorskip("numpy.array_api")
+./swebench_9_15/testbed/sklearn/utils/tests/test_array_api.py-149-    xp_ = _AdjustableNameAPITestWrapper(xp, "wrapped.array_api")
+[RAW line 58 TOOL Bash]
+grep -r "column_or_1d" --include="*.py" sklearn/ | head -20
+[RAW line 59 TOOL RESULT toolu_01LA7rm14owNz9LAKRaGQZxj]
+sklearn//metrics/_classification.py:from ..utils import column_or_1d
+sklearn//metrics/_classification.py:        y_true = column_or_1d(y_true)
+sklearn//metrics/_classification.py:        y_pred = column_or_1d(y_pred)
+sklearn//metrics/_classification.py:        sample_weight = column_or_1d(sample_weight)
+sklearn//metrics/_classification.py:    y_true = column_or_1d(y_true)
+sklearn//metrics/_classification.py:        pred_decision = column_or_1d(pred_decision)
+sklearn//metrics/_classification.py:    y_true = column_or_1d(y_true)
+sklearn//metrics/_classification.py:    y_prob = column_or_1d(y_prob)
+sklearn//metrics/_regression.py:    column_or_1d,
+sklearn//metrics/_regression.py:        sample_weight = column_or_1d(sample_weight)
+sklearn//metrics/_regression.py:        sample_weight = column_or_1d(sample_weight)
+sklearn//metrics/_ranking.py:from ..utils import column_or_1d, check_array
+sklearn//metrics/_ranking.py:    x = column_or_1d(x)
+sklearn//metrics/_ranking.py:    y = column_or_1d(y)
+sklearn//metrics/_ranking.py:        labels = column_or_1d(labels)
+sklearn//metrics/_ranking.py:    y_true = column_or_1d(y_true)
+sklearn//metrics/_ranking.py:    y_score = column_or_1d(y_score)
+sklearn//metrics/_ranking.py:        sample_weight = column_or_1d(sample_weight)
+sklearn//metrics/_ranking.py:    y_true = column_or_1d(y_true)
+sklearn//metrics/_ranking.py:        y_score = column_or_1d(y_score)
+[RAW line 61 TOOL Grep]
+{
+  "-A": 30,
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sklearn/utils",
+  "pattern": "^def column_or_1d"
+}
+[RAW line 62 TOOL RESULT toolu_01YDjjMtPqm134cxNPwHQa1P]
+sklearn/utils/validation.py:1152:def column_or_1d(y, *, dtype=None, warn=False):
+./swebench_9_15/testbed/sklearn/utils/validation.py-1153-    """Ravel column or 1d numpy array, else raises an error.
+./swebench_9_15/testbed/sklearn/utils/validation.py-1154-
+./swebench_9_15/testbed/sklearn/utils/validation.py-1155-    Parameters
+./swebench_9_15/testbed/sklearn/utils/validation.py-1156-    ----------
+sklearn/utils/validation.py-1157-    y : array-like
+./swebench_9_15/testbed/sklearn/utils/validation.py-1158-       Input data.
+./swebench_9_15/testbed/sklearn/utils/validation.py-1159-
+sklearn/utils/validation.py-1160-    dtype : data-type, default=None
+./swebench_9_15/testbed/sklearn/utils/validation.py-1161-        Data type for `y`.
+./swebench_9_15/testbed/sklearn/utils/validation.py-1162-
+sklearn/utils/validation.py-1163-        .. versionadded:: 1.2
+./swebench_9_15/testbed/sklearn/utils/validation.py-1164-
+sklearn/utils/validation.py-1165-    warn : bool, default=False
+./swebench_9_15/testbed/sklearn/utils/validation.py-1166-       To control display of warnings.
+./swebench_9_15/testbed/sklearn/utils/validation.py-1167-
+./swebench_9_15/testbed/sklearn/utils/validation.py-1168-    Returns
+./swebench_9_15/testbed/sklearn/utils/validation.py-1169-    -------
+sklearn/utils/validation.py-1170-    y : ndarray
+./swebench_9_15/testbed/sklearn/utils/validation.py-1171-       Output data.
+./swebench_9_15/testbed/sklearn/utils/validation.py-1172-
+./swebench_9_15/testbed/sklearn/utils/validation.py-1173-    Raises
+./swebench_9_15/testbed/sklearn/utils/validation.py-1174-    ------
+./swebench_9_15/testbed/sklearn/utils/validation.py-1175-    ValueError
+./swebench_9_15/testbed/sklearn/utils/validation.py-1176-        If `y` is not a 1D array or a 2D array with a single row or column.
+./swebench_9_15/testbed/sklearn/utils/validation.py-1177-    """
+./swebench_9_15/testbed/sklearn/utils/validation.py-1178-    xp, _ = get_namespace(y)
+./swebench_9_15/testbed/sklearn/utils/validation.
+[... truncated ...]
+[RAW line 69 TOOL Edit]
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "new_text_sha256": "8ebd482bc068ef4d3ad4ffa312e5615399651164b6e636ae7fce027027f84df2",
+  "old_text_sha256": "6a71ac0645b9875d5cc1bd6e902fe8b28e0ced78135f7d90a1fe451c7b43924f"
+}
+[RAW line 76 TOOL Glob]
+{
+  "path": "./swebench_9_15/testbed",
+  "pattern": "**/test_calibration.py"
+}
+[RAW line 77 TOOL RESULT toolu_01QEueYAANfpEXqpmMGBeSFk]
+./swebench_9_15/testbed/sklearn/tests/test_calibration.py
+[RAW line 79 TOOL Grep]
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sklearn/tests/test_calibration.py",
+  "pattern": "transform_output|pandas|set_config"
+}
+[RAW line 80 TOOL RESULT toolu_01RBQhLWwCHFRjtdozx467ar]
+No matches found
+[RAW line 83 TOOL Write]
+{
+  "content_sha256": "337d8e2e53eb040e0ca9c23d2c887deb7bba891b4b92aba9d1eb5eb5b58ff234",
+  "file_path": "./swebench_9_15/test_fix.py"
+}
+[RAW line 86 TOOL Bash]
+cd ./swebench_9_15 && python test_fix.py
+[RAW line 87 TOOL RESULT toolu_01Ph4wudtEWN5Gnt3ReG5Mgg]
+Exit code 1
+  File "test_fix.py", line 19
+    print(f"Input shape: {df.shape}")
+                                   ^
+SyntaxError: invalid syntax
+[RAW line 89 TOOL Bash]
+python3 test_fix.py
+[RAW line 90 TOOL RESULT toolu_01VVHiAiPxW85TwWYnCRKfuj]
+Exit code 2
+python3: can't open file 'test_fix.py': [Errno 2] No such file or directory
+[RAW line 95 TOOL Bash]
+python3 ./swebench_9_15/test_fix.py
+[RAW line 96 TOOL RESULT toolu_014q5kVQtcNhpYDtTg2156Le]
+Exit code 1
+Traceback (most recent call last):
+  File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 48, in <module>
+    from ._check_build import check_build  # noqa
+ModuleNotFoundError: No module named 'sklearn.__check_build._check_build'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "./swebench_9_15/test_fix.py", line 31, in <module>
+    from sklearn.utils import column_or_1d
+  File "./swebench_9_15/testbed/sklearn/__init__.py", line 81, in <module>
+    from . import __check_build  # noqa: F401
+  File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 50, in <module>
+    raise_build_error(e)
+  File "./swebench_9_15/testbed/sklearn/__check_build/__init__.py", line 31, in raise_build_error
+    raise ImportError(
+ImportError: No module named 'sklearn.__check_build._check_build'
+___________________________________________________________________________
+Contents of ./swebench_9_15/testbed/sklearn/__check_build:
+__init__.py               __pycache__               _check_build.c
+_check_build.pyx
+___________________________________________________________________________
+It seems that scikit-learn has not been built correctly.
+
+If you have installed scikit-learn from source, please do not forget
+to build the package before using it: run `python setup.py install` or
+`make` in the source directory.
+
+If you have used an installer, please check that it is suited for your
+Python version, your operating system and your platform.
+
+Warning: Could not test with pandas: No module named 'sklearn.__check_build._check_build'
+___________________________________________________________________________
+Contents of ./swebench_9_15/testbed/sklearn/__check_build:
+__init__.py               __pycache__               _check_build.c
+_check_build.pyx
+___________________________________________________________________________
+It seems that scikit-learn has not been built correctly.
+
+If you have i
+[... truncated ...]
+[RAW line 99 TOOL Read]
+{
+  "file_path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "limit": 15,
+  "offset": 755
+}
+[RAW line 100 TOOL RESULT toolu_0182mngTUHD9mZrAPCEsfPwm]
+   755→        proba = np.zeros((_num_samples(X), n_classes))
+   756→        for class_idx, this_pred, calibrator in zip(
+   757→            pos_class_indices, predictions.T, self.calibrators
+   758→        ):
+   759→            if n_classes == 2:
+   760→                # When binary, `predictions` consists only of predictions for
+   761→                # clf.classes_[1] but `pos_class_indices` = 0
+   762→                class_idx += 1
+   763→            proba[:, class_idx] = column_or_1d(calibrator.predict(this_pred))
+   764→
+   765→        # Normalize the probabilities
+   766→        if n_classes == 2:
+   767→            proba[:, 0] = 1.0 - proba[:, 1]
+   768→        else:
+   769→            denominator = np.sum(proba, axis=1)[:, np.newaxis]
+
+[RAW line 102 TOOL Grep]
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "pattern": "^from.*column_or_1d"
+}
+[RAW line 103 TOOL RESULT toolu_012bwZuSTb3VCftvW63BX7Rc]
+No matches found
+[RAW line 105 TOOL Grep]
+{
+  "-n": true,
+  "output_mode": "content",
+  "path": "./swebench_9_15/testbed/sklearn/calibration.py",
+  "pattern": "column_or_1d"
+}
+[RAW line 106 TOOL RESULT toolu_01AedvDSPSsjAgY1UzgLVtud]
+32:    column_or_1d,
+763:            proba[:, class_idx] = column_or_1d(calibrator.predict(this_pred))
+810:    predictions = column_or_1d(predictions)
+811:    y = column_or_1d(y)
+885:        X = column_or_1d(X)
+886:        y = column_or_1d(y)
+905:        T = column_or_1d(T)
+993:    y_true = column_or_1d(y_true)
+994:    y_prob = column_or_1d(y_prob)
+END_PRIOR_CONTEXT
+
+
+
+CURRENT_TARGET
+Repository: scikit-learn/scikit-learn
+Base commit: f45a9071e1ff2bdc044c040959b5387c3d9559c8
+Instance ID: scikit-learn__scikit-learn-25365
+
+CURRENT_ISSUE
+sklearn.set_config(transform_output="pandas") breaks TSNE embeddings
+### Describe the bug
+
+TSNE doesn't work when the [global config is changed to pandas.](https://scikit-learn-enhancement-proposals.readthedocs.io/en/latest/slep018/proposal.html#global-configuration)
+
+I tracked down this bug in the sklearn codebase. The issue is here: https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/manifold/_t_sne.py#L996
+
+What's happening is that `X_embedded` returns a Pandas array under `set_output` API, with the columns being named "pca0" and "pca1". So when `X_embedded[:, 0]` is called, we get an IndexError, because you'd have to index with `X_embedded.iloc[:, 0]` in this situation.
+
+Possible fix could be changing line 996 to this:
+`X_embedded = X_embedded / np.std(np.array(X_embedded)[:, 0]) * 1e-4`
+
+which I am happy to make a PR to do unless somebody has a cleaner way.
+
+Cheers!
+
+### Steps/Code to Reproduce
+
+```py
+import sklearn
+import numpy as np
+from sklearn.manifold import TSNE
+
+sklearn.set_config(transform_output="pandas")
+arr = np.arange(35*4).reshape(35, 4)
+TSNE(n_components=2).fit_transform(arr)
+```
+
+### Expected Results
+
+No error is thrown, a 2-dimensional pandas array is returned
+
+### Actual Results
+
+```
+---------------------------------------------------------------------------
+TypeError                                 Traceback (most recent call last)
+File ~/.pyenv/versions/3.10.9/lib/python3.10/site-packages/pandas/core/indexes/base.py:3803, in Index.get_loc(self, key, method, tolerance)
+   3802 try:
+-> 3803     return self._engine.get_loc(casted_key)
+   3804 except KeyError as err:
+
+File ~/.pyenv/versions/3.10.9/lib/python3.10/site-packages/pandas/_libs/index.pyx:138, in pandas._libs.index.IndexEngine.get_loc()
+
+File ~/.pyenv/versions/3.10.9/lib/python3.10/site-packages/pandas/_libs/index.pyx:144, in pandas._libs.index.IndexEngine.get_loc()
+
+TypeError: '(slice(None, None, None), 0)' is an invalid key
+
+During handling of the above exception, another exception occurred:
+
+InvalidIndexError                         Traceback (most recent call last)
+Cell In[14], line 7
+      5 sklearn.set_config(transform_output="pandas")
+      6 arr = np.arange(35*4).reshape(35, 4)
+----> 7 TSNE(n_components=2).fit_transform(arr)
+
+File ~/.pyenv/versions/3.10.9/lib/python3.10/site-packages/sklearn/manifold/_t_sne.py:1117, in TSNE.fit_transform(self, X, y)
+   1115 self._validate_params()
+   1116 self._check_params_vs_input(X)
+-> 1117 embedding = self._fit(X)
+   1118 self.embedding_ = embedding
+   1119 return self.embedding_
+
+File ~/.pyenv/versions/3.10.9/lib/python3.10/site-packages/sklearn/manifold/_t_sne.py:996, in TSNE._fit(self, X, skip_num_points)
+    993     X_embedded = pca.fit_transform(X).astype(np.float32, copy=False)
+    994     # PCA is rescaled so that PC1 has standard deviation 1e-4 which is
+    995     # the default value for random initialization. See issue #18018.
+--> 996     X_embedded = X_embedded / np.std(X_embedded[:, 0]) * 1e-4
+    997 elif self.init == "random":
+    998     # The embedding is initialized with iid samples from Gaussians with
+    999     # standard deviation 1e-4.
+   1000     X_embedded = 1e-4 * random_state.standard_normal(
+   1001         size=(n_samples, self.n_components)
+   1002     ).astype(np.float32)
+
+File ~/.pyenv/versions/3.10.9/lib/python3.10/site-packages/pandas/core/frame.py:3805, in DataFrame.__getitem__(self, key)
+   3803 if self.columns.nlevels > 1:
+   3804     return self._getitem_multilevel(key)
+-> 3805 indexer = self.columns.get_loc(key)
+   3806 if is_integer(indexer):
+   3807     indexer = [indexer]
+
+File ~/.pyenv/versions/3.10.9/lib/python3.10/site-packages/pandas/core/indexes/base.py:3810, in Index.get_loc(self, key, method, tolerance)
+   3805         raise KeyError(key) from err
+   3806     except TypeError:
+   3807         # If we have a listlike key, _check_indexing_error will raise
+   3808         #  InvalidIndexError. Otherwise we fall through and re-raise
+   3809         #  the TypeError.
+-> 3810         self._check_indexing_error(key)
+   3811         raise
+   3813 # GH#42269
+
+File ~/.pyenv/versions/3.10.9/lib/python3.10/site-packages/pandas/core/indexes/base.py:5968, in Index._check_indexing_error(self, key)
+   5964 def _check_indexing_error(self, key):
+   5965     if not is_scalar(key):
+   5966         # if key is not a scalar, directly raise an error (the code below
+   5967         # would convert to numpy arrays and raise later any way) - GH29926
+-> 5968         raise InvalidIndexError(key)
+
+InvalidIndexError: (slice(None, None, None), 0)
+```
+
+### Versions
+
+```shell
+System:
+    python: 3.10.9 (main, Dec 12 2022, 21:10:20) [GCC 9.4.0]
+executable: /home/aloftus/.pyenv/versions/3.10.9/bin/python3.10
+   machine: Linux-5.4.0-128-generic-x86_64-with-glibc2.31
+
+Python dependencies:
+      sklearn: 1.2.0
+          pip: 22.3.1
+   setuptools: 65.6.3
+        numpy: 1.23.5
+        scipy: 1.9.3
+       Cython: None
+       pandas: 1.5.2
+   matplotlib: 3.6.2
+       joblib: 1.2.0
+threadpoolctl: 3.1.0
+
+Built with OpenMP: True
+
+threadpoolctl info:
+       user_api: blas
+   internal_api: openblas
+         prefix: libopenblas
+       filepath: /home/aloftus/.pyenv/versions/3.10.9/lib/python3.10/site-packages/numpy.libs/libopenblas64_p-r0-742d56dc.3.20.so
+        version: 0.3.20
+threading_layer: pthreads
+   architecture: SkylakeX
+    num_threads: 32
+
+       user_api: blas
+   internal_api: openblas
+         prefix: libopenblas
+       filepath: /home/aloftus/.pyenv/versions/3.10.9/lib/python3.10/site-packages/scipy.libs/libopenblasp-r0-41284840.3.18.so
+        version: 0.3.18
+threading_layer: pthreads
+   architecture: SkylakeX
+    num_threads: 32
+
+       user_api: openmp
+   internal_api: openmp
+         prefix: libgomp
+       filepath: /home/aloftus/.pyenv/versions/3.10.9/lib/python3.10/site-packages/scikit_learn.libs/libgomp-a34b3233.so.1.0.0
+        version: None
+    num_threads: 32
+
+       user_api: openmp
+   internal_api: openmp
+         prefix: libgomp
+       filepath: /home/aloftus/.pyenv/versions/3.10.9/lib/python3.10/site-packages/torch/lib/libgomp-a34b3233.so.1
+        version: None
+    num_threads: 16
+```
+END_CURRENT_ISSUE
+
+
+
+FINAL_INSTRUCTION
+Fix the CURRENT_ISSUE in the current repository. Do not modify unrelated behavior. Run relevant tests when practical, and leave the repository with the intended patch applied.

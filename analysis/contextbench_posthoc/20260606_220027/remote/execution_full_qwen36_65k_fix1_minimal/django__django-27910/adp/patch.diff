@@ -1,0 +1,260 @@
+diff --git a/django/db/models/fields/__init__.py b/django/db/models/fields/__init__.py
+index 9ce46e3f73..a307050976 100644
+--- a/django/db/models/fields/__init__.py
++++ b/django/db/models/fields/__init__.py
+@@ -6,6 +6,7 @@ import operator
+ import uuid
+ import warnings
+ from base64 import b64decode, b64encode
++from enum import Enum
+ from functools import partialmethod, total_ordering
+ 
+ from django import forms
+@@ -56,6 +57,31 @@ class NOT_PROVIDED:
+ BLANK_CHOICE_DASH = [("", "---------")]
+ 
+ 
++def _check_choices_is_enum(choices):
++    """
++    Check if choices is an Enum class and return it if so, otherwise return False.
++    """
++    # Check if choices is an Enum class (not an instance)
++    if isinstance(choices, type) and issubclass(choices, Enum):
++        return choices
++    return False
++
++
++def _get_choices_from_enum(enum_class):
++    """
++    Convert an Enum class to a list of (value, name) tuples.
++    
++    For example, if enum_class is:
++        class Color(Enum):
++            RED = 'red'
++            BLUE = 'blue'
++    
++    This returns: [('red', 'RED'), ('blue', 'BLUE')]
++    """
++    return [(member.value, member.name) for member in enum_class]
++
++
++
+ def _load_field(app_label, model_name, field_name):
+     return apps.get_model(app_label, model_name)._meta.get_field(field_name)
+ 
+@@ -245,6 +271,10 @@ class Field(RegisterLookupMixin):
+         if not self.choices:
+             return []
+ 
++        # If choices is an Enum class, it's valid
++        if _check_choices_is_enum(self.choices):
++            return []
++
+         def is_value(value, accept_promise=True):
+             return isinstance(value, (str, Promise) if accept_promise else str) or not is_iterable(value)
+ 
+@@ -264,6 +294,9 @@ class Field(RegisterLookupMixin):
+             except (TypeError, ValueError):
+                 # Containing non-pairs
+                 break
++            # If group_choices is an Enum class, it's valid
++            if _check_choices_is_enum(group_choices):
++                continue
+             try:
+                 if not all(
+                     is_value(value) and is_value(human_name)
+@@ -843,9 +876,15 @@ class Field(RegisterLookupMixin):
+         """Flattened version of choices tuple."""
+         if self.choices is None:
+             return []
++        # If choices is an Enum class, convert it to (value, name) tuples
++        if _check_choices_is_enum(self.choices):
++            return _get_choices_from_enum(self.choices)
+         flat = []
+         for choice, value in self.choices:
+-            if isinstance(value, (list, tuple)):
++            # If value is an Enum class, convert it
++            if _check_choices_is_enum(value):
++                flat.extend(_get_choices_from_enum(value))
++            elif isinstance(value, (list, tuple)):
+                 flat.extend(value)
+             else:
+                 flat.append((choice, value))
+diff --git a/test_enum_choices.py b/test_enum_choices.py
+new file mode 100644
+index 0000000000..f0c12ffb1a
+--- /dev/null
++++ b/test_enum_choices.py
+@@ -0,0 +1,172 @@
++"""
++Test Enum support in model Field choices.
++"""
++import os
++import sys
++
++# Setup Django settings
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'tests.test_sqlite')
++sys.path.insert(0, '/testbed')
++
++import django
++django.setup()
++
++from enum import Enum, IntEnum
++from django.db import models
++from django.core import checks
++
++
++class TextEnum(Enum):
++    A = 'a-value'
++    B = 'b-value'
++
++
++class IntEnumExample(IntEnum):
++    A = 1
++    B = 2
++    C = 3
++
++
++def test_charfield_with_enum_choices():
++    """CharField should accept an Enum class directly as choices."""
++    class TestModel(models.Model):
++        year_in_school = models.CharField(
++            max_length=2,
++            choices=TextEnum,
++            default=TextEnum.A,
++        )
++        
++        class Meta:
++            app_label = 'test_app'
++    
++    field = TestModel._meta.get_field('year_in_school')
++    # Should have no check errors
++    errors = field.check()
++    assert errors == [], f"Got errors: {errors}"
++    
++    # Check that flatchoices contains the enum values and names
++    flat = field.flatchoices
++    assert len(flat) == 2, f"Expected 2 choices, got {len(flat)}"
++    assert ('a-value', 'A') in flat, f"'(a-value, A)' not in {flat}"
++    assert ('b-value', 'B') in flat, f"'(b-value, B)' not in {flat}"
++    print("✓ test_charfield_with_enum_choices passed")
++
++
++def test_intfield_with_intenum_choices():
++    """IntegerField should accept an IntEnum class directly as choices."""
++    class TestModel(models.Model):
++        status = models.IntegerField(
++            choices=IntEnumExample,
++            default=IntEnumExample.A,
++        )
++        
++        class Meta:
++            app_label = 'test_app'
++    
++    field = TestModel._meta.get_field('status')
++    # Should have no check errors
++    errors = field.check()
++    assert errors == [], f"Got errors: {errors}"
++    
++    # Check that flatchoices contains the enum values and names
++    flat = field.flatchoices
++    assert len(flat) == 3, f"Expected 3 choices, got {len(flat)}"
++    assert (1, 'A') in flat, f"'(1, A)' not in {flat}"
++    assert (2, 'B') in flat, f"'(2, B)' not in {flat}"
++    assert (3, 'C') in flat, f"'(3, C)' not in {flat}"
++    print("✓ test_intfield_with_intenum_choices passed")
++
++
++def test_enum_with_grouped_choices():
++    """Enum can be used in grouped choices."""
++    class TestModel(models.Model):
++        status = models.IntegerField(
++            choices=[('Status', IntEnumExample)],
++            default=IntEnumExample.A,
++        )
++        
++        class Meta:
++            app_label = 'test_app'
++    
++    field = TestModel._meta.get_field('status')
++    # Should have no check errors
++    errors = field.check()
++    assert errors == [], f"Got errors: {errors}"
++    
++    # Check that flatchoices contains the enum values and names
++    flat = field.flatchoices
++    assert len(flat) == 3, f"Expected 3 choices, got {len(flat)}"
++    assert (1, 'A') in flat, f"'(1, A)' not in {flat}"
++    assert (2, 'B') in flat, f"'(2, B)' not in {flat}"
++    assert (3, 'C') in flat, f"'(3, C)' not in {flat}"
++    print("✓ test_enum_with_grouped_choices passed")
++
++
++def test_enum_member_as_default():
++    """Enum member can be used directly as default value."""
++    class TestModel(models.Model):
++        year_in_school = models.CharField(
++            max_length=2,
++            choices=TextEnum,
++            default=TextEnum.A,
++        )
++        
++        class Meta:
++            app_label = 'test_app'
++    
++    field = TestModel._meta.get_field('year_in_school')
++    # The default should be the enum member itself
++    assert field.default == TextEnum.A, f"Expected TextEnum.A, got {field.default}"
++    print("✓ test_enum_member_as_default passed")
++
++
++def test_enum_member_in_formfield_choices():
++    """Enum values should work in formfield choices."""
++    class TestModel(models.Model):
++        year_in_school = models.CharField(
++            max_length=2,
++            choices=TextEnum,
++            default=TextEnum.A,
++        )
++        
++        class Meta:
++            app_label = 'test_app'
++    
++    field = TestModel._meta.get_field('year_in_school')
++    formfield = field.formfield()
++    
++    # The choices should be in (value, display) format
++    choices = dict(formfield.choices)
++    assert 'a-value' in choices, f"'a-value' not in {choices.keys()}"
++    assert 'b-value' in choices, f"'b-value' not in {choices.keys()}"
++    assert choices['a-value'] == 'A', f"Expected 'A', got {choices['a-value']}"
++    assert choices['b-value'] == 'B', f"Expected 'B', got {choices['b-value']}"
++    print("✓ test_enum_member_in_formfield_choices passed")
++
++
++if __name__ == '__main__':
++    tests = [
++        test_charfield_with_enum_choices,
++        test_intfield_with_intenum_choices,
++        test_enum_with_grouped_choices,
++        test_enum_member_as_default,
++        test_enum_member_in_formfield_choices,
++    ]
++    
++    failed = []
++    for test in tests:
++        try:
++            test()
++        except Exception as e:
++            print(f"✗ {test.__name__} failed: {e}")
++            failed.append(test.__name__)
++    
++    print("\n" + "="*50)
++    if failed:
++        print(f"FAILED: {len(failed)} test(s) failed:")
++        for name in failed:
++            print(f"  - {name}")
++        sys.exit(1)
++    else:
++        print("All tests passed! ✓")
++        sys.exit(0)

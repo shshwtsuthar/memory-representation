@@ -1,0 +1,43 @@
+diff --git a/sympy/printing/octave.py b/sympy/printing/octave.py
+index 9fa66d4d7..75fecc880 100644
+--- a/sympy/printing/octave.py
++++ b/sympy/printing/octave.py
+@@ -392,6 +392,13 @@ def _print_lowergamma(self, expr):
+                                               self._print(expr.args[0]))
+ 
+ 
++    def _print_sinc(self, expr):
++        # SymPy's sinc(x) = sin(x)/x (unnormalized)
++        # Octave's sinc(x) = sin(pi*x)/(pi*x) (normalized)
++        # So sinc_Sympy(x) = sinc_Octave(x/pi)
++        return "sinc(%s/%s)" % (self._print(expr.args[0]), self._print(S.Pi))
++
++
+     def _print_hankel1(self, expr):
+         return "besselh(%s, 1, %s)" % (self._print(expr.order),
+                                        self._print(expr.argument))
+diff --git a/sympy/printing/tests/test_octave.py b/sympy/printing/tests/test_octave.py
+index 0907625a8..9be3d95a8 100644
+--- a/sympy/printing/tests/test_octave.py
++++ b/sympy/printing/tests/test_octave.py
+@@ -1,7 +1,7 @@
+ from sympy.core import (S, pi, oo, symbols, Function, Rational, Integer,
+                         Tuple, Symbol)
+ from sympy.core import EulerGamma, GoldenRatio, Catalan, Lambda
+-from sympy.functions import Piecewise, sqrt, ceiling, exp, sin, cos
++from sympy.functions import Piecewise, sqrt, ceiling, exp, sin, cos, sinc
+ from sympy.utilities.pytest import raises
+ from sympy.utilities.lambdify import implemented_function
+ from sympy.matrices import (eye, Matrix, MatrixSymbol, Identity,
+@@ -368,3 +368,11 @@ def test_specfun():
+     assert octave_code(lowergamma(n, x)) == 'gammainc(x, n, \'lower\')'
+     assert octave_code(jn(n, x)) == 'sqrt(2)*sqrt(pi)*sqrt(1./x).*besselj(n + 1/2, x)/2'
+     assert octave_code(yn(n, x)) == 'sqrt(2)*sqrt(pi)*sqrt(1./x).*bessely(n + 1/2, x)/2'
++
++
++def test_sinc():
++    # SymPy's sinc(x) = sin(x)/x (unnormalized)
++    # Octave's sinc(x) = sin(pi*x)/(pi*x) (normalized)
++    # So sinc_Sympy(x) = sinc_Octave(x/pi)
++    assert octave_code(sinc(x)) == 'sinc(x/pi)'
++    assert octave_code(sinc(2*x)) == 'sinc(2*x/pi)'

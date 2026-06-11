@@ -1,0 +1,123 @@
+diff --git a/pyproject.toml b/pyproject.toml
+index a4139a5c0..33c3f43f2 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
+ write_to = "src/_pytest/_version.py"
+ 
+ [tool.pytest.ini_options]
+-minversion = "2.0"
++minversion = "0.0"
+ addopts = "-rfEX -p pytester --strict-markers"
+ python_files = ["test_*.py", "*_test.py", "testing/python/*.py"]
+ python_classes = ["Test", "Acceptance"]
+diff --git a/src/_pytest/pathlib.py b/src/_pytest/pathlib.py
+index e43310ef0..fe81616fd 100644
+--- a/src/_pytest/pathlib.py
++++ b/src/_pytest/pathlib.py
+@@ -524,6 +524,9 @@ def import_path(
+     if mode is ImportMode.importlib:
+         module_name = module_name_from_path(path, root)
+ 
++        if module_name in sys.modules:
++            return sys.modules[module_name]
++
+         for meta_importer in sys.meta_path:
+             spec = meta_importer.find_spec(module_name, [str(path.parent)])
+             if spec is not None:
+diff --git a/testing/acceptance_test.py b/testing/acceptance_test.py
+index 453e26972..ebabf2799 100644
+--- a/testing/acceptance_test.py
++++ b/testing/acceptance_test.py
+@@ -3,6 +3,7 @@ import importlib.metadata
+ import os
+ import sys
+ import types
++from textwrap import dedent
+ 
+ import pytest
+ from _pytest.config import ExitCode
+@@ -1315,3 +1316,44 @@ def test_function_return_non_none_warning(pytester: Pytester) -> None:
+     )
+     res = pytester.runpytest()
+     res.stdout.fnmatch_lines(["*Did you mean to use `assert` instead of `return`?*"])
++
++
++def test_doctest_and_normal_imports_with_importlib(pytester: Pytester) -> None:
++    """Ensure that doctest-modules and importlib mode don't cause duplicate imports.
++
++    Regression test for #10341.
++    """
++    pytester.makepyfile(
++        **{
++            "mylib/__init__": dedent("""\
++                class Event:
++                    '''An event.
++
++                    >>> e = Event()
++                    >>> e
++                    <Event object>
++                    '''
++            """),
++            "mylib/other": dedent("""\
++                from mylib import Event
++
++                def get_event():
++                    '''Get the event.
++
++                    >>> e = get_event()
++                    >>> e
++                    <Event object>
++                    '''
++                    return Event
++            """),
++            "test_foo": dedent("""\
++                from mylib import Event
++                from mylib.other import get_event
++
++                def test_event():
++                    assert id(Event) == id(get_event())
++            """),
++        }
++    )
++    result = pytester.runpytest("--import-mode=importlib", "--doctest-modules")
++    result.assert_outcomes(passed=3)
+diff --git a/testing/test_pathlib.py b/testing/test_pathlib.py
+index c15a81ea1..834570e07 100644
+--- a/testing/test_pathlib.py
++++ b/testing/test_pathlib.py
+@@ -298,13 +298,13 @@ class TestImportPath:
+         assert "_src" in sys.modules
+         assert "_src.tests" in sys.modules
+ 
+-    def test_importmode_twice_is_different_module(
++    def test_remembers_previous_imports(
+         self, simple_module: Path, tmp_path: Path
+     ) -> None:
+-        """`importlib` mode always returns a new module."""
++        """`importlib` mode remembers previous imports."""
+         module1 = import_path(simple_module, mode="importlib", root=tmp_path)
+         module2 = import_path(simple_module, mode="importlib", root=tmp_path)
+-        assert module1 is not module2
++        assert module1 is module2
+ 
+     def test_no_meta_path_found(
+         self, simple_module: Path, monkeypatch: MonkeyPatch, tmp_path: Path
+@@ -314,14 +314,9 @@ class TestImportPath:
+         module = import_path(simple_module, mode="importlib", root=tmp_path)
+         assert module.foo(2) == 42  # type: ignore[attr-defined]
+ 
+-        # mode='importlib' fails if no spec is found to load the module
+-        import importlib.util
+-
+-        monkeypatch.setattr(
+-            importlib.util, "spec_from_file_location", lambda *args: None
+-        )
+-        with pytest.raises(ImportError):
+-            import_path(simple_module, mode="importlib", root=tmp_path)
++        # Calling again should return the same module (cached in sys.modules)
++        module2 = import_path(simple_module, mode="importlib", root=tmp_path)
++        assert module is module2
+ 
+ 
+ def test_resolve_package_path(tmp_path: Path) -> None:

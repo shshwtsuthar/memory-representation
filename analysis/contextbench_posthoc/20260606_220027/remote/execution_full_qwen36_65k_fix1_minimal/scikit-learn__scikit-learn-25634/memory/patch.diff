@@ -1,0 +1,66 @@
+diff --git a/sklearn/utils/multiclass.py b/sklearn/utils/multiclass.py
+index 5eaef2fde..0475c0459 100644
+--- a/sklearn/utils/multiclass.py
++++ b/sklearn/utils/multiclass.py
+@@ -342,7 +342,18 @@ def type_of_target(y, input_name=""):
+         return "unknown"
+     if not issparse(y) and y.dtype == object and not isinstance(y.flat[0], str):
+         # [obj_1] and not ["label_1"]
+-        return "unknown"
++        # However, if the first element is a numeric type (e.g., from nullable
++        # pandas dtypes like Int64, Float64, boolean), convert to the appropriate
++        # dtype and continue processing
++        if isinstance(y.flat[0], (bool, int, float)):
++            if isinstance(y.flat[0], bool):
++                y = xp.asarray(y, dtype=bool)
++            elif isinstance(y.flat[0], int):
++                y = xp.asarray(y, dtype=int)
++            else:
++                y = xp.asarray(y, dtype=float)
++        else:
++            return "unknown"
+ 
+     # Check if multioutput
+     if y.ndim == 2 and y.shape[1] > 1:
+diff --git a/sklearn/utils/tests/test_multiclass.py b/sklearn/utils/tests/test_multiclass.py
+index cf5858d0f..c25e44904 100644
+--- a/sklearn/utils/tests/test_multiclass.py
++++ b/sklearn/utils/tests/test_multiclass.py
+@@ -346,6 +346,37 @@ def test_type_of_target_pandas_sparse():
+         type_of_target(y)
+ 
+ 
++def test_type_of_target_nullable_dtypes():
++    """Test that nullable pandas dtypes are correctly handled by type_of_target."""
++    pd = pytest.importorskip("pandas")
++
++    # Test Int64 (nullable integer)
++    y_int = pd.Series([1, 0, 0, 1, 0, 1], dtype="Int64")
++    assert type_of_target(y_int) == "binary"
++
++    # Test Float64 (nullable float)
++    y_float = pd.Series([1.0, 0.0, 0.0, 1.0, 0.0, 1.0], dtype="Float64")
++    assert type_of_target(y_float) == "binary"
++
++    # Test boolean (nullable boolean)
++    y_bool = pd.Series([True, False, False, True, False, True], dtype="boolean")
++    assert type_of_target(y_bool) == "binary"
++
++    # Test multiclass with nullable integer dtype
++    y_multiclass = pd.Series([0, 1, 2, 3, 1, 2], dtype="Int64")
++    assert type_of_target(y_multiclass) == "multiclass"
++
++    # Test unique_labels with nullable pandas dtypes
++    from sklearn.utils.multiclass import unique_labels
++
++    for dtype in ["Int64", "Float64", "boolean"]:
++        y_true = pd.Series([1, 0, 0, 1, 0, 1, 1, 0, 1], dtype=dtype)
++        y_predicted = pd.Series([0, 0, 1, 1, 0, 1, 1, 1, 1], dtype="int64")
++        # Should not raise ValueError
++        result = unique_labels(y_true, y_predicted)
++        assert len(result) > 0
++
++
+ def test_class_distribution():
+     y = np.array(
+         [

@@ -1,0 +1,174 @@
+diff --git a/lib/matplotlib/artist.py b/lib/matplotlib/artist.py
+index 1f33b9d3ec..1a0f11b100 100644
+--- a/lib/matplotlib/artist.py
++++ b/lib/matplotlib/artist.py
+@@ -1304,10 +1304,14 @@ class Artist:
+             normed = self.norm(data)
+             if np.isfinite(normed):
+                 # Midpoints of neighboring color intervals.
+-                neighbors = self.norm.inverse(
+-                    (int(self.norm(data) * n) + np.array([0, 1])) / n)
+-                delta = abs(neighbors - data).max()
+-                g_sig_digits = cbook._g_sig_digits(data, delta)
++                try:
++                    neighbors = self.norm.inverse(
++                        (int(self.norm(data) * n) + np.array([0, 1])) / n)
++                    delta = abs(neighbors - data).max()
++                    g_sig_digits = cbook._g_sig_digits(data, delta)
++                except ValueError:
++                    # Handle non-invertible norms like BoundaryNorm
++                    g_sig_digits = 3
+             else:
+                 g_sig_digits = 3  # Consistent with default below.
+             return "[{:-#.{}g}]".format(data, g_sig_digits)
+diff --git a/test_boundarynorm_format_cursor.py b/test_boundarynorm_format_cursor.py
+new file mode 100644
+index 0000000000..7a91ba2238
+--- /dev/null
++++ b/test_boundarynorm_format_cursor.py
+@@ -0,0 +1,64 @@
++"""
++Test for format_cursor_data with BoundaryNorm (issue #23098).
++
++This test verifies that format_cursor_data gracefully handles non-invertible
++normalization classes like BoundaryNorm that raise ValueError when their
++inverse method is called.
++"""
++import numpy as np
++import matplotlib
++matplotlib.use('Agg')  # Use non-interactive backend
++import matplotlib.pyplot as plt
++import matplotlib.colors as mcolors
++
++
++def test_format_cursor_data_with_boundarynorm():
++    """Test that format_cursor_data works with BoundaryNorm.
++    
++    BoundaryNorm is not invertible, so calling its inverse() method raises
++    ValueError. format_cursor_data should handle this gracefully and not crash.
++    """
++    fig, ax = plt.subplots()
++    norm = mcolors.BoundaryNorm(np.linspace(-4, 4, 5), 256)
++    X = np.random.randn(10, 10)
++    im = ax.imshow(X, cmap='RdBu_r', norm=norm)
++    
++    # This should not raise an exception
++    # Before the fix, this would crash with:
++    # ValueError: BoundaryNorm is not invertible
++    data = im.get_cursor_data((0, 0))
++    result = im.format_cursor_data(data)
++    
++    # Verify we get a valid string representation
++    assert isinstance(result, str)
++    assert result.startswith('[')
++    assert result.endswith(']')
++    
++    plt.close(fig)
++    print("PASS: format_cursor_data works with BoundaryNorm")
++
++
++def test_format_cursor_data_with_various_norms():
++    """Test format_cursor_data with various normalization classes."""
++    fig, ax = plt.subplots()
++    X = np.random.randn(10, 10)
++    
++    # Test with BoundaryNorm (non-invertible)
++    norm_bn = mcolors.BoundaryNorm(np.linspace(-4, 4, 5), 256)
++    im_bn = ax.imshow(X, cmap='RdBu_r', norm=norm_bn)
++    data = im_bn.get_cursor_data((0, 0))
++    result = im_bn.format_cursor_data(data)
++    assert isinstance(result, str)
++    print(f"  BoundaryNorm: {result}")
++    
++    plt.close(fig)
++    print("PASS: format_cursor_data works with various norms")
++
++
++if __name__ == '__main__':
++    print("Testing format_cursor_data with BoundaryNorm...")
++    print("=" * 60)
++    test_format_cursor_data_with_boundarynorm()
++    test_format_cursor_data_with_various_norms()
++    print("=" * 60)
++    print("All tests passed!")
+diff --git a/test_boundarynorm_issue.py b/test_boundarynorm_issue.py
+new file mode 100644
+index 0000000000..aca7ce1f5a
+--- /dev/null
++++ b/test_boundarynorm_issue.py
+@@ -0,0 +1,75 @@
++"""Test to reproduce the BoundaryNorm issue with format_cursor_data."""
++import matplotlib
++matplotlib.use('Agg')  # Use non-interactive backend
++import matplotlib.pyplot as plt
++import numpy as np
++import matplotlib as mpl
++
++# Test 1: Basic BoundaryNorm with imshow (the original bug case)
++print("Test 1: BoundaryNorm with imshow...")
++fig, ax = plt.subplots()
++norm = mpl.colors.BoundaryNorm(np.linspace(-4, 4, 5), 256)
++X = np.random.randn(10, 10)
++pc = ax.imshow(X, cmap='RdBu_r', norm=norm)
++
++# Try to get cursor data - this should not crash
++try:
++    cursor_data = pc.format_cursor_data()
++    print(f"  SUCCESS: format_cursor_data() returned: {cursor_data}")
++except ValueError as e:
++    print(f"  FAILED: format_cursor_data() raised ValueError: {e}")
++
++plt.close(fig)
++
++# Test 2: Test with different data values
++print("\nTest 2: BoundaryNorm with different data values...")
++fig, ax = plt.subplots()
++norm = mpl.colors.BoundaryNorm(np.linspace(-4, 4, 5), 256)
++X = np.random.randn(10, 10)
++pc = ax.imshow(X, cmap='RdBu_r', norm=norm)
++
++test_values = [0.5, -2.3, 3.7, 0.0]
++for val in test_values:
++    try:
++        cursor_data = pc.format_cursor_data(val)
++        print(f"  SUCCESS: format_cursor_data({val}) returned: {cursor_data}")
++    except ValueError as e:
++        print(f"  FAILED: format_cursor_data({val}) raised ValueError: {e}")
++
++plt.close(fig)
++
++# Test 3: Test with pcolormesh (another common use case)
++print("\nTest 3: BoundaryNorm with pcolormesh...")
++fig, ax = plt.subplots()
++norm = mpl.colors.BoundaryNorm([-2, -1, 0, 1, 2], 256)
++Y = np.random.randn(10, 10)
++pc = ax.pcolormesh(Y, cmap='viridis', norm=norm)
++
++try:
++    cursor_data = pc.format_cursor_data()
++    print(f"  SUCCESS: format_cursor_data() returned: {cursor_data}")
++except ValueError as e:
++    print(f"  FAILED: format_cursor_data() raised ValueError: {e}")
++
++plt.close(fig)
++
++# Test 4: Test with contourf
++print("\nTest 4: BoundaryNorm with contourf...")
++fig, ax = plt.subplots()
++norm = mpl.colors.BoundaryNorm([-2, -1, 0, 1, 2], 256)
++x = np.linspace(-3, 3, 100)
++y = np.linspace(-3, 3, 100)
++X, Y = np.meshgrid(x, y)
++Z = np.sin(X) * np.cos(Y)
++cf = ax.contourf(X, Y, Z, levels=norm.boundaries, cmap='RdBu_r', norm=norm)
++
++try:
++    cursor_data = cf.format_cursor_data()
++    print(f"  SUCCESS: format_cursor_data() returned: {cursor_data}")
++except ValueError as e:
++    print(f"  FAILED: format_cursor_data() raised ValueError: {e}")
++
++plt.close(fig)
++
++print("\n" + "="*60)
++print("All tests completed!")
